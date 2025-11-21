@@ -87,8 +87,8 @@ export default function DemoPersonaSelect() {
         sessionStorage.removeItem('demoLabel');
         sessionStorage.removeItem('demoPersonas');
 
-        // Redirect to dashboard
-        navigate('/dashboard');
+        // Force full page reload to refresh auth state
+        window.location.href = '/dashboard';
       }
     } catch (error) {
       toast({
