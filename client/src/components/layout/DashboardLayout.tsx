@@ -214,7 +214,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="flex flex-col overflow-hidden text-left flex-1">
                     <span className="text-sm font-medium truncate">{displayName}</span>
                     <span className="text-xs text-sidebar-foreground/60 truncate">
-                      {formatRole(currentUserRole)}
+                      {currentUserRole ? formatRole(currentUserRole) : 'Loading...'}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 opacity-50" />
