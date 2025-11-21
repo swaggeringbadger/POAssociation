@@ -53,8 +53,29 @@ SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
 - ✅ Auto-role detection via useUserTenants hook
 - ✅ Dynamic role switching when changing tenant context
 
+### 🐛 Known Issues to Triage
+
+**Sign Out Race Condition (Priority: High)**
+- **Symptom:** After signing out of demo user A and signing into demo user B, user A's name still shows in bottom left
+- **Workaround:** Sign out a second time, then sign in as user B again - works correctly
+- **Likely Cause:** React Query cache or localStorage not clearing on logout
+- **To Investigate:**
+  1. Check if logout endpoint clears session properly
+  2. Verify React Query cache is being invalidated on logout
+  3. Check if Zustand store is being reset on logout
+  4. Look for race condition between logout API call and navigation
+  5. May need to add explicit cache clearing in logout flow
+
+**Homeowner Role Permissions (Priority: Medium)**
+- **Symptom:** James (homeowner) can see content he shouldn't have access to
+- **To Investigate:**
+  1. Check what applications he can see (should only see his own)
+  2. Verify he can't access admin features
+  3. Check community data access (should only see his community)
+  4. Add permission checks to components that need role-based filtering
+
 ### Blockers/Issues
-- None - Demo system fully operational
+- Sign out not clearing user state cleanly (see above)
 
 ### Implementation Status
 - ✅ Phase 1: Database Schema
