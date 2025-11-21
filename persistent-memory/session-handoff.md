@@ -28,23 +28,33 @@ Add to `.env` or Replit Secrets:
 SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
 ```
 
-### 🔧 Current Work: Role-Based Dashboards
+### ✅ RESOLVED - Dashboard Routing & Role-Based Views (commit b359ce7)
 
-**Issue Discovered:**
-- Demo user Emily (Management Company Manager) gets 404 on `/dashboard` route
-- Expected: Dashboard should work for demo users same as real users
-- Need to debug routing and build role-specific dashboard views
+**Issue:** Demo users getting 404 on `/dashboard` route after login
 
-**Next Steps:**
-1. Debug why /dashboard route returns 404 for demo users
-2. Build role-based dashboards with appropriate functionality subsets:
-   - Management Company Manager dashboard
-   - Board Member dashboard
-   - Homeowner/Resident dashboard
-   - Board Contributor dashboard
+**Root Cause:**
+- Demo login succeeded and set session cookie
+- Navigation used wouter's `navigate()` which doesn't reload the page
+- React Query cache still had "unauthorized" response from before login
+- `useAuth` hook returned isAuthenticated: false
+- Route fell through to 404
+
+**Solution:**
+- Changed `navigate('/dashboard')` to `window.location.href = '/dashboard'`
+- Forces full page reload, refreshing auth state
+- React Query fetches fresh user data
+- Authentication succeeds, dashboard loads
+
+**Discovery:** Role-based dashboards were already fully implemented!
+- ✅ ManagementDashboard - Multi-community overview with stats
+- ✅ BoardMemberDashboard - Review queue focused with approval workflow
+- ✅ ContributorDashboard - Non-voting board contributor view
+- ✅ HomeownerDashboard - Personal application management
+- ✅ Auto-role detection via useUserTenants hook
+- ✅ Dynamic role switching when changing tenant context
 
 ### Blockers/Issues
-- Dashboard routing needs investigation for demo users
+- None - Demo system fully operational
 
 ### Implementation Status
 - ✅ Phase 1: Database Schema
