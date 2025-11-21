@@ -8,6 +8,7 @@ import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
+import MarklandExample from "@/pages/MarklandExample";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 function Router() {
@@ -38,6 +39,12 @@ function Router() {
       <Route path="/apply">
         <DashboardLayout>
           <ApplicationSubmit />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/apply/markland-demo">
+        <DashboardLayout>
+          <MarklandExample />
         </DashboardLayout>
       </Route>
 

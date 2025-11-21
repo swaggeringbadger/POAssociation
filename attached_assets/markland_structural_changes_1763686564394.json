@@ -1,83 +1,4 @@
-
-import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck } from "lucide-react";
-
-// Types for our mockup
-export type Role = 
-  | 'super_admin'
-  | 'account_admin'
-  | 'management_rep'
-  | 'management_manager'
-  | 'poa_board_member'
-  | 'poa_board_contributor'
-  | 'homeowner'
-  | 'delegated_rep';
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  roles: Role[];
-  avatarUrl?: string;
-}
-
-export interface Tenant {
-  id: string;
-  name: string;
-  type: 'management_company' | 'community';
-  subdomain: string;
-}
-
-// Mock Data
-export const MOCK_USER: User = {
-  id: 'u1',
-  name: 'Jane Doe',
-  email: 'jane@example.com',
-  roles: ['account_admin', 'homeowner'], // Multi-role demonstration
-};
-
-export const TENANTS: Tenant[] = [
-  { id: 't1', name: 'Apex Management Solutions', type: 'management_company', subdomain: 'apex' },
-  { id: 't2', name: 'Whispering Pines HOA', type: 'community', subdomain: 'whispering-pines' },
-  { id: 't3', name: 'Oak Ridge Estates', type: 'community', subdomain: 'oak-ridge' },
-];
-
-export const NAV_ITEMS = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-  { label: 'Applications', icon: FileText, href: '/applications' },
-  { label: 'Submit Request', icon: FileText, href: '/apply' },
-  { label: 'Directory', icon: Users, href: '/directory' },
-  { label: 'Properties', icon: Building2, href: '/properties' },
-  { label: 'Compliance', icon: ShieldCheck, href: '/compliance' },
-  { label: 'Form Wizard', icon: Settings, href: '/admin/form-builder' },
-  { label: 'Settings', icon: Settings, href: '/settings' },
-];
-
-// Placeholder for the "Revolutionary Form Wizard" JSON structure
-export const ARCH_REQUEST_FORM_SCHEMA = {
-  title: "Architectural Modification Request",
-  description: "Submit your plans for exterior modifications.",
-  sections: [
-    {
-      id: "project_details",
-      title: "Project Details",
-      fields: [
-        { id: "project_type", type: "select", label: "Project Type", options: ["Fence", "Painting", "Landscaping", "Addition", "Other"] },
-        { id: "description", type: "textarea", label: "Detailed Description" },
-        { id: "contractor", type: "text", label: "Contractor Name" }
-      ]
-    },
-    {
-      id: "documents",
-      title: "Documentation",
-      fields: [
-        { id: "plat_map", type: "file", label: "Plat Map / Survey" },
-        { id: "materials", type: "file", label: "Material Samples / Photos" }
-      ]
-    }
-  ]
-};
-
-export const MARKLAND_STRUCTURAL_SCHEMA = {
+{
   "title": "Structural Changes Additional Information - Markland POA",
   "description": "Please provide comprehensive details about your structural modification project. All structural changes require professional design and engineering oversight, plus Markland ARB approval prior to construction.",
   "relevantBylaws": {
@@ -121,7 +42,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
   },
   "sections": [
     {
-      "id": "project_scope",
       "title": "Project Scope and Design",
       "fields": [
         {
@@ -247,7 +167,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "construction_specs",
       "title": "Construction Specifications",
       "fields": [
         {
@@ -325,7 +244,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "site_planning",
       "title": "Site Planning and Compliance",
       "fields": [
         {
@@ -407,7 +325,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "professional_team",
       "title": "Professional Team and Documentation",
       "fields": [
         {
@@ -424,12 +341,60 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
           }
         },
         {
+          "id": "architect_name",
+          "label": "Architect Name and Firm",
+          "type": "text",
+          "required": false,
+          "placeholder": "John Smith, AIA - Smith Architecture LLC",
+          "description": "Name and firm of licensed architect (if required)"
+        },
+        {
+          "id": "architect_license",
+          "label": "Architect License Number",
+          "type": "text",
+          "required": false,
+          "placeholder": "FL-AA12345",
+          "description": "State architecture license number"
+        },
+        {
+          "id": "structural_engineer_required",
+          "label": "Structural Engineer Required",
+          "type": "radio",
+          "required": true,
+          "options": ["Yes - engineer retained", "Yes - engineer being selected", "No - not required", "Unsure"],
+          "description": "Most structural additions require structural engineering"
+        },
+        {
+          "id": "structural_engineer_name",
+          "label": "Structural Engineer Name",
+          "type": "text",
+          "required": false,
+          "placeholder": "Jane Doe, PE - Structural Solutions Inc.",
+          "description": "Name and firm of licensed structural engineer"
+        },
+        {
+          "id": "structural_engineer_license",
+          "label": "Structural Engineer License Number",
+          "type": "text",
+          "required": false,
+          "placeholder": "FL-PE67890",
+          "description": "State professional engineer license number"
+        },
+        {
           "id": "general_contractor",
           "label": "General Contractor",
           "type": "text",
           "required": true,
           "placeholder": "ABC Construction Company",
           "description": "Name of licensed general contractor performing the work"
+        },
+        {
+          "id": "contractor_license",
+          "label": "General Contractor License",
+          "type": "text",
+          "required": true,
+          "placeholder": "FL-CCC1234567",
+          "description": "State general contractor license number"
         },
         {
           "id": "contractor_insurance",
@@ -442,7 +407,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "arb_requirements",
       "title": "ARB Application Requirements",
       "fields": [
         {
@@ -504,7 +468,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "permits",
       "title": "Permits and Approvals",
       "fields": [
         {
@@ -522,6 +485,30 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
           "description": "Current status of required building permits"
         },
         {
+          "id": "permit_numbers",
+          "label": "Building Permit Number(s)",
+          "type": "text",
+          "required": false,
+          "placeholder": "Enter permit numbers if obtained",
+          "description": "Provide permit numbers if permits have been issued"
+        },
+        {
+          "id": "other_permits_required",
+          "label": "Other Permits Required",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Electrical permit",
+            "Plumbing permit",
+            "Mechanical/HVAC permit",
+            "Septic system permit",
+            "Driveway/utility permit",
+            "Tree removal permit",
+            "Wetlands permit"
+          ],
+          "description": "Check any additional permits required for this project"
+        },
+        {
           "id": "variance_required",
           "label": "Zoning Variance or Special Approval Required",
           "type": "radio",
@@ -532,7 +519,6 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
       ]
     },
     {
-      "id": "timeline",
       "title": "Timeline and Construction Management",
       "fields": [
         {
@@ -546,8 +532,266 @@ export const MARKLAND_STRUCTURAL_SCHEMA = {
             "requirement": "Construction hours shall comply with St. Johns County regulations. Developer and Association reserve right to limit weekend and holiday hours.",
             "note": "No construction may begin until ARB final approval and pre-construction meeting completed"
           }
+        },
+        {
+          "id": "construction_duration",
+          "label": "Estimated Construction Duration",
+          "type": "select",
+          "required": true,
+          "options": [
+            "1-2 months",
+            "3-4 months",
+            "5-6 months",
+            "7-9 months",
+            "10-12 months",
+            "Over 12 months"
+          ],
+          "description": "Estimated time to complete construction"
+        },
+        {
+          "id": "construction_completion_date",
+          "label": "Target Completion Date",
+          "type": "date",
+          "required": true,
+          "description": "When do you expect construction to be completed?"
+        },
+        {
+          "id": "work_hours",
+          "label": "Construction Work Hours",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Monday-Friday 7:00 AM - 6:00 PM, Saturday 8:00 AM - 4:00 PM, No Sunday work",
+          "description": "Specify days and hours when construction work will occur",
+          "relevantBylaws": {
+            "reference": "Section 4.2.1 Construction Hours",
+            "requirement": "Construction hours must comply with St. Johns County regulations and codes",
+            "note": "Developer and Association may limit weekend and holiday construction hours as residents occupy community"
+          }
+        },
+        {
+          "id": "phased_construction",
+          "label": "Construction Phases",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Phase 1: Foundation (weeks 1-3), Phase 2: Framing (weeks 4-7), etc.",
+          "description": "Outline major construction phases and timeline"
+        }
+      ]
+    },
+    {
+      "title": "Utility and Infrastructure Impact",
+      "fields": [
+        {
+          "id": "electrical_service_upgrade",
+          "label": "Electrical Service Upgrade Required",
+          "type": "radio",
+          "required": true,
+          "options": ["No upgrade needed", "Panel upgrade required", "Service upgrade required", "Under evaluation"],
+          "description": "Will the addition require electrical service upgrades?"
+        },
+        {
+          "id": "plumbing_connections",
+          "label": "Plumbing Connections Required",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Water supply lines",
+            "Drain/waste lines",
+            "Vent lines",
+            "Gas lines",
+            "Septic system modifications"
+          ],
+          "description": "Check all plumbing connections required for the addition"
+        },
+        {
+          "id": "hvac_modifications",
+          "label": "HVAC System Modifications",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Ductwork extensions, system capacity upgrades, zoning, etc.",
+          "description": "Describe any heating and cooling system modifications needed"
+        },
+        {
+          "id": "utility_line_impacts",
+          "label": "Existing Utility Line Impacts",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Any existing utility lines that need to be relocated or protected",
+          "description": "Address impacts to electric, gas, water, sewer, cable, phone lines",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3 Construction Activities - Utility Adjustments",
+            "requirement": "Owner/Builder must coordinate utility relocations in advance as part of initial site plan submittal and bear all associated costs",
+            "note": "Must call for utility locates to avoid damage to existing utilities. Repairs paid by Owner/Builder causing damage."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Environmental and Site Impact",
+      "fields": [
+        {
+          "id": "tree_removal_required",
+          "label": "Tree Removal Required",
+          "type": "radio",
+          "required": true,
+          "options": ["No trees affected", "Minor tree/shrub removal", "Significant tree removal", "Heritage/protected trees affected"],
+          "description": "Will any trees need to be removed for this addition?",
+          "relevantBylaws": {
+            "reference": "Section 4.5 Site Preparation - Existing Vegetation and Tree Protection",
+            "requirement": "Protected trees must be identified on plans and properly protected with silt barriers. No disturbance within drip line of protected trees.",
+            "note": "Tree protection fencing required per St. Johns County regulation. Conservation land disturbances strictly prohibited."
+          }
+        },
+        {
+          "id": "drainage_modifications",
+          "label": "Drainage System Modifications",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Changes to roof drainage, yard grading, storm water management, etc.",
+          "description": "Describe all drainage and grading changes needed",
+          "relevantBylaws": {
+            "reference": "Section 4.6 Earthwork and Drainage",
+            "requirement": "Must adhere to Neighborhood Grading and Drainage Plan. Positive drainage required - cannot be diverted onto adjacent lots.",
+            "note": "Downspouts must include subsurface drain pipe or splash blocks. Finished floor elevations cannot be modified without approvals."
+          }
+        },
+        {
+          "id": "soil_conditions",
+          "label": "Soil and Geotechnical Considerations",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Soil test results, foundation requirements, etc.",
+          "description": "Describe any soil testing or geotechnical engineering requirements"
+        },
+        {
+          "id": "neighbor_impact_assessment",
+          "label": "Neighbor Impact Assessment",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Visual impact, privacy concerns, construction disruption, etc.",
+          "description": "Assess potential impacts on neighboring properties"
+        }
+      ]
+    },
+    {
+      "title": "Safety and Risk Management",
+      "fields": [
+        {
+          "id": "builders_risk_insurance",
+          "label": "Builder's Risk Insurance",
+          "type": "radio",
+          "required": true,
+          "options": ["Coverage in place", "Will obtain before construction", "Contractor providing coverage", "Under review"],
+          "description": "Builder's risk insurance protects against construction-related damages"
+        },
+        {
+          "id": "construction_safety_plan",
+          "label": "Construction Safety Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Safety fencing, signage, pedestrian protection, equipment staging, etc.",
+          "description": "Describe safety measures for workers, residents, and neighbors",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3 Construction Activities",
+            "requirement": "Maintain clean and orderly construction site. All activities controlled within property boundaries. Material storage and equipment staging on-site only.",
+            "note": "Continuous silt fencing and protective barriers required. Portable restrooms must face lot, not street."
+          }
+        },
+        {
+          "id": "emergency_access",
+          "label": "Emergency Access Considerations",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Maintain emergency vehicle access, clear fire lanes, etc.",
+          "description": "How will emergency access be maintained during construction?",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3 Construction Activities - Traffic Flow",
+            "requirement": "Traffic flow must never be blocked or restricted on neighborhood streets as result of parking and construction activities",
+            "note": "Emergency access must be maintained at all times during construction"
+          }
         }
       ]
     }
-  ]
-};
+  ],
+  "required_documents": [
+    "Complete architectural plans and elevations (ARB required)",
+    "Structural engineering drawings (stamped)",
+    "Site survey showing existing conditions and proposed addition",
+    "Foundation and grading plan",
+    "Building permit application or approved permits",
+    "Contractor license and insurance certificates",
+    "Material specifications and cut sheets",
+    "Utility connection plans",
+    "Drainage and stormwater management plan",
+    "Tree survey and protection plan (if applicable)",
+    "Completed Markland Design Review Application Form",
+    "Performance deposit documentation",
+    "Landscape plan (if required by ARB)",
+    "Color and material samples for ARB review"
+  ],
+  "scoring_weights": {
+    "structure_type": 8,
+    "lot_type_classification": 10,
+    "square_footage_addition": 8,
+    "height_specifications": 6,
+    "foundation_type": 8,
+    "framing_materials": 6,
+    "setbacks_front": 10,
+    "setbacks_side": 10,
+    "setbacks_rear": 8,
+    "lot_coverage_proposed": 12,
+    "height_restrictions": 10,
+    "architect_name": 8,
+    "structural_engineer_name": 10,
+    "general_contractor": 8,
+    "contractor_license": 8,
+    "arb_application_status": 20,
+    "performance_deposit": 15,
+    "pre_construction_meeting": 15,
+    "building_permit_status": 15,
+    "construction_start_date": 5,
+    "construction_duration": 5,
+    "work_hours": 6,
+    "utility_line_impacts": 8,
+    "drainage_modifications": 10,
+    "neighbor_impact_assessment": 12,
+    "builders_risk_insurance": 8,
+    "construction_safety_plan": 10,
+    "emergency_access": 8
+  },
+  "complianceNotes": {
+    "criticalReminders": [
+      "NO CONSTRUCTION may begin until ARB final approval is received - this is mandatory and strictly enforced",
+      "Pre-construction meeting with Developer representative required before any site work begins",
+      "Performance deposit must be posted before construction can commence",
+      "All structural changes must comply with maximum building height of 35 feet and 3-story limit",
+      "Lot-specific minimum and maximum square footage limits must be observed for additions",
+      "All exterior materials and colors require ARB approval before installation",
+      "Construction hours must comply with St. Johns County regulations and community standards",
+      "Continuous silt fencing required along conservation lands, wetlands, lakes, and common areas",
+      "All construction activities must remain within property boundaries"
+    ],
+    "commonViolations": [
+      "Starting construction without ARB approval - results in immediate stop-work order",
+      "Exceeding maximum building height or story limitations",
+      "Adding square footage that exceeds lot-type maximums",
+      "Using non-approved exterior materials or colors",
+      "Failing to maintain clean construction site and proper debris removal",
+      "Construction activities extending onto adjacent properties or common areas",
+      "Not coordinating utility relocations in advance of site plan submittal",
+      "Inadequate tree protection and conservation land encroachment",
+      "Not maintaining required setbacks from property lines",
+      "Missing required professional team members (architect/structural engineer for major additions)"
+    ]
+  },
+  "arbProcessNotes": {
+    "applicationTimeline": "Allow 30-45 days for ARB review after complete application submission",
+    "requiredMeetings": [
+      "Pre-construction site meeting with Developer representative (mandatory)",
+      "Potential ARB presentation meeting if requested",
+      "Final inspection meeting for performance deposit release"
+    ],
+    "performanceDepositInfo": "Deposit amounts vary by project scope and are posted on the Design Review Application Form. Deposit is refundable upon successful completion and compliance verification.",
+    "arbContactInfo": "Contact ARB for latest application requirements and forms - requirements subject to change"
+  }
+}

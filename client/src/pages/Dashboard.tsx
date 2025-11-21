@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ARCH_REQUEST_FORM_SCHEMA } from "@/lib/mock-data";
-import { ArrowUpRight, Clock, FileCheck, Plus } from "lucide-react";
+import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Dashboard() {
   return (
@@ -52,9 +53,16 @@ export default function Dashboard() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4">
-              <Button>Start New Application</Button>
+              <Link href="/apply">
+                <Button>Start New Application</Button>
+              </Link>
+              <Link href="/apply/markland-demo">
+                <Button variant="secondary" className="border-primary/20 border">
+                    <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                    Demo: Markland Form
+                </Button>
+              </Link>
               <Button variant="outline">Report Violation</Button>
-              <Button variant="outline">Message Board</Button>
             </CardContent>
           </Card>
         </div>
