@@ -62,9 +62,10 @@ interface DynamicFormProps {
   schema: Schema;
   onSubmit?: (data: any) => void;
   readOnly?: boolean;
+  isSubmitting?: boolean;
 }
 
-export default function DynamicForm({ schema, onSubmit, readOnly = false }: DynamicFormProps) {
+export default function DynamicForm({ schema, onSubmit, readOnly = false, isSubmitting = false }: DynamicFormProps) {
   const { register, handleSubmit, control, formState: { errors } } = useForm();
 
   const onFormSubmit = (data: any) => {
@@ -253,8 +254,10 @@ export default function DynamicForm({ schema, onSubmit, readOnly = false }: Dyna
 
         {!readOnly && (
             <div className="flex flex-col sm:flex-row justify-end gap-4 pt-4 pb-12">
-            <Button variant="outline" size="lg">Save Draft</Button>
-            <Button type="submit" size="lg">Submit Application</Button>
+            <Button variant="outline" size="lg" disabled={isSubmitting} data-testid="button-save-draft">Save Draft</Button>
+            <Button type="submit" size="lg" disabled={isSubmitting} data-testid="button-submit">
+              {isSubmitting ? "Submitting..." : "Submit Application"}
+            </Button>
             </div>
         )}
         </form>
