@@ -23,13 +23,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NAV_ITEMS, MOCK_USER, TENANTS, Role } from "@/lib/mock-data";
-import { ChevronDown, User as UserIcon, Building, LogOut } from "lucide-react";
+import { useAppStore } from "@/lib/store";
+import { ChevronDown, User as UserIcon, Building, LogOut, Globe } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const [currentTenant, setCurrentTenant] = useState(TENANTS[0]);
-  const [currentRole, setCurrentRole] = useState<Role>('account_admin');
+  const { currentTenant, currentUserRole, setCurrentTenant, setCurrentUserRole } = useAppStore();
 
   return (
     <SidebarProvider defaultOpen>
@@ -47,20 +47,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Tenant Switcher Mockup */}
             <div className="mb-6 px-2">
               <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider mb-2 block">
-                Current Portal
+                Current Portal (Simulated)
               </label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-between bg-sidebar-accent/50 border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left h-auto py-3">
                     <div className="flex flex-col items-start overflow-hidden">
                       <span className="font-medium truncate w-full">{currentTenant.name}</span>
-                      <span className="text-xs text-muted-foreground capitalize">{currentTenant.type.replace('_', ' ')}</span>
+                      <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
+                        <Globe className="h-3 w-3" />
+                        {currentTenant.subdomain}.civicflow.com
+                      </span>
                     </div>
                     <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="start">
-                  <DropdownMenuLabel>Switch Portal</DropdownMenuLabel>
+                <DropdownMenuContent className="w-64" align="start">
+                  <DropdownMenuLabel>Switch Subdomain Context</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {TENANTS.map(t => (
                     <DropdownMenuItem key={t.id} onClick={() => setCurrentTenant(t)}>
@@ -69,6 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <span>{t.name}</span>
                         <span className="text-xs text-muted-foreground">{t.subdomain}.civicflow.com</span>
                       </div>
+                      {currentTenant.id === t.id && <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -105,8 +109,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </label>
                 <select 
                   className="w-full bg-transparent text-xs text-sidebar-foreground border-none p-0 focus:ring-0 cursor-pointer"
-                  value={currentRole}
-                  onChange={(e) => setCurrentRole(e.target.value as Role)}
+                  value={currentUserRole}
+                  onChange={(e) => setCurrentUserRole(e.target.value as Role)}
                 >
                   <option value="super_admin">Super Admin</option>
                   <option value="account_admin">Account Admin</option>
@@ -124,7 +128,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="flex flex-col overflow-hidden">
                 <span className="text-sm font-medium truncate">{MOCK_USER.name}</span>
                 <span className="text-xs text-sidebar-foreground/60 truncate">
-                  {currentRole.replace('_', ' ')}
+                  {currentUserRole.replace('_', ' ')}
                 </span>
               </div>
             </div>
@@ -142,6 +146,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </h1>
             </div>
             <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                <Globe className="h-3 w-3 mr-1" />
+                Context: <span className="font-medium ml-1 text-foreground">{currentTenant.name}</span>
+              </div>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
                 <UserIcon className="h-5 w-5" />
               </Button>
