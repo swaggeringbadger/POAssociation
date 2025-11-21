@@ -12,7 +12,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={logoImage} alt="Logo" className="h-8 w-8 rounded" />
-            <span className="text-xl font-bold text-primary font-heading">CivicFlow</span>
+            <span className="text-xl font-bold text-primary font-heading">POA Association</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -20,9 +20,9 @@ export default function Landing() {
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button>Go to Portal <ArrowRight className="ml-2 h-4 w-4" /></Button>
-            </Link>
+            <Button onClick={() => window.location.href = '/api/login'} data-testid="button-login">
+              Sign In <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
         </div>
       </nav>
@@ -39,7 +39,9 @@ export default function Landing() {
               The all-in-one platform for HOAs, Management Companies, and Boards to streamline architectural reviews, communications, and compliance.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-              <Button size="lg" className="text-lg px-8 h-12">Get Started</Button>
+              <Button size="lg" className="text-lg px-8 h-12" onClick={() => window.location.href = '/api/login'} data-testid="button-get-started">
+                Get Started
+              </Button>
               <Button size="lg" variant="outline" className="text-lg px-8 h-12">View Demo</Button>
             </div>
           </div>
@@ -87,7 +89,7 @@ export default function Landing() {
       {/* Footer Mockup */}
       <footer className="bg-background border-t py-12">
         <div className="max-w-7xl mx-auto px-4 text-center text-muted-foreground">
-          <p>&copy; 2024 CivicFlow Inc. All rights reserved.</p>
+          <p>&copy; 2024 POA Association. All rights reserved.</p>
         </div>
       </footer>
     </div>

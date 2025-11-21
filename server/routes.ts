@@ -3,10 +3,26 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTenantSchema, insertFormTemplateSchema, insertApplicationSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Tenants
-  app.get("/api/tenants", async (req, res) => {
+  // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
+  await setupAuth(app);
+
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error: any) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Tenants - Protected routes
+  app.get("/api/tenants", isAuthenticated, async (req, res) => {
     try {
       const tenants = await storage.listTenants();
       res.json(tenants);
@@ -15,7 +31,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tenants/subdomain/:subdomain", async (req, res) => {
+  app.get("/api/tenants/subdomain/:subdomain", isAuthenticated, async (req, res) => {
     try {
       const tenant = await storage.getTenantBySubdomain(req.params.subdomain);
       if (!tenant) {
@@ -27,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tenants", async (req, res) => {
+  app.post("/api/tenants", isAuthenticated, async (req, res) => {
     try {
       const validated = insertTenantSchema.parse(req.body);
       const tenant = await storage.createTenant(validated);
@@ -40,8 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Form Templates
-  app.get("/api/tenants/:tenantId/forms", async (req, res) => {
+  // Form Templates - Protected routes
+  app.get("/api/tenants/:tenantId/forms", isAuthenticated, async (req, res) => {
     try {
       const forms = await storage.listFormTemplatesForTenant(req.params.tenantId);
       res.json(forms);
@@ -50,7 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/forms/:id", async (req, res) => {
+  app.get("/api/forms/:id", isAuthenticated, async (req, res) => {
     try {
       const form = await storage.getFormTemplate(req.params.id);
       if (!form) {
@@ -62,7 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tenants/:tenantId/forms", async (req, res) => {
+  app.post("/api/tenants/:tenantId/forms", isAuthenticated, async (req, res) => {
     try {
       const validated = insertFormTemplateSchema.parse({
         ...req.body,
@@ -78,7 +94,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/forms/:id", async (req, res) => {
+  app.patch("/api/forms/:id", isAuthenticated, async (req, res) => {
     try {
       const form = await storage.updateFormTemplate(req.params.id, req.body);
       res.json(form);
@@ -87,8 +103,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Applications
-  app.get("/api/applications/:id", async (req, res) => {
+  // Applications - Protected routes
+  app.get("/api/applications/:id", isAuthenticated, async (req, res) => {
     try {
       const application = await storage.getApplication(req.params.id);
       if (!application) {
@@ -100,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tenants/:tenantId/applications", async (req, res) => {
+  app.get("/api/tenants/:tenantId/applications", isAuthenticated, async (req, res) => {
     try {
       const applications = await storage.listApplicationsForTenant(req.params.tenantId);
       res.json(applications);
@@ -109,7 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/applications", async (req, res) => {
+  app.post("/api/applications", isAuthenticated, async (req, res) => {
     try {
       const validated = insertApplicationSchema.parse(req.body);
       const application = await storage.createApplication(validated);
@@ -122,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/applications/:id/status", async (req, res) => {
+  app.patch("/api/applications/:id/status", isAuthenticated, async (req, res) => {
     try {
       const { status, reviewedByUserId, reviewNotes } = req.body;
       const application = await storage.updateApplicationStatus(
@@ -137,8 +153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User-Tenant relationships
-  app.get("/api/users/:userId/tenants", async (req, res) => {
+  // User-Tenant relationships - Protected routes
+  app.get("/api/users/:userId/tenants", isAuthenticated, async (req, res) => {
     try {
       const tenants = await storage.getUserTenants(req.params.userId);
       res.json(tenants);

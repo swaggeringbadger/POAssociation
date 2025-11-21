@@ -10,10 +10,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 const db = drizzle({ client: pool, schema });
 
 export interface IStorage {
-  // Users
+  // Users - Referenced from Replit Auth integration
   getUser(id: string): Promise<schema.User | undefined>;
   getUserByEmail(email: string): Promise<schema.User | undefined>;
-  createUser(user: schema.InsertUser): Promise<schema.User>;
+  upsertUser(user: schema.UpsertUser): Promise<schema.User>;
   
   // Tenants
   getTenant(id: string): Promise<schema.Tenant | undefined>;
@@ -57,8 +57,18 @@ export class DbStorage implements IStorage {
     return user;
   }
 
-  async createUser(insertUser: schema.InsertUser): Promise<schema.User> {
-    const [user] = await db.insert(schema.users).values(insertUser).returning();
+  async upsertUser(userData: schema.UpsertUser): Promise<schema.User> {
+    const [user] = await db
+      .insert(schema.users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: schema.users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
     return user;
   }
 

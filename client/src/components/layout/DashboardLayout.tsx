@@ -22,14 +22,34 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { NAV_ITEMS, MOCK_USER, TENANTS, Role } from "@/lib/mock-data";
+import { NAV_ITEMS, TENANTS, Role } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
+import { useAuth } from "@/hooks/useAuth";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
+import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { currentTenant, currentUserRole, setCurrentTenant, setCurrentUserRole } = useAppStore();
+  const { user: authUser } = useAuth();
+  const user = authUser as User | undefined;
+  
+  // Get initials for avatar fallback
+  const getInitials = () => {
+    if (!user) return "U";
+    if (user.firstName && user.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    if (user.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    return "U";
+  };
+
+  const displayName = user?.firstName && user?.lastName 
+    ? `${user.firstName} ${user.lastName}` 
+    : user?.email || "User";
 
   return (
     <SidebarProvider defaultOpen>
@@ -39,7 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border">
             <div className="flex items-center gap-2 font-bold text-lg text-sidebar-primary-foreground">
               <img src={logoImage} className="w-8 h-8 rounded" alt="Logo" />
-              <span>CivicFlow</span>
+              <span>POA Association</span>
             </div>
           </SidebarHeader>
           
@@ -56,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <span className="font-medium truncate w-full">{currentTenant.name}</span>
                       <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
                         <Globe className="h-3 w-3" />
-                        {currentTenant.subdomain}.civicflow.com
+                        {currentTenant.subdomain}.poassociation.com
                       </span>
                     </div>
                     <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
@@ -70,7 +90,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <Building className="mr-2 h-4 w-4" />
                       <div className="flex flex-col">
                         <span>{t.name}</span>
-                        <span className="text-xs text-muted-foreground">{t.subdomain}.civicflow.com</span>
+                        <span className="text-xs text-muted-foreground">{t.subdomain}.poassociation.com</span>
                       </div>
                       {currentTenant.id === t.id && <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>}
                     </DropdownMenuItem>
@@ -120,18 +140,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </select>
              </div>
 
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9 border border-sidebar-border">
-                <AvatarImage src={MOCK_USER.avatarUrl} />
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">JD</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-sm font-medium truncate">{MOCK_USER.name}</span>
-                <span className="text-xs text-sidebar-foreground/60 truncate">
-                  {currentUserRole.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="w-full justify-start gap-3 h-auto p-2 hover:bg-sidebar-accent">
+                  <Avatar className="h-9 w-9 border border-sidebar-border">
+                    <AvatarImage src={user?.profileImageUrl || undefined} style={{ objectFit: 'cover' }} />
+                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
+                      {getInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col overflow-hidden text-left flex-1">
+                    <span className="text-sm font-medium truncate">{displayName}</span>
+                    <span className="text-xs text-sidebar-foreground/60 truncate">
+                      {currentUserRole.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => window.location.href = '/api/logout'}
+                  data-testid="button-logout"
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
 

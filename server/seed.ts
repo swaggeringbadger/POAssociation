@@ -52,22 +52,6 @@ async function seed() {
   });
   console.log("✅ Created form template:", marklandForm.name);
 
-  // Create a demo user
-  const user = await storage.createUser({
-    name: "Jane Doe",
-    email: "jane@example.com",
-    passwordHash: null,
-  });
-  console.log("✅ Created user:", user.name);
-
-  // Assign user to Markland as homeowner
-  await storage.assignUserRole({
-    userId: user.id,
-    tenantId: markland.id,
-    role: "homeowner",
-  });
-  console.log("✅ Assigned user to Markland as homeowner");
-
   console.log("\n🎉 Database seeded successfully!");
   process.exit(0);
 }

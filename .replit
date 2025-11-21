@@ -16,7 +16,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 41487
+localPort = 38507
 externalPort = 3000
 
 [env]
@@ -45,3 +45,4 @@ waitForPort = 5000
 
 [agent]
 mockupState = "FULLSTACK"
+integrations = ["javascript_log_in_with_replit:1.0.0"]

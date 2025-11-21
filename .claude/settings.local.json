@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/runner/workspace log --oneline --graph -20)",
+      "Bash(git -C /home/runner/workspace log --oneline --all --decorate -10)",
+      "Bash(git -C /home/runner/workspace show --stat HEAD)",
+      "Bash(git -C /home/runner/workspace show --stat d2d1447)",
+      "Bash(git -C /home/runner/workspace show --stat 9fcf895)",
+      "Bash(git -C /home/runner/workspace show --stat c48d41c)",
+      "Bash(git -C /home/runner/workspace log:*)",
+      "Bash(git -C /home/runner/workspace status)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

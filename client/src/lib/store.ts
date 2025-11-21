@@ -25,12 +25,12 @@ export const useAppStore = create<AppState>()(
         if (tenant) {
           set({ currentTenant: tenant });
           // In a real app, this would trigger a window.location.href change
-          console.log(`Navigated to ${subdomain}.civicflow.com`);
+          console.log(`Navigated to ${subdomain}.poassociation.com`);
         }
       }
     }),
     {
-      name: 'civicflow-state',
+      name: 'poassociation-state',
     }
   )
 );
