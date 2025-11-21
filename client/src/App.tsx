@@ -9,6 +9,11 @@ import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
 import MarklandExample from "@/pages/MarklandExample";
+import DemoCodeEntry from "@/pages/DemoCodeEntry";
+import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
+import DemoCodes from "@/pages/admin/DemoCodes";
+import DemoCodeForm from "@/pages/admin/DemoCodeForm";
+import DemoCodeStats from "@/pages/admin/DemoCodeStats";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -18,6 +23,10 @@ function Router() {
 
   return (
     <Switch>
+      {/* Demo routes - accessible without auth */}
+      <Route path="/demo" component={DemoCodeEntry} />
+      <Route path="/demo/personas" component={DemoPersonaSelect} />
+
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
@@ -26,14 +35,14 @@ function Router() {
           <Route path="/">
             {() => <Redirect to="/dashboard" />}
           </Route>
-          
+
           {/* Dashboard Routes wrapped in Layout */}
           <Route path="/dashboard">
             <DashboardLayout>
               <Dashboard />
             </DashboardLayout>
           </Route>
-          
+
           {/* Add other dashboard pages here similarly */}
           <Route path="/applications">
             <DashboardLayout>
@@ -57,6 +66,27 @@ function Router() {
             <DashboardLayout>
               <MarklandExample />
             </DashboardLayout>
+          </Route>
+
+          {/* Admin Routes */}
+          <Route path="/admin/demo-codes">
+            <DashboardLayout>
+              <DemoCodes />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/admin/demo-codes/:id">
+            {(params) => (
+              <DashboardLayout>
+                {params.id === 'new' || params.id?.endsWith('/edit') ? (
+                  <DemoCodeForm />
+                ) : params.id?.endsWith('/stats') ? (
+                  <DemoCodeStats />
+                ) : (
+                  <DemoCodeForm />
+                )}
+              </DashboardLayout>
+            )}
           </Route>
         </>
       )}

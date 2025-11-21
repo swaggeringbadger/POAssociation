@@ -105,6 +105,105 @@ class ApiClient {
     if (!response.ok) throw new Error("Failed to fetch applications");
     return response.json();
   }
+
+  async getUserTenants(userId: string): Promise<Array<{
+    id: string;
+    userId: string;
+    tenantId: string;
+    role: string;
+    createdAt: string;
+    tenant: Tenant;
+  }>> {
+    const response = await fetch(`${this.baseUrl}/users/${userId}/tenants`);
+    if (!response.ok) throw new Error("Failed to fetch user tenants");
+    return response.json();
+  }
+
+  // Demo endpoints
+  async validateDemoCode(code: string): Promise<{
+    valid: boolean;
+    codeId?: string;
+    label?: string;
+    personas?: Array<{ id: string; firstName: string; lastName: string; email: string }>;
+    message?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/demo/validate-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) throw new Error("Failed to validate demo code");
+    return response.json();
+  }
+
+  async loginAsDemo(userId: string): Promise<{
+    success: boolean;
+    user: any;
+    sessionId: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/demo/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) throw new Error("Failed to login as demo user");
+    return response.json();
+  }
+
+  // Admin demo code management
+  async listDemoCodes(): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/admin/demo-codes`);
+    if (!response.ok) throw new Error("Failed to list demo codes");
+    return response.json();
+  }
+
+  async createDemoCode(data: {
+    code: string;
+    label: string;
+    validFrom: string;
+    validUntil: string;
+    maxUses?: number;
+    isActive?: boolean;
+  }): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/admin/demo-codes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("Failed to create demo code");
+    return response.json();
+  }
+
+  async updateDemoCode(id: string, data: any): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/admin/demo-codes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("Failed to update demo code");
+    return response.json();
+  }
+
+  async deleteDemoCode(id: string): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${this.baseUrl}/admin/demo-codes/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete demo code");
+    return response.json();
+  }
+
+  async getDemoCodeStats(id: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/admin/demo-codes/${id}/stats`);
+    if (!response.ok) throw new Error("Failed to get demo code stats");
+    return response.json();
+  }
+
+  // Auth helpers
+  async isSuperAdmin(): Promise<{ isSuperAdmin: boolean }> {
+    const response = await fetch(`${this.baseUrl}/auth/is-super-admin`);
+    if (!response.ok) return { isSuperAdmin: false };
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { TENANTS, Tenant, Role } from './mock-data';
+import type { Tenant } from '@/lib/api';
 
 interface AppState {
-  currentTenant: Tenant;
-  currentUserRole: Role;
+  availableTenants: Tenant[];
+  currentTenant: Tenant | null;
+  currentUserRole: string;
+  setAvailableTenants: (tenants: Tenant[]) => void;
   setCurrentTenant: (tenant: Tenant) => void;
-  setCurrentUserRole: (role: Role) => void;
+  setCurrentUserRole: (role: string) => void;
   // Helper to simulate subdomain navigation
   simulateSubdomainVisit: (subdomain: string) => void;
 }
@@ -14,14 +16,16 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      currentTenant: TENANTS[0], // Default to Apex Management
-      currentUserRole: 'account_admin',
-      
+      availableTenants: [],
+      currentTenant: null,
+      currentUserRole: 'homeowner',
+
+      setAvailableTenants: (tenants) => set({ availableTenants: tenants }),
       setCurrentTenant: (tenant) => set({ currentTenant: tenant }),
       setCurrentUserRole: (role) => set({ currentUserRole: role }),
-      
+
       simulateSubdomainVisit: (subdomain) => {
-        const tenant = TENANTS.find(t => t.subdomain === subdomain);
+        const tenant = get().availableTenants.find(t => t.subdomain === subdomain);
         if (tenant) {
           set({ currentTenant: tenant });
           // In a real app, this would trigger a window.location.href change

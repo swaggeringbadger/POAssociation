@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowRight, CheckCircle2, Layout, Shield, Users } from "lucide-react";
 import heroImage from "@assets/generated_images/modern_suburban_homes_with_green_lawns_and_blue_sky.png";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 
 export default function Landing() {
+  const [, navigate] = useLocation();
+
   return (
     <div className="min-h-screen bg-background font-sans">
       {/* Navigation */}
@@ -42,7 +44,9 @@ export default function Landing() {
               <Button size="lg" className="text-lg px-8 h-12" onClick={() => window.location.href = '/api/login'} data-testid="button-get-started">
                 Get Started
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 h-12">View Demo</Button>
+              <Button size="lg" variant="outline" className="text-lg px-8 h-12" onClick={() => navigate('/demo')}>
+                View Demo
+              </Button>
             </div>
           </div>
           <div className="flex-1 relative">

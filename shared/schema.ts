@@ -15,6 +15,35 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
+// Demo Codes table - must be defined before users table
+export const demoCodes = pgTable("demo_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  label: text("label").notNull(),
+  validFrom: timestamp("valid_from").notNull(),
+  validUntil: timestamp("valid_until").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  maxUses: integer("max_uses"), // null = unlimited
+  currentUses: integer("current_uses").notNull().default(0),
+  isProvisioned: boolean("is_provisioned").notNull().default(false),
+  provisionedAt: timestamp("provisioned_at"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertDemoCodeSchema = createInsertSchema(demoCodes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  currentUses: true,
+  isProvisioned: true,
+  provisionedAt: true,
+});
+
+export type InsertDemoCode = z.infer<typeof insertDemoCodeSchema>;
+export type DemoCode = typeof demoCodes.$inferSelect;
+
 // User storage table - updated for Replit Auth compatibility
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -22,6 +51,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -36,6 +66,7 @@ export const tenants = pgTable("tenants", {
   type: text("type").notNull(), // 'management_company' | 'community'
   subdomain: text("subdomain").notNull().unique(),
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
 });
@@ -54,6 +85,7 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // 'super_admin', 'account_admin', etc.
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userTenantIdx: uniqueIndex("user_tenant_idx").on(table.userId, table.tenantId, table.role),
@@ -74,6 +106,7 @@ export const formTemplates = pgTable("form_templates", {
   name: text("name").notNull(),
   description: text("description"),
   schema: jsonb("schema").notNull(), // The full JSON form schema
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -96,6 +129,7 @@ export const applications = pgTable("applications", {
   submittedByUserId: varchar("submitted_by_user_id").notNull().references(() => users.id),
   formData: jsonb("form_data").notNull(), // The actual submitted data
   status: text("status").default("pending").notNull(), // 'pending', 'under_review', 'approved', 'rejected'
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at"),
   reviewedByUserId: varchar("reviewed_by_user_id").references(() => users.id),
@@ -109,3 +143,24 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
 
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
 export type Application = typeof applications.$inferSelect;
+
+// Demo Sessions table (for analytics and tracking)
+export const demoSessions = pgTable("demo_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  demoCodeId: varchar("demo_code_id").notNull().references(() => demoCodes.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+export const insertDemoSessionSchema = createInsertSchema(demoSessions).omit({
+  id: true,
+  startedAt: true,
+  lastActivityAt: true,
+});
+
+export type InsertDemoSession = z.infer<typeof insertDemoSessionSchema>;
+export type DemoSession = typeof demoSessions.$inferSelect;

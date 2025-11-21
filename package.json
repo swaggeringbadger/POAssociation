@@ -9,7 +9,11 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "demo:create": "tsx server/createDemoCode.ts",
+    "demo:purge": "tsx server/purgeExpiredDemos.ts",
+    "demo:purge:dry": "tsx server/purgeExpiredDemos.ts --dry-run",
+    "demo:purge:all": "tsx server/purgeExpiredDemos.ts --inactive"
   },
   "notes": "removed framer motion dependency",
   "dependencies": {

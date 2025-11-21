@@ -1,40 +1,54 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { 
-  Sidebar, 
-  SidebarContent, 
-  SidebarFooter, 
-  SidebarHeader, 
-  SidebarMenu, 
-  SidebarMenuItem, 
+import { useQuery } from "@tanstack/react-query";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
   SidebarMenuButton,
   SidebarProvider,
   SidebarTrigger
 } from "@/components/ui/sidebar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { NAV_ITEMS, TENANTS, Role } from "@/lib/mock-data";
+import { Separator } from "@/components/ui/separator";
+import { NAV_ITEMS } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
-import { ChevronDown, User as UserIcon, Building, LogOut, Globe } from "lucide-react";
+import { useUserTenants } from "@/hooks/useUserTenants";
+import { api } from "@/lib/api";
+import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { currentTenant, currentUserRole, setCurrentTenant, setCurrentUserRole } = useAppStore();
+  const { currentTenant, currentUserRole, availableTenants, setCurrentTenant } = useAppStore();
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
-  
+  const { isLoading: tenantsLoading } = useUserTenants();
+
+  // Check if user is super admin
+  const { data: superAdminData } = useQuery({
+    queryKey: ['/api/auth/is-super-admin'],
+    queryFn: () => api.isSuperAdmin(),
+    enabled: !!user,
+  });
+
+  const isSuperAdmin = superAdminData?.isSuperAdmin ?? false;
+
   // Get initials for avatar fallback
   const getInitials = () => {
     if (!user) return "U";
@@ -47,9 +61,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return "U";
   };
 
-  const displayName = user?.firstName && user?.lastName 
-    ? `${user.firstName} ${user.lastName}` 
+  const displayName = user?.firstName && user?.lastName
+    ? `${user.firstName} ${user.lastName}`
     : user?.email || "User";
+
+  // Format role display name
+  const formatRole = (role: string) => {
+    return role
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Show loading state while tenants are loading
+  if (tenantsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message if no tenants available
+  if (!currentTenant) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md p-8">
+          <h2 className="text-2xl font-bold mb-4">No Communities Assigned</h2>
+          <p className="text-muted-foreground mb-4">
+            You don't have access to any communities yet. Please contact your administrator to get access.
+          </p>
+          <Button onClick={() => window.location.href = '/api/logout'}>
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen>
@@ -64,40 +115,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarHeader>
           
           <SidebarContent className="px-2 py-4">
-            {/* Tenant Switcher Mockup */}
-            <div className="mb-6 px-2">
-              <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider mb-2 block">
-                Current Portal (Simulated)
-              </label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between bg-sidebar-accent/50 border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left h-auto py-3">
-                    <div className="flex flex-col items-start overflow-hidden">
-                      <span className="font-medium truncate w-full">{currentTenant.name}</span>
-                      <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
-                        <Globe className="h-3 w-3" />
-                        {currentTenant.subdomain}.poassociation.com
-                      </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="start">
-                  <DropdownMenuLabel>Switch Subdomain Context</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {TENANTS.map(t => (
-                    <DropdownMenuItem key={t.id} onClick={() => setCurrentTenant(t)}>
-                      <Building className="mr-2 h-4 w-4" />
-                      <div className="flex flex-col">
-                        <span>{t.name}</span>
-                        <span className="text-xs text-muted-foreground">{t.subdomain}.poassociation.com</span>
+            {/* Tenant Switcher - Only show if user has multiple tenants */}
+            {availableTenants.length > 1 && currentTenant && (
+              <div className="mb-6 px-2">
+                <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider mb-2 block">
+                  Current Community
+                </label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between bg-sidebar-accent/50 border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left h-auto py-3">
+                      <div className="flex flex-col items-start overflow-hidden">
+                        <span className="font-medium truncate w-full">{currentTenant.name}</span>
+                        <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
+                          <Globe className="h-3 w-3" />
+                          {currentTenant.subdomain}.poassociation.com
+                        </span>
                       </div>
-                      {currentTenant.id === t.id && <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                      <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64" align="start">
+                    <DropdownMenuLabel>Switch Community</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {availableTenants.map(t => (
+                      <DropdownMenuItem key={t.id} onClick={() => setCurrentTenant(t)}>
+                        <Building className="mr-2 h-4 w-4" />
+                        <div className="flex flex-col">
+                          <span>{t.name}</span>
+                          <span className="text-xs text-muted-foreground">{t.subdomain}.poassociation.com</span>
+                        </div>
+                        {currentTenant.id === t.id && <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
 
             {/* Navigation */}
             <SidebarMenu>
@@ -105,8 +158,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 const isActive = location === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton 
-                      asChild 
+                    <SidebarMenuButton
+                      asChild
                       isActive={isActive}
                       className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                     >
@@ -119,27 +172,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 );
               })}
             </SidebarMenu>
+
+            {/* Admin Section - Only visible to super admins */}
+            {isSuperAdmin && (
+              <>
+                <Separator className="my-4" />
+                <div className="px-2 mb-2">
+                  <div className="flex items-center gap-2 text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider">
+                    <Shield className="h-3 w-3" />
+                    <span>Admin</span>
+                  </div>
+                </div>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location.startsWith('/admin/demo-codes')}
+                      className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                    >
+                      <Link href="/admin/demo-codes">
+                        <Ticket className="h-5 w-5" />
+                        <span>Demo Codes</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </>
+            )}
           </SidebarContent>
 
           <SidebarFooter className="border-t border-sidebar-border p-4">
-             {/* Role Switcher for Demo */}
-             <div className="mb-4 p-2 bg-sidebar-accent/20 rounded-md border border-dashed border-sidebar-border">
-                <label className="text-[10px] font-bold text-sidebar-foreground/50 uppercase tracking-wider block mb-1">
-                  Demo: Current Role
-                </label>
-                <select 
-                  className="w-full bg-transparent text-xs text-sidebar-foreground border-none p-0 focus:ring-0 cursor-pointer"
-                  value={currentUserRole}
-                  onChange={(e) => setCurrentUserRole(e.target.value as Role)}
-                >
-                  <option value="super_admin">Super Admin</option>
-                  <option value="account_admin">Account Admin</option>
-                  <option value="management_manager">Mgmt Manager</option>
-                  <option value="poa_board_member">Board Member</option>
-                  <option value="homeowner">Homeowner</option>
-                </select>
-             </div>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 h-auto p-2 hover:bg-sidebar-accent">
@@ -152,7 +214,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="flex flex-col overflow-hidden text-left flex-1">
                     <span className="text-sm font-medium truncate">{displayName}</span>
                     <span className="text-xs text-sidebar-foreground/60 truncate">
-                      {currentUserRole.replace('_', ' ')}
+                      {formatRole(currentUserRole)}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 opacity-50" />

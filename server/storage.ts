@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import ws from "ws";
 
@@ -38,11 +38,28 @@ export interface IStorage {
   listApplicationsForUser(userId: string): Promise<schema.Application[]>;
   createApplication(application: schema.InsertApplication): Promise<schema.Application>;
   updateApplicationStatus(
-    id: string, 
-    status: string, 
-    reviewedByUserId?: string, 
+    id: string,
+    status: string,
+    reviewedByUserId?: string,
     reviewNotes?: string
   ): Promise<schema.Application>;
+
+  // Demo Codes
+  getDemoCode(id: string): Promise<schema.DemoCode | undefined>;
+  getDemoCodeByCode(code: string): Promise<schema.DemoCode | undefined>;
+  listDemoCodes(): Promise<schema.DemoCode[]>;
+  createDemoCode(code: schema.InsertDemoCode): Promise<schema.DemoCode>;
+  updateDemoCode(id: string, updates: Partial<Omit<schema.DemoCode, 'id' | 'createdAt' | 'updatedAt'>>): Promise<schema.DemoCode>;
+  deleteDemoCode(id: string): Promise<void>;
+  incrementDemoCodeUsage(id: string): Promise<void>;
+
+  // Demo Users
+  getDemoUsersByCodeId(codeId: string): Promise<schema.User[]>;
+
+  // Demo Sessions
+  createDemoSession(session: schema.InsertDemoSession): Promise<schema.DemoSession>;
+  endDemoSession(id: string): Promise<void>;
+  getDemoSessionStats(codeId: string): Promise<any>;
 }
 
 export class DbStorage implements IStorage {
@@ -188,6 +205,85 @@ export class DbStorage implements IStorage {
       .where(eq(schema.applications.id, id))
       .returning();
     return application;
+  }
+
+  // Demo Codes
+  async getDemoCode(id: string): Promise<schema.DemoCode | undefined> {
+    const [code] = await db.select().from(schema.demoCodes).where(eq(schema.demoCodes.id, id));
+    return code;
+  }
+
+  async getDemoCodeByCode(code: string): Promise<schema.DemoCode | undefined> {
+    const [demoCode] = await db.select().from(schema.demoCodes).where(eq(schema.demoCodes.code, code));
+    return demoCode;
+  }
+
+  async listDemoCodes(): Promise<schema.DemoCode[]> {
+    return db.select().from(schema.demoCodes);
+  }
+
+  async createDemoCode(insertCode: schema.InsertDemoCode): Promise<schema.DemoCode> {
+    const [code] = await db.insert(schema.demoCodes).values(insertCode).returning();
+    return code;
+  }
+
+  async updateDemoCode(id: string, updates: Partial<Omit<schema.DemoCode, 'id' | 'createdAt' | 'updatedAt'>>): Promise<schema.DemoCode> {
+    const [code] = await db
+      .update(schema.demoCodes)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.demoCodes.id, id))
+      .returning();
+    return code;
+  }
+
+  async deleteDemoCode(id: string): Promise<void> {
+    // Cascade delete handles all related data automatically
+    await db.delete(schema.demoCodes).where(eq(schema.demoCodes.id, id));
+  }
+
+  async incrementDemoCodeUsage(id: string): Promise<void> {
+    await db
+      .update(schema.demoCodes)
+      .set({ currentUses: sql`${schema.demoCodes.currentUses} + 1` })
+      .where(eq(schema.demoCodes.id, id));
+  }
+
+  // Demo Users
+  async getDemoUsersByCodeId(codeId: string): Promise<schema.User[]> {
+    return db.select().from(schema.users).where(eq(schema.users.demoCodeId, codeId));
+  }
+
+  // Demo Sessions
+  async createDemoSession(insertSession: schema.InsertDemoSession): Promise<schema.DemoSession> {
+    const [session] = await db.insert(schema.demoSessions).values(insertSession).returning();
+    return session;
+  }
+
+  async endDemoSession(id: string): Promise<void> {
+    await db
+      .update(schema.demoSessions)
+      .set({ endedAt: new Date() })
+      .where(eq(schema.demoSessions.id, id));
+  }
+
+  async getDemoSessionStats(codeId: string): Promise<any> {
+    const sessions = await db
+      .select()
+      .from(schema.demoSessions)
+      .where(eq(schema.demoSessions.demoCodeId, codeId));
+
+    const activeSessions = sessions.filter(s => !s.endedAt);
+
+    return {
+      totalSessions: sessions.length,
+      activeSessions: activeSessions.length,
+      averageDuration: sessions
+        .filter(s => s.endedAt)
+        .reduce((acc, s) => {
+          const duration = s.endedAt!.getTime() - s.startedAt.getTime();
+          return acc + duration;
+        }, 0) / sessions.filter(s => s.endedAt).length,
+    };
   }
 }
 

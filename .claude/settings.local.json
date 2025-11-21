@@ -8,7 +8,14 @@
       "Bash(git -C /home/runner/workspace show --stat 9fcf895)",
       "Bash(git -C /home/runner/workspace show --stat c48d41c)",
       "Bash(git -C /home/runner/workspace log:*)",
-      "Bash(git -C /home/runner/workspace status)"
+      "Bash(git -C /home/runner/workspace status)",
+      "Bash(npm run db:push:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run demo:create:*)",
+      "Bash(curl:*)",
+      "Bash(tsx check-demo-codes.ts:*)",
+      "Bash(git -C /home/runner/workspace diff --stat)",
+      "Bash(git -C /home/runner/workspace add -A)"
     ],
     "deny": [],
     "ask": []
