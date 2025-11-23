@@ -47,6 +47,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       clearState();
       // Clear React Query cache
       queryClient.clear();
+      // Clear saved demo code
+      localStorage.removeItem('poa-demo-code');
       // Destroy session on backend
       await api.logout();
       // Redirect to landing page with logout flag to prevent redirect loop
@@ -54,6 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch (error) {
       console.error('Logout error:', error);
       // Even if API call fails, still clear frontend state and redirect
+      localStorage.removeItem('poa-demo-code');
       window.location.href = '/?logout=true';
     }
   };
