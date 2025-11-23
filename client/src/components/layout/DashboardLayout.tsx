@@ -28,6 +28,7 @@ import { NAV_ITEMS } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
+import { useSubdomain } from "@/hooks/useSubdomain";
 import { api, queryClient } from "@/lib/api";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
@@ -39,6 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
   const { isLoading: tenantsLoading } = useUserTenants();
+  const { subdomain, isSubdomainMode } = useSubdomain();
 
   // Handle logout - clear all state before redirecting
   const handleLogout = async () => {
@@ -136,8 +138,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarHeader>
           
           <SidebarContent className="px-2 py-4">
-            {/* Tenant Switcher - Only show if user has multiple tenants */}
-            {availableTenants.length > 1 && currentTenant && (
+            {/* Tenant Switcher - Only show if user has multiple tenants AND not in subdomain mode */}
+            {!isSubdomainMode && availableTenants.length > 1 && currentTenant && (
               <div className="mb-6 px-2">
                 <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider mb-2 block">
                   Current Community
@@ -275,7 +277,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-4">
               <div className="hidden md:flex items-center text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                 <Globe className="h-3 w-3 mr-1" />
-                Context: <span className="font-medium ml-1 text-foreground">{currentTenant.name}</span>
+                {isSubdomainMode ? (
+                  <>
+                    <span className="font-medium text-foreground">{subdomain}.poassociation.com</span>
+                  </>
+                ) : (
+                  <>
+                    Context: <span className="font-medium ml-1 text-foreground">{currentTenant.name}</span>
+                  </>
+                )}
               </div>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
                 <UserIcon className="h-5 w-5" />

@@ -7,9 +7,40 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { provisionDemoEcosystem } from "./provision";
 import { z } from "zod";
 
+// Subdomain detection middleware
+function subdomainMiddleware(req: any, res: any, next: any) {
+  // Extract subdomain from hostname
+  const hostname = req.hostname;
+  const parts = hostname.split('.');
+
+  // Check for subdomain in query param first (for Replit testing)
+  // Usage: ?subdomain=markland
+  if (req.query.subdomain) {
+    req.subdomain = req.query.subdomain;
+    console.log('Subdomain from query param:', req.subdomain);
+    return next();
+  }
+
+  // Check for actual subdomain in hostname
+  // Example: markland.poassociation.com -> parts = ['markland', 'poassociation', 'com']
+  if (parts.length >= 3) {
+    const subdomain = parts[0];
+    // Exclude common non-tenant subdomains
+    if (subdomain !== 'www' && subdomain !== 'api' && subdomain !== 'admin') {
+      req.subdomain = subdomain;
+      console.log('Subdomain from hostname:', req.subdomain);
+    }
+  }
+
+  next();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   await setupAuth(app);
+
+  // Apply subdomain detection to all routes
+  app.use(subdomainMiddleware);
 
   // Auth routes
   app.get('/api/auth/user', async (req: any, res) => {
@@ -65,6 +96,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       hasUser: !!req.user,
       cookies: req.headers.cookie,
       isAuthenticated: req.isAuthenticated?.(),
+    });
+  });
+
+  // Get subdomain context (public endpoint for frontend to check)
+  app.get('/api/subdomain', (req: any, res) => {
+    res.json({
+      subdomain: req.subdomain || null,
+      hostname: req.hostname,
     });
   });
 
