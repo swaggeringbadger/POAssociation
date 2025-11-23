@@ -11,6 +11,8 @@ interface AppState {
   setCurrentUserRole: (role: string) => void;
   // Helper to simulate subdomain navigation
   simulateSubdomainVisit: (subdomain: string) => void;
+  // Clear all state (for logout)
+  clearState: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -31,6 +33,16 @@ export const useAppStore = create<AppState>()(
           // In a real app, this would trigger a window.location.href change
           console.log(`Navigated to ${subdomain}.poassociation.com`);
         }
+      },
+
+      clearState: () => {
+        set({
+          availableTenants: [],
+          currentTenant: null,
+          currentUserRole: 'homeowner',
+        });
+        // Also clear from localStorage
+        localStorage.removeItem('poassociation-state');
       }
     }),
     {

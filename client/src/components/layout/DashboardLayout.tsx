@@ -28,17 +28,35 @@ import { NAV_ITEMS } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
-import { api } from "@/lib/api";
+import { api, queryClient } from "@/lib/api";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { currentTenant, currentUserRole, availableTenants, setCurrentTenant } = useAppStore();
+  const { currentTenant, currentUserRole, availableTenants, setCurrentTenant, clearState } = useAppStore();
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
   const { isLoading: tenantsLoading } = useUserTenants();
+
+  // Handle logout - clear all state before redirecting
+  const handleLogout = async () => {
+    try {
+      // Clear Zustand store and localStorage
+      clearState();
+      // Clear React Query cache
+      queryClient.clear();
+      // Destroy session on backend
+      await api.logout();
+      // Redirect to landing page
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if API call fails, still clear frontend state and redirect
+      window.location.href = '/';
+    }
+  };
 
   // Check if user is super admin
   const { data: superAdminData } = useQuery({
@@ -94,7 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <p className="text-muted-foreground mb-4">
             You don't have access to any communities yet. Please contact your administrator to get access.
           </p>
-          <Button onClick={() => window.location.href = '/api/logout'}>
+          <Button onClick={handleLogout}>
             Sign Out
           </Button>
         </div>
@@ -228,8 +246,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   Profile
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => window.location.href = '/api/logout'}
+                <DropdownMenuItem
+                  onClick={handleLogout}
                   data-testid="button-logout"
                   className="text-destructive focus:text-destructive"
                 >

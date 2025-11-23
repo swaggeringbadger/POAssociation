@@ -37,6 +37,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Logout endpoint - properly destroys session for both demo and Replit auth users
+  app.post('/api/auth/logout', async (req: any, res) => {
+    try {
+      // Destroy the session (clears both demo and Replit auth)
+      req.session.destroy((err: any) => {
+        if (err) {
+          console.error('Error destroying session:', err);
+          return res.status(500).json({ error: 'Failed to logout' });
+        }
+        // Clear the session cookie
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+      });
+    } catch (error: any) {
+      console.error('Error during logout:', error);
+      res.status(500).json({ error: 'Failed to logout' });
+    }
+  });
+
   // Check if current user is super admin
   app.get('/api/auth/is-super-admin', isAuthenticated, async (req: any, res) => {
     try {

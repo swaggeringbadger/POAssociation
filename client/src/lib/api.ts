@@ -204,6 +204,14 @@ class ApiClient {
     if (!response.ok) return { isSuperAdmin: false };
     return response.json();
   }
+
+  async logout(): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/auth/logout`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Failed to logout");
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();
