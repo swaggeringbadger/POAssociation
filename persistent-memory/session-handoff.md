@@ -78,6 +78,45 @@ SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
 - `client/src/lib/api.ts` - Added `logout()` method
 - `client/src/components/layout/DashboardLayout.tsx` - Updated logout handler
 
+### ✅ RESOLVED - Logout Redirect Loop (commit c363ea2)
+
+**Issue:** After clicking logout, screen would flicker and log user back in
+
+**Root Cause:**
+- Logout redirected to `/` (landing page)
+- Page reloaded and checked authentication
+- If session wasn't fully cleared yet (race condition), user appeared authenticated
+- App.tsx redirected to `/dashboard` creating an infinite loop
+
+**Solution:**
+- Redirect to `/?logout=true` instead of just `/`
+- Check for `logout=true` query parameter in App.tsx
+- If present, show Landing page even if user appears authenticated
+- Prevents redirect loop during session cleanup
+
+**Files Modified:**
+- `client/src/components/layout/DashboardLayout.tsx` - Redirect to `/?logout=true`
+- `client/src/App.tsx` - Check for logout param to prevent redirect
+
+### ✅ RESOLVED - Demo Users "No Communities Assigned" (commit 73581d9)
+
+**Issue:** Emily (and all demo users) showed "No Communities Assigned" message
+
+**Root Cause:**
+- `isAuthenticated` middleware only checked for Replit OAuth auth (`req.user`)
+- Demo users use session-based auth (`req.session.userId`)
+- When demo users tried to access `/api/users/:userId/tenants`, they got 401 Unauthorized
+- Frontend couldn't load tenant assignments, showing "No Communities Assigned"
+
+**Solution:**
+- Updated `isAuthenticated` middleware to check for both auth types:
+  1. First check for demo session auth (`req.session.userId`)
+  2. Then check for Replit OAuth auth (`req.user`)
+- Demo users now pass authentication and can access protected routes
+
+**Files Modified:**
+- `server/replitAuth.ts` - Updated `isAuthenticated` middleware
+
 ### 🐛 Known Issues to Triage
 
 **Homeowner Role Permissions (Priority: Medium)**
