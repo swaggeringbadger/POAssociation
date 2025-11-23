@@ -1,7 +1,32 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-11-21
-**Current Session:** Building Role-Based Dashboards
+**Last Updated:** 2025-11-23
+**Current Session:** Authentication Fixes & Subdomain Routing
+
+---
+
+## Current Status
+
+### 🎯 Latest Session Summary (2025-11-23)
+
+**Major Accomplishments:**
+1. ✅ Fixed all demo user authentication issues (401 errors)
+2. ✅ Implemented demo code persistence in localStorage
+3. ✅ Built complete subdomain routing functionality
+4. ✅ Fixed logout redirect loops
+5. ✅ Created comprehensive deployment guide for production
+
+**Commits Today:**
+- `1557fd3` - Add comprehensive subdomain deployment guide
+- `44cb009` - Implement subdomain-based tenant routing
+- `eb6fc18` - Add debug logging and explicit session save
+- `d9f67ff` - Fix session cookie configuration for local development
+- `5adc196` - Add demo code persistence to localStorage
+- `c363ea2` - Fix logout redirect loop with ?logout=true parameter
+- `73581d9` - Fix isAuthenticated middleware to support demo session auth
+- `d0cc76a` - Fix sign out race condition for demo users
+- `6650f05` - Document sign out race condition fix in session handoff
+- `0716fe8` - Document logout loop and communities fixes
 
 ---
 
@@ -116,6 +141,77 @@ SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
 
 **Files Modified:**
 - `server/replitAuth.ts` - Updated `isAuthenticated` middleware
+
+### ✅ NEW FEATURE - Demo Code Persistence (commit 5adc196)
+
+**Feature:** Seamless return to demo without re-entering code
+
+**Implementation:**
+- Demo codes are stored in localStorage (base64 encoded) after validation
+- On return to `/demo` page, automatically validates stored code
+- If valid, skips code entry and goes directly to persona selection
+- If invalid/expired, clears stored code and shows entry form
+- Stored code cleared on logout for security
+
+**User Experience:**
+1. User enters demo code once
+2. Closes browser and returns later
+3. Goes to `/demo` → automatically validated
+4. Taken directly to persona selection
+5. No need to re-enter code!
+
+**Files Modified:**
+- `client/src/pages/DemoCodeEntry.tsx` - Auto-validation on mount, localStorage storage
+- `client/src/components/layout/DashboardLayout.tsx` - Clear demo code on logout
+
+**Storage Key:** `poa-demo-code` (base64 encoded)
+
+### ✅ NEW FEATURE - Subdomain Routing (commit 44cb009)
+
+**Feature:** Tenant-specific subdomain access (e.g., markland.poassociation.com)
+
+**How It Works:**
+1. User visits `markland.poassociation.com`
+2. Backend middleware detects subdomain from hostname
+3. Frontend auto-selects Markland POA tenant
+4. Tenant switcher is hidden (locked to subdomain tenant)
+5. Header displays subdomain URL
+
+**Testing on Replit:**
+Since Replit doesn't support custom subdomains, use query parameter:
+```
+https://your-app.repl.co/dashboard?subdomain=markland
+https://your-app.repl.co/dashboard?subdomain=whispering-pines
+```
+
+**Production Setup:**
+Cloudflare DNS with wildcard CNAME → see `subdomain-deployment-guide.md`
+
+**Backend Implementation:**
+- Middleware detects subdomain from `req.hostname`
+- Falls back to `?subdomain=` query parameter for testing
+- Exposes via `/api/subdomain` endpoint
+- Subdomain stored in `req.subdomain` for all routes
+
+**Frontend Implementation:**
+- New hook: `useSubdomain()` detects subdomain
+- Auto-selects matching tenant from availableTenants
+- Tenant switcher hidden when `isSubdomainMode === true`
+- Header shows subdomain URL instead of "Context: Tenant Name"
+
+**Files Added:**
+- `client/src/hooks/useSubdomain.ts` - Subdomain detection and auto-selection
+- `persistent-memory/subdomain-deployment-guide.md` - Complete production deployment guide
+
+**Files Modified:**
+- `server/routes.ts` - Subdomain middleware, `/api/subdomain` endpoint
+- `client/src/components/layout/DashboardLayout.tsx` - Conditional UI based on subdomain mode
+
+**Next Steps for Production:**
+1. Deploy to hosting platform that supports wildcard subdomains (Railway, Vercel, Fly.io)
+2. Configure Cloudflare DNS with wildcard CNAME
+3. Add domain to hosting platform
+4. Test subdomain routing
 
 ### 🐛 Known Issues to Triage
 
@@ -358,11 +454,76 @@ const PERSONA_INFO = {
 - Session handoff will track progress between sessions
 - Global memory will capture reusable patterns and conventions
 
+**Next Session Plan: Super Admin Management UI**
+
+**Goal:** Build comprehensive super admin interface for managing the entire application hierarchy
+
+**Features to Implement:**
+
+1. **Management Company Management**
+   - List all management companies
+   - Create new management company
+   - Edit management company details (name, subdomain, settings)
+   - View communities under management company
+   - Deactivate/reactivate management companies
+
+2. **Community Management**
+   - List all communities (filterable by management company)
+   - Create new community
+   - Edit community details (name, subdomain, parent management company)
+   - View community stats (users, applications, forms)
+   - Deactivate/reactivate communities
+
+3. **RBAC User Assignment**
+   - View all users in the system
+   - Assign users to tenants with specific roles
+   - Manage user-tenant-role relationships
+   - Bulk assignment capabilities
+   - Role hierarchy visualization
+
+4. **Tenant Subdomain Management**
+   - View/edit subdomain for each tenant
+   - Validate subdomain uniqueness
+   - Preview subdomain URL
+   - Test subdomain routing
+
+**Database Schema Notes:**
+- `tenants` table already has all needed fields:
+  - `type`: 'management_company' | 'community'
+  - `subdomain`: unique subdomain
+  - `managementCompanyId`: parent relationship
+  - `isActive`: soft delete flag
+- `userTenantRoles` table handles RBAC:
+  - `userId`, `tenantId`, `role`
+  - Already has 8 role types defined
+
+**Implementation Approach:**
+1. Create super admin navigation section in DashboardLayout
+2. Build management companies list/form pages
+3. Build communities list/form pages
+4. Build user-role assignment interface
+5. Add subdomain management to tenant forms
+6. Add validation and error handling
+7. Test with demo data
+
+**Files to Create:**
+- `client/src/pages/admin/ManagementCompanies.tsx`
+- `client/src/pages/admin/ManagementCompanyForm.tsx`
+- `client/src/pages/admin/Communities.tsx`
+- `client/src/pages/admin/CommunityForm.tsx`
+- `client/src/pages/admin/UserRoles.tsx`
+
+**API Endpoints Needed:**
+Most CRUD endpoints already exist! May need to add:
+- `POST /api/admin/users/:userId/roles` - Assign role
+- `DELETE /api/admin/user-roles/:id` - Remove role assignment
+- `GET /api/admin/tenants/hierarchy` - Get tenant hierarchy tree
+
 **Next Session Recommendations:**
-- Review any new user requirements
-- Check git status for uncommitted changes
-- Continue with whatever task the user requests
-- Update this handoff document at end of session with latest progress
+- Start with management companies list view
+- Reuse existing tenant CRUD endpoints where possible
+- Focus on super admin access control (check SUPER_ADMIN_EMAILS)
+- Test with demo ecosystem data
 
 ---
 
