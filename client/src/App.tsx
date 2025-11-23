@@ -21,13 +21,17 @@ function Router() {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Check if we're in logout mode to prevent redirect loop
+  const urlParams = new URLSearchParams(window.location.search);
+  const isLoggingOut = urlParams.get('logout') === 'true';
+
   return (
     <Switch>
       {/* Demo routes - accessible without auth */}
       <Route path="/demo" component={DemoCodeEntry} />
       <Route path="/demo/personas" component={DemoPersonaSelect} />
 
-      {isLoading || !isAuthenticated ? (
+      {isLoading || !isAuthenticated || isLoggingOut ? (
         <Route path="/" component={Landing} />
       ) : (
         <>

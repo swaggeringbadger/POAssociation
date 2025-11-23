@@ -49,12 +49,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       queryClient.clear();
       // Destroy session on backend
       await api.logout();
-      // Redirect to landing page
-      window.location.href = '/';
+      // Redirect to landing page with logout flag to prevent redirect loop
+      window.location.href = '/?logout=true';
     } catch (error) {
       console.error('Logout error:', error);
       // Even if API call fails, still clear frontend state and redirect
-      window.location.href = '/';
+      window.location.href = '/?logout=true';
     }
   };
 
