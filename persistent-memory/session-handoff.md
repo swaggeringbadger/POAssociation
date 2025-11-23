@@ -53,18 +53,32 @@ SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
 - ✅ Auto-role detection via useUserTenants hook
 - ✅ Dynamic role switching when changing tenant context
 
-### 🐛 Known Issues to Triage
+### ✅ RESOLVED - Sign Out Race Condition (commit d0cc76a)
 
-**Sign Out Race Condition (Priority: High)**
-- **Symptom:** After signing out of demo user A and signing into demo user B, user A's name still shows in bottom left
-- **Workaround:** Sign out a second time, then sign in as user B again - works correctly
-- **Likely Cause:** React Query cache or localStorage not clearing on logout
-- **To Investigate:**
-  1. Check if logout endpoint clears session properly
-  2. Verify React Query cache is being invalidated on logout
-  3. Check if Zustand store is being reset on logout
-  4. Look for race condition between logout API call and navigation
-  5. May need to add explicit cache clearing in logout flow
+**Issue:** After signing out of demo user A and signing into demo user B, user A's name still shows in bottom left
+
+**Root Cause:**
+- `/api/logout` endpoint only cleared Replit OAuth session, not express session
+- Demo users store `req.session.userId` which wasn't being destroyed
+- Zustand store persisted to localStorage and wasn't cleared on logout
+- React Query cache wasn't being invalidated on logout
+
+**Solution:**
+- Created new `/api/auth/logout` endpoint that properly destroys express session
+- Added `clearState()` method to Zustand store
+- Updated logout flow to:
+  1. Clear Zustand store and localStorage
+  2. Clear React Query cache
+  3. Destroy backend session via API
+  4. Redirect to landing page
+
+**Files Modified:**
+- `server/routes.ts` - Added `/api/auth/logout` endpoint
+- `client/src/lib/store.ts` - Added `clearState()` method
+- `client/src/lib/api.ts` - Added `logout()` method
+- `client/src/components/layout/DashboardLayout.tsx` - Updated logout handler
+
+### 🐛 Known Issues to Triage
 
 **Homeowner Role Permissions (Priority: Medium)**
 - **Symptom:** James (homeowner) can see content he shouldn't have access to
@@ -75,7 +89,7 @@ SUPER_ADMIN_EMAILS=your-email@example.com;another@example.com
   4. Add permission checks to components that need role-based filtering
 
 ### Blockers/Issues
-- Sign out not clearing user state cleanly (see above)
+- None currently
 
 ### Implementation Status
 - ✅ Phase 1: Database Schema
