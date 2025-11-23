@@ -56,6 +56,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug endpoint - check session state
+  app.get('/api/debug/session', (req: any, res) => {
+    res.json({
+      hasSession: !!req.session,
+      sessionId: req.sessionID,
+      userId: req.session?.userId,
+      hasUser: !!req.user,
+      cookies: req.headers.cookie,
+      isAuthenticated: req.isAuthenticated?.(),
+    });
+  });
+
   // Check if current user is super admin
   app.get('/api/auth/is-super-admin', isAuthenticated, async (req: any, res) => {
     try {
@@ -309,6 +321,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create session (same as regular auth)
       req.session.userId = user.id;
 
+      console.log('Demo login - Setting session userId:', user.id);
+      console.log('Demo login - Session ID:', req.sessionID);
+
       // Track demo session (analytics)
       const demoSession = await storage.createDemoSession({
         demoCodeId: user.demoCodeId,
@@ -319,6 +334,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Increment usage counter
       await storage.incrementDemoCodeUsage(user.demoCodeId);
+
+      // Ensure session is saved before responding
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => {
+          if (err) {
+            console.error('Error saving session:', err);
+            reject(err);
+          } else {
+            console.log('Session saved successfully');
+            resolve();
+          }
+        });
+      });
 
       res.json({
         success: true,

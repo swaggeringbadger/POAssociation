@@ -136,7 +136,16 @@ export async function setupAuth(app: Express) {
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   // Check for demo session auth first (session-based)
-  if ((req as any).session?.userId) {
+  const session = (req as any).session;
+  console.log('isAuthenticated middleware - Session:', {
+    hasSession: !!session,
+    sessionId: (req as any).sessionID,
+    userId: session?.userId,
+    cookies: req.headers.cookie,
+  });
+
+  if (session?.userId) {
+    console.log('Demo user authenticated via session');
     return next();
   }
 
@@ -144,6 +153,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user?.expires_at) {
+    console.log('Authentication failed - no valid session or OAuth');
     return res.status(401).json({ message: "Unauthorized" });
   }
 
