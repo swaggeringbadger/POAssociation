@@ -783,6 +783,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Workflow Templates - list for tenant
+  app.get("/api/workflows/templates", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!req.subdomain) {
+        return res.status(400).json({ error: "No tenant context" });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      
+      const templates = await storage.listWorkflowTemplatesForTenant(tenant.id);
+      res.json(templates);
+    } catch (error: any) {
+      console.error("Error fetching workflow templates:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Initialize workflow for application
+  app.post("/api/applications/:applicationId/workflow", isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { workflowTemplateId } = req.body;
+      
+      const app = await storage.getApplication(applicationId);
+      if (!app) return res.status(404).json({ error: "Application not found" });
+
+      const existing = await storage.getApplicationWorkflow(applicationId);
+      if (existing) return res.status(400).json({ error: "Workflow already exists" });
+
+      const workflow = await storage.createApplicationWorkflow({
+        applicationId,
+        workflowTemplateId,
+      });
+      
+      res.status(201).json(workflow);
+    } catch (error: any) {
+      console.error("Error creating workflow:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get workflow for application
+  app.get("/api/applications/:applicationId/workflow", isAuthenticated, async (req: any, res) => {
+    try {
+      const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
+      if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+      
+      const template = await storage.getWorkflowTemplate(workflow.workflowTemplateId);
+      res.json({ ...workflow, template });
+    } catch (error: any) {
+      console.error("Error fetching workflow:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Advance workflow - perform action
+  app.post("/api/applications/:applicationId/workflow/action", isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { action, stepIndex, notes } = req.body;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const workflow = await storage.advanceApplicationWorkflow(
+        applicationId,
+        action,
+        userId,
+        stepIndex,
+        notes
+      );
+      
+      res.json(workflow);
+    } catch (error: any) {
+      console.error("Error advancing workflow:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get workflow action history
+  app.get("/api/applications/:applicationId/workflow/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
+      if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+
+      const history = await storage.getWorkflowActionHistory(workflow.id);
+      res.json(history);
+    } catch (error: any) {
+      console.error("Error fetching workflow history:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Add comment to application
+  app.post("/api/applications/:applicationId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { text, parentCommentId } = req.body;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const comment = await storage.addComment({
+        applicationId,
+        userId,
+        text,
+        parentCommentId,
+      });
+
+      res.status(201).json(comment);
+    } catch (error: any) {
+      console.error("Error adding comment:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get comments for application
+  app.get("/api/applications/:applicationId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const comments = await storage.getApplicationComments(req.params.applicationId);
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark comment as resolved
+  app.patch("/api/comments/:commentId/resolved", isAuthenticated, async (req: any, res) => {
+    try {
+      const { commentId } = req.params;
+      const { isResolved } = req.body;
+
+      const comment = await storage.updateCommentResolved(commentId, isResolved);
+      res.json(comment);
+    } catch (error: any) {
+      console.error("Error updating comment:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

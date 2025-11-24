@@ -69,7 +69,7 @@ export const tenants = pgTable("tenants", {
   type: text("type").notNull(), // 'management_company' | 'community'
   subdomain: text("subdomain").notNull().unique(),
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
-  workflowTemplateId: varchar("workflow_template_id").references((): any => null), // Will be set after workflow templates exist
+  workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
