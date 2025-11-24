@@ -320,7 +320,7 @@ export default function Directory() {
               <p className="text-sm mt-2">Use the property filter in the sidebar to select a community</p>
             </div>
           ) : (
-          <Table>
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -398,7 +398,7 @@ export default function Directory() {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
           )}
         </CardContent>
       </Card>
