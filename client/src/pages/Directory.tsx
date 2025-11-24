@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, UserPlus, MoreVertical, Mail, Shield, Trash2 } from "lucide-react";
+import { Search, UserPlus, MoreVertical, Mail, Shield, Trash2, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Role definitions and permissions
