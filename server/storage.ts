@@ -389,7 +389,33 @@ export class DbStorage implements IStorage {
 
     // Management roles: see all applications for their managed tenants
     if (role === 'management_rep' || role === 'management_manager' || role === 'account_admin') {
-      return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+      // First check if the current tenant is a management company
+      const tenant = await this.getTenant(tenantId);
+      if (!tenant) return [];
+      
+      if (tenant.type === 'management_company') {
+        // Get all communities managed by this management company
+        const communities = await db
+          .select()
+          .from(schema.tenants)
+          .where(
+            and(
+              eq(schema.tenants.type, 'community'),
+              eq(schema.tenants.managementCompanyId, tenantId)
+            )
+          );
+        
+        const communityIds = communities.map(c => c.id);
+        if (communityIds.length === 0) return [];
+        
+        // Return applications from all managed communities
+        return db.select().from(schema.applications).where(
+          inArray(schema.applications.tenantId, communityIds)
+        );
+      } else {
+        // Single community tenant
+        return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+      }
     }
 
     // Super admin: see all
