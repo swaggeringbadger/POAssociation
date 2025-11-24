@@ -373,6 +373,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const application = await storage.createApplication(validated);
+
+      // Seed workflows for tenant and auto-create workflow for application
+      try {
+        await seedWorkflowTemplates(req.body.tenantId);
+        const templates = await storage.listWorkflowTemplatesForTenant(req.body.tenantId);
+        if (templates.length > 0) {
+          await storage.createApplicationWorkflow({
+            applicationId: application.id,
+            workflowTemplateId: templates[0].id,
+          });
+        }
+      } catch (workflowError) {
+        console.error("Warning: Failed to create workflow:", workflowError);
+        // Don't fail the entire application creation if workflow setup fails
+      }
+
       res.status(201).json(application);
     } catch (error: any) {
       if (error.name === "ZodError") {
