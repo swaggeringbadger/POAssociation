@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Building, ShieldCheck, Home, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { api, queryClient } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import logoImage from '@assets/generated_images/abstract_geometric_building_logo_concept.png';
 
 const PERSONA_INFO = {
@@ -63,6 +64,7 @@ export default function DemoPersonaSelect() {
   const [isLoading, setIsLoading] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { clearState } = useAppStore();
 
   const demoLabel = sessionStorage.getItem('demoLabel');
   const personasJson = sessionStorage.getItem('demoPersonas');
@@ -73,6 +75,10 @@ export default function DemoPersonaSelect() {
     setIsLoading(true);
 
     try {
+      // Clear previous user's state before logging in as new user
+      clearState();
+      queryClient.clear();
+
       const result = await api.loginAsDemo(userId);
 
       if (result.success) {
