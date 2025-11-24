@@ -101,7 +101,7 @@ function formatRole(role: string) {
 }
 
 export default function Directory() {
-  const { currentTenant, currentUserRole } = useAppStore();
+  const { currentTenant, currentUserRole, selectedPropertyFilter } = useAppStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,19 +118,26 @@ export default function Directory() {
     roles: [] as string[],
   });
 
-  // Fetch users for current tenant
+  // Determine effective tenant ID - for management companies, require property filter
+  const isManagementUser = currentTenant?.type === 'management_company';
+  const effectiveTenantId = selectedPropertyFilter || currentTenant?.id;
+
+  // For management users, only fetch if they've selected a property
+  const shouldFetchUsers = isManagementUser ? !!selectedPropertyFilter : !!currentTenant;
+
+  // Fetch users for current tenant (or filtered property)
   const { data: users, isLoading } = useQuery({
-    queryKey: ["tenantUsers", currentTenant?.id],
-    queryFn: () => api.getTenantUsers(currentTenant!.id),
-    enabled: !!currentTenant,
+    queryKey: ["tenantUsers", effectiveTenantId, selectedPropertyFilter],
+    queryFn: () => api.getTenantUsers(effectiveTenantId!),
+    enabled: shouldFetchUsers,
   });
 
   // Mutation for inviting user
   const inviteUserMutation = useMutation({
     mutationFn: (data: typeof newUser) =>
-      api.inviteUser({ ...data, tenantId: currentTenant!.id }),
+      api.inviteUser({ ...data, tenantId: effectiveTenantId! }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenantUsers", currentTenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["tenantUsers", effectiveTenantId, selectedPropertyFilter] });
       setAddUserOpen(false);
       setNewUser({ email: "", firstName: "", lastName: "", roles: [] });
       toast({
@@ -152,7 +159,7 @@ export default function Directory() {
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       api.assignUserRole(userId, currentTenant!.id, role),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenantUsers", currentTenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["tenantUsers", effectiveTenantId, selectedPropertyFilter] });
       setEditUserOpen(false);
       setSelectedUser(null);
       toast({
@@ -174,7 +181,7 @@ export default function Directory() {
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       api.removeUserRole(userId, currentTenant!.id, role),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenantUsers", currentTenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["tenantUsers", effectiveTenantId, selectedPropertyFilter] });
       setEditUserOpen(false);
       setSelectedUser(null);
       toast({
@@ -196,7 +203,7 @@ export default function Directory() {
     mutationFn: (userId: string) =>
       api.removeUserFromTenant(currentTenant!.id, userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenantUsers", currentTenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["tenantUsers", effectiveTenantId, selectedPropertyFilter] });
       setRemoveUserOpen(false);
       setSelectedUser(null);
       toast({
@@ -305,6 +312,14 @@ export default function Directory() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Show message if management user hasn't selected a property */}
+          {isManagementUser && !selectedPropertyFilter ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">Please select a property to view directory</p>
+              <p className="text-sm mt-2">Use the property filter in the sidebar to select a community</p>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -384,6 +399,7 @@ export default function Directory() {
               )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
