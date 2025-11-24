@@ -10,6 +10,7 @@ import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
 import ApplicationTypeSelect from "@/pages/ApplicationTypeSelect";
 import Applications from "@/pages/Applications";
+import ApplicationDetail from "@/pages/ApplicationDetail";
 import MarklandExample from "@/pages/MarklandExample";
 import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
@@ -58,6 +59,14 @@ function Router() {
             <DashboardLayout>
               <div className="p-8">
                 <Applications />
+              </div>
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/applications/:id">
+            <DashboardLayout>
+              <div className="p-8">
+                <ApplicationDetail />
               </div>
             </DashboardLayout>
           </Route>
