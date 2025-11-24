@@ -18,7 +18,7 @@ import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import type { Application } from "@shared/schema";
 
-type ApplicationWithWorkflow = Application & { workflowStage?: string };
+type ApplicationWithWorkflow = Application & { workflowStage?: string; tenantName?: string };
 
 export default function Applications() {
   const { user } = useAuth();
