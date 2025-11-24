@@ -371,24 +371,24 @@ export class DbStorage implements IStorage {
     return db.select().from(schema.applications).where(eq(schema.applications.submittedByUserId, userId));
   }
 
-  async listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<schema.Application[]> {
+  async listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<(schema.Application & { workflowStage?: string })[]> {
+    let applications: schema.Application[] = [];
+
     // Homeowner: only see their own applications
     if (role === 'homeowner' || role === 'delegated_rep') {
-      return db.select().from(schema.applications).where(
+      applications = await db.select().from(schema.applications).where(
         and(
           eq(schema.applications.tenantId, tenantId),
           eq(schema.applications.submittedByUserId, userId)
         )
       );
     }
-
     // Board members: see all applications for their tenant
-    if (role === 'poa_board_member' || role === 'poa_board_contributor' || role === 'hoa_board_member') {
-      return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+    else if (role === 'poa_board_member' || role === 'poa_board_contributor' || role === 'hoa_board_member') {
+      applications = await db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
     }
-
     // Management roles: see all applications for their managed tenants
-    if (role === 'management_rep' || role === 'management_manager' || role === 'account_admin') {
+    else if (role === 'management_rep' || role === 'management_manager' || role === 'account_admin') {
       // First check if the current tenant is a management company
       const tenant = await this.getTenant(tenantId);
       if (!tenant) return [];
@@ -409,22 +409,40 @@ export class DbStorage implements IStorage {
         if (communityIds.length === 0) return [];
         
         // Return applications from all managed communities
-        return db.select().from(schema.applications).where(
+        applications = await db.select().from(schema.applications).where(
           inArray(schema.applications.tenantId, communityIds)
         );
       } else {
         // Single community tenant
-        return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+        applications = await db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
       }
     }
-
     // Super admin: see all
-    if (role === 'super_admin') {
-      return db.select().from(schema.applications);
+    else if (role === 'super_admin') {
+      applications = await db.select().from(schema.applications);
     }
 
-    // Default: return empty
-    return [];
+    // Enrich with workflow stage info
+    const enriched = await Promise.all(
+      applications.map(async (app) => {
+        const workflow = await this.getApplicationWorkflow(app.id);
+        if (workflow) {
+          const template = await this.getWorkflowTemplate(workflow.workflowTemplateId);
+          const steps = (template?.steps as any[]) || [];
+          const currentStep = steps[workflow.currentStepIndex];
+          return {
+            ...app,
+            workflowStage: currentStep?.title || 'Unknown'
+          };
+        }
+        return {
+          ...app,
+          workflowStage: undefined
+        };
+      })
+    );
+
+    return enriched;
   }
 
   async createApplication(insertApplication: schema.InsertApplication): Promise<schema.Application> {

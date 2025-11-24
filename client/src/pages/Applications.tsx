@@ -18,6 +18,8 @@ import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import type { Application } from "@shared/schema";
 
+type ApplicationWithWorkflow = Application & { workflowStage?: string };
+
 export default function Applications() {
   const { user } = useAuth();
   const { currentUserRole, currentTenant } = useAppStore();
