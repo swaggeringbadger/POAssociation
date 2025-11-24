@@ -43,9 +43,10 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
       if (!user?.id || !tenantId) return [];
       const res = await fetch(`/api/users/${user.id}/tenants`, { credentials: "include" });
       if (!res.ok) return [];
-      const tenants = await res.json();
-      const currentTenant = tenants.find((t: any) => t.tenant?.id === tenantId || t.tenantId === tenantId);
-      return currentTenant?.roles || [];
+      const tenantRoles = await res.json();
+      // tenantRoles is array of {id, userId, tenantId, role, ..., tenant: {...}}
+      const rolesForTenant = tenantRoles.filter((tr: any) => tr.tenant?.id === tenantId || tr.tenantId === tenantId);
+      return rolesForTenant.map((tr: any) => tr.role);
     },
     enabled: !!user?.id && !!tenantId,
   });
