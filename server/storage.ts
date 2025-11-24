@@ -70,6 +70,23 @@ export interface IStorage {
   createDemoSession(session: schema.InsertDemoSession): Promise<schema.DemoSession>;
   endDemoSession(id: string): Promise<void>;
   getDemoSessionStats(codeId: string): Promise<any>;
+
+  // Workflow Templates
+  getWorkflowTemplate(id: string): Promise<schema.WorkflowTemplate | undefined>;
+  listWorkflowTemplatesForTenant(tenantId: string): Promise<schema.WorkflowTemplate[]>;
+  createWorkflowTemplate(template: schema.InsertWorkflowTemplate): Promise<schema.WorkflowTemplate>;
+  updateTenantWorkflow(tenantId: string, workflowTemplateId: string): Promise<schema.Tenant>;
+
+  // Comments
+  addComment(comment: schema.InsertComment): Promise<schema.Comment>;
+  getApplicationComments(applicationId: string): Promise<(schema.Comment & { user: schema.User })[]>;
+  updateCommentResolved(commentId: string, isResolved: boolean): Promise<schema.Comment>;
+
+  // Application Workflows
+  createApplicationWorkflow(workflow: schema.InsertApplicationWorkflow): Promise<schema.ApplicationWorkflow>;
+  getApplicationWorkflow(applicationId: string): Promise<schema.ApplicationWorkflow | undefined>;
+  advanceApplicationWorkflow(applicationId: string, action: string, userId: string, stepIndex: number, notes?: string): Promise<schema.ApplicationWorkflow>;
+  getWorkflowActionHistory(applicationWorkflowId: string): Promise<schema.WorkflowStepAction[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -486,9 +503,6 @@ export class DbStorage implements IStorage {
         }, 0) / sessions.filter(s => s.endedAt).length,
     };
   }
-}
-
-export const storage = new DbStorage();
 
   // Workflow Templates
   async getWorkflowTemplate(id: string): Promise<schema.WorkflowTemplate | undefined> {
@@ -523,6 +537,11 @@ export const storage = new DbStorage();
       .orderBy(schema.comments.createdAt);
   }
 
+  async updateCommentResolved(commentId: string, isResolved: boolean): Promise<schema.Comment> {
+    const [updated] = await db.update(schema.comments).set({ isResolved }).where(eq(schema.comments.id, commentId)).returning();
+    return updated;
+  }
+
   // Application Workflows
   async createApplicationWorkflow(workflow: schema.InsertApplicationWorkflow): Promise<schema.ApplicationWorkflow> {
     const [created] = await db.insert(schema.applicationWorkflows).values(workflow).returning();
@@ -533,3 +552,48 @@ export const storage = new DbStorage();
     const [workflow] = await db.select().from(schema.applicationWorkflows).where(eq(schema.applicationWorkflows.applicationId, applicationId));
     return workflow;
   }
+
+  async advanceApplicationWorkflow(applicationId: string, action: string, userId: string, stepIndex: number, notes?: string): Promise<schema.ApplicationWorkflow> {
+    const workflow = await this.getApplicationWorkflow(applicationId);
+    if (!workflow) throw new Error("Workflow not found");
+
+    let nextStepIndex = workflow.currentStepIndex + 1;
+    let status: "in_progress" | "completed" | "halted" = "in_progress";
+    let completedAt: Date | null = null;
+
+    // Determine next step or completion
+    const template = await this.getWorkflowTemplate(workflow.workflowTemplateId);
+    if (!template) throw new Error("Workflow template not found");
+    
+    const steps = template.steps as any[];
+    if (action === "approved" || action === "rejected" || action === "conditionally_approved") {
+      if (nextStepIndex >= steps.length) {
+        status = "completed";
+        completedAt = new Date();
+      }
+    }
+
+    // Update workflow
+    const [updated] = await db.update(schema.applicationWorkflows)
+      .set({ currentStepIndex: nextStepIndex, status, completedAt })
+      .where(eq(schema.applicationWorkflows.id, workflow.id))
+      .returning();
+
+    // Log action
+    await db.insert(schema.workflowStepActions).values({
+      applicationWorkflowId: workflow.id,
+      stepIndex,
+      action,
+      userId,
+      notes,
+    });
+
+    return updated;
+  }
+
+  async getWorkflowActionHistory(applicationWorkflowId: string): Promise<schema.WorkflowStepAction[]> {
+    return db.select().from(schema.workflowStepActions).where(eq(schema.workflowStepActions.applicationWorkflowId, applicationWorkflowId)).orderBy(desc(schema.workflowStepActions.createdAt));
+  }
+}
+
+export const storage = new DbStorage();
