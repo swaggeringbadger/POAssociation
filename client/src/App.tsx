@@ -8,6 +8,7 @@ import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
+import ApplicationTypeSelect from "@/pages/ApplicationTypeSelect";
 import MarklandExample from "@/pages/MarklandExample";
 import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
@@ -65,6 +66,12 @@ function Router() {
           </Route>
 
           <Route path="/apply">
+            <DashboardLayout>
+              <ApplicationTypeSelect />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/applications/submit/:typeId">
             <DashboardLayout>
               <ApplicationSubmit />
             </DashboardLayout>

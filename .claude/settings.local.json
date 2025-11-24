@@ -18,7 +18,8 @@
       "Bash(fuser:*)",
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
-      "Bash(pgrep:*)"
+      "Bash(pgrep:*)",
+      "WebFetch(domain:marklandpoaportal.replit.app)"
     ],
     "deny": [],
     "ask": []
