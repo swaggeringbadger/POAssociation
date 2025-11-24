@@ -106,14 +106,24 @@ export type UserTenantRole = typeof userTenantRoles.$inferSelect;
 export const formTemplates = pgTable("form_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  projectType: text("project_type").notNull(), // 'exterior-modifications', 'structural-changes', etc.
+  version: integer("version").notNull().default(1),
   name: text("name").notNull(),
   description: text("description"),
   schema: jsonb("schema").notNull(), // The full JSON form schema
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   isActive: boolean("is_active").default(true).notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  activatedAt: timestamp("activated_at"),
+  activatedByUserId: varchar("activated_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Ensure only one active version per tenant + project type
+  tenantProjectTypeActiveIdx: uniqueIndex("tenant_project_type_active_idx")
+    .on(table.tenantId, table.projectType, table.isActive)
+    .where(sql`${table.isActive} = true`),
+}));
 
 export const insertFormTemplateSchema = createInsertSchema(formTemplates).omit({
   id: true,
@@ -127,10 +137,23 @@ export type FormTemplate = typeof formTemplates.$inferSelect;
 // Applications table
 export const applications = pgTable("applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationNumber: text("application_number").notNull().unique(), // APP-2024-001
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  projectType: text("project_type").notNull(), // 'exterior-modifications', etc.
   formTemplateId: varchar("form_template_id").notNull().references(() => formTemplates.id),
+  formTemplateVersion: integer("form_template_version").notNull(), // Snapshot of version
   submittedByUserId: varchar("submitted_by_user_id").notNull().references(() => users.id),
-  formData: jsonb("form_data").notNull(), // The actual submitted data
+
+  // Project Details (Step 1 - Generic)
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  propertyAddress: text("property_address").notNull(),
+
+  // Additional Information (Step 2 - Project-Type-Specific)
+  formData: jsonb("form_data").notNull(), // The actual submitted data from dynamic form
+  completenessScore: integer("completeness_score").default(0).notNull(),
+
+  // Status and Review
   status: text("status").default("pending").notNull(), // 'pending', 'under_review', 'approved', 'rejected'
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),

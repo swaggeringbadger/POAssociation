@@ -19,7 +19,11 @@
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
       "Bash(pgrep:*)",
-      "WebFetch(domain:marklandpoaportal.replit.app)"
+      "WebFetch(domain:marklandpoaportal.replit.app)",
+      "Bash(git -C /home/runner/workspace log --oneline -10)",
+      "Bash(npm run db:push:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 30 tail:*)"
     ],
     "deny": [],
     "ask": []

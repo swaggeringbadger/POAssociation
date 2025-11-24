@@ -5,7 +5,11 @@ import { insertTenantSchema, insertFormTemplateSchema, insertApplicationSchema, 
 import { fromZodError } from "zod-validation-error";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { provisionDemoEcosystem } from "./provision";
+import { AdditionalInfoService } from "./additionalInfoService";
 import { z } from "zod";
+
+// Initialize services
+const additionalInfoService = new AdditionalInfoService(storage);
 
 // Subdomain detection middleware
 function subdomainMiddleware(req: any, res: any, next: any) {
@@ -244,6 +248,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Additional Info / Dynamic Forms - Protected routes
+  app.get("/api/additional-info/:tenantId/:projectType", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantId, projectType } = req.params;
+      console.log(`[additional-info] Request for tenantId: ${tenantId}, projectType: ${projectType}`);
+
+      const config = await additionalInfoService.getAdditionalInfoConfig(
+        tenantId,
+        projectType as any
+      );
+
+      if (!config) {
+        console.error(`[additional-info] No config found for tenantId: ${tenantId}, projectType: ${projectType}`);
+
+        // Debug: Check what templates exist for this tenant
+        const templates = await storage.listFormTemplatesForTenant(tenantId);
+        console.log(`[additional-info] Templates for tenant ${tenantId}:`, templates.map(t => ({ projectType: t.projectType, isActive: t.isActive })));
+
+        return res.status(404).json({
+          error: `No active form configuration found for project type: ${projectType}`,
+        });
+      }
+
+      res.json(config);
+    } catch (error: any) {
+      console.error('Error fetching additional info config:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/additional-info/validate", isAuthenticated, async (req, res) => {
+    try {
+      const { formTemplateId, formData } = req.body;
+
+      if (!formTemplateId || !formData) {
+        return res.status(400).json({
+          error: "formTemplateId and formData are required",
+        });
+      }
+
+      const config = await additionalInfoService.getFormTemplateConfig(formTemplateId);
+
+      if (!config) {
+        return res.status(404).json({
+          error: `Form template not found: ${formTemplateId}`,
+        });
+      }
+
+      const validation = additionalInfoService.validateAdditionalInfo(config, formData);
+      res.json(validation);
+    } catch (error: any) {
+      console.error('Error validating additional info:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Applications - Protected routes
   app.get("/api/applications/:id", isAuthenticated, async (req, res) => {
     try {
@@ -268,7 +328,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/applications", isAuthenticated, async (req, res) => {
     try {
-      const validated = insertApplicationSchema.parse(req.body);
+      // Get form template to extract version and config
+      const formTemplate = await storage.getFormTemplate(req.body.formTemplateId);
+      if (!formTemplate) {
+        return res.status(400).json({ error: "Invalid form template" });
+      }
+
+      // Calculate completeness score
+      const config = await additionalInfoService.getFormTemplateConfig(req.body.formTemplateId);
+      const completenessScore = config
+        ? additionalInfoService.calculateCompletenessScore(config, req.body.formData || {})
+        : 0;
+
+      // Generate application number
+      // Format: APP-YYYY-NNNN (e.g., APP-2024-0001)
+      const year = new Date().getFullYear();
+      const count = await storage.getApplicationCountForYear(req.body.tenantId, year);
+      const applicationNumber = `APP-${year}-${String(count + 1).padStart(4, '0')}`;
+
+      // Validate and create application
+      const validated = insertApplicationSchema.parse({
+        ...req.body,
+        applicationNumber,
+        formTemplateVersion: formTemplate.version,
+        completenessScore,
+      });
+
       const application = await storage.createApplication(validated);
       res.status(201).json(application);
     } catch (error: any) {

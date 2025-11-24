@@ -1,25 +1,32 @@
-import { ARCH_REQUEST_FORM_SCHEMA } from "@/lib/mock-data";
-import DynamicForm from "@/components/DynamicForm";
-import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useRoute, useLocation } from "wouter";
+import { ApplicationWizard } from "@/components/ApplicationWizard";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft } from "lucide-react";
 
 export default function ApplicationSubmit() {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [, navigate] = useLocation();
+  const [match, params] = useRoute("/applications/submit/:typeId");
 
-  const handleSubmit = (data: any) => {
-    toast({
-      title: "Application Submitted",
-      description: "Your architectural request has been sent to the board for review.",
-    });
-    setTimeout(() => {
-      setLocation("/dashboard");
-    }, 2000);
-  };
+  if (!match || !params?.typeId) {
+    return (
+      <div className="max-w-3xl mx-auto py-8 px-4">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Invalid application type. Please select a project type to continue.
+          </AlertDescription>
+        </Alert>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => navigate('/apply')}
+        >
+          <ChevronLeft className="h-4 w-4 mr-2" />
+          Back to Project Types
+        </Button>
+      </div>
+    );
+  }
 
-  return (
-    <div className="max-w-3xl mx-auto py-8">
-      <DynamicForm schema={ARCH_REQUEST_FORM_SCHEMA} onSubmit={handleSubmit} />
-    </div>
-  );
+  return <ApplicationWizard projectType={params.typeId} />;
 }

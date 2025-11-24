@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import ws from "ws";
 
@@ -35,12 +35,14 @@ export interface IStorage {
   
   // Form Templates
   getFormTemplate(id: string): Promise<schema.FormTemplate | undefined>;
+  getActiveFormTemplateForProjectType(tenantId: string, projectType: string): Promise<schema.FormTemplate | undefined>;
   listFormTemplatesForTenant(tenantId: string): Promise<schema.FormTemplate[]>;
   createFormTemplate(template: schema.InsertFormTemplate): Promise<schema.FormTemplate>;
   updateFormTemplate(id: string, template: Partial<schema.InsertFormTemplate>): Promise<schema.FormTemplate>;
   
   // Applications
   getApplication(id: string): Promise<schema.Application | undefined>;
+  getApplicationCountForYear(tenantId: string, year: number): Promise<number>;
   listApplicationsForTenant(tenantId: string): Promise<schema.Application[]>;
   listApplicationsForUser(userId: string): Promise<schema.Application[]>;
   createApplication(application: schema.InsertApplication): Promise<schema.Application>;
@@ -277,6 +279,22 @@ export class DbStorage implements IStorage {
     return template;
   }
 
+  async getActiveFormTemplateForProjectType(tenantId: string, projectType: string): Promise<schema.FormTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(schema.formTemplates)
+      .where(
+        and(
+          eq(schema.formTemplates.tenantId, tenantId),
+          eq(schema.formTemplates.projectType, projectType),
+          eq(schema.formTemplates.isActive, true)
+        )
+      )
+      .orderBy(desc(schema.formTemplates.version)) // Get highest version if multiple somehow exist
+      .limit(1);
+    return template;
+  }
+
   async listFormTemplatesForTenant(tenantId: string): Promise<schema.FormTemplate[]> {
     return db
       .select()
@@ -307,6 +325,24 @@ export class DbStorage implements IStorage {
   async getApplication(id: string): Promise<schema.Application | undefined> {
     const [application] = await db.select().from(schema.applications).where(eq(schema.applications.id, id));
     return application;
+  }
+
+  async getApplicationCountForYear(tenantId: string, year: number): Promise<number> {
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year + 1, 0, 1);
+
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.applications)
+      .where(
+        and(
+          eq(schema.applications.tenantId, tenantId),
+          sql`${schema.applications.submittedAt} >= ${startOfYear}`,
+          sql`${schema.applications.submittedAt} < ${endOfYear}`
+        )
+      );
+
+    return result[0]?.count || 0;
   }
 
   async listApplicationsForTenant(tenantId: string): Promise<schema.Application[]> {

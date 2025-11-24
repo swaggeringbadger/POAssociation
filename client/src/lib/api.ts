@@ -314,3 +314,33 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+/**
+ * Generic API request helper
+ * Used by components that need flexible API calls
+ */
+export async function apiRequest<T = any>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  url: string,
+  data?: any
+): Promise<T> {
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  if (data && (method === 'POST' || method === 'PATCH')) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `Request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
