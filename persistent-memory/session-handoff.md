@@ -1,13 +1,127 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-11-24
-**Current Session:** Global Property Filter for Management Companies
+**Last Updated:** 2025-11-24 (End of Day)
+**Current Session:** Application Submission Flow - Type Selector Complete
 
 ---
 
 ## Current Status
 
-### 🎯 Latest Session Summary (2025-11-24)
+### 🎯 Latest Session Summary (2025-11-24 - Part 2)
+
+**Major Accomplishments:**
+1. ✅ Added elegant 6-option application type selector
+2. ✅ Fixed demo login race condition (state clearing)
+3. ✅ Added POA Association logo favicon
+4. ✅ Fixed Directory to require property filter for management users
+5. ✅ Fixed JSX syntax errors and missing imports
+
+**Application Type Selector Implementation:**
+
+Created beautiful card-based UI for application submission with 6 types:
+1. **Exterior Modifications** - Paint, siding, windows, doors, roofing
+2. **Structural Changes** - Additions, extensions, modifications
+3. **Landscaping** - Trees, plants, irrigation, hardscaping
+4. **Fencing & Barriers** - Fences, gates, privacy screens, retaining walls
+5. **Outdoor Structures** - Sheds, gazebos, pergolas, pools, outdoor kitchens
+6. **Signage** - Address signs, decorative signs, business signage
+
+**Features Implemented:**
+- Card-based UI with icons (lucide-react) and hover effects
+- Each card shows title, description, and example items
+- Application completeness progress indicator (0% placeholder)
+- Responsive design (mobile-first, grid layout)
+- Routes: `/apply` → type selector, `/applications/submit/:typeId` → form
+
+**Files Created:**
+- `client/src/pages/ApplicationTypeSelect.tsx` - 6-card type selector
+
+**Files Modified:**
+- `client/src/App.tsx` - Added routes for type selector and individual forms
+
+**Next Steps for Tomorrow: Complete Application Forms**
+
+### Phase 1: Common Application Data Collection
+Build a form component that collects standard information for ALL application types:
+- **Project Title** (text input)
+- **Property Address** (text input or dropdown from user's properties)
+- **Description** (textarea)
+- **Estimated Start Date** (date picker)
+- **Estimated Completion Date** (date picker)
+- **Contractor Information** (optional - name, company, license #)
+- **Estimated Cost** (number input)
+
+### Phase 2: Type-Specific Dynamic Forms
+After common data, show type-specific custom form:
+- Each application type has a unique form schema
+- Forms built using AI Form Wizard functionality (already exists in codebase)
+- Use the `DynamicForm` component with JSON schema
+- Store schemas in database via `formTemplates` table
+
+### Phase 3: Form Wizard Integration
+**Key Insight:** Use existing AI form generation capabilities
+- Admin/Management can create custom forms per application type
+- Forms stored as JSON schemas in `formTemplates` table
+- Each tenant can have different requirements for same application type
+- Example: Markland POA's "Exterior Modifications" form vs Whispering Pines'
+
+### Phase 4: Completeness Tracking
+Implement the application completeness score:
+- Calculate based on required vs filled fields
+- Update progress bar in real-time as user fills form
+- Store completion percentage with draft applications
+- Show visual feedback (0% → 100%)
+
+### Phase 5: Backend Integration
+- Update ApplicationSubmit to accept `typeId` param
+- Fetch appropriate form schema from database
+- Save application with type, common data, and form responses
+- Link to current user and tenant
+- Set initial status (e.g., "draft" or "pending_review")
+
+**Implementation Pattern:**
+```typescript
+// 1. Common data form
+<CommonApplicationForm onComplete={(commonData) => {
+  // 2. Load type-specific schema from database
+  const schema = await api.getFormTemplateForType(typeId, tenantId);
+
+  // 3. Show dynamic form
+  <DynamicForm
+    schema={schema}
+    onSubmit={(formData) => {
+      // 4. Combine and save
+      api.createApplication({
+        ...commonData,
+        type: typeId,
+        formData: formData,
+        tenantId,
+        userId,
+        status: 'pending_review'
+      });
+    }}
+  />
+}}>
+```
+
+**Database Schema Notes:**
+- `applications` table has `type` field - update to use application type IDs
+- Link applications to `formTemplates` via `formTemplateId`
+- Store type-specific responses in `formData` JSONB field
+
+**Files to Create Tomorrow:**
+- `client/src/components/CommonApplicationForm.tsx` - Shared data collection
+- `client/src/components/ApplicationFormFlow.tsx` - Orchestrates common → dynamic form
+- Update `client/src/pages/ApplicationSubmit.tsx` - Use typeId param
+
+**Files to Modify Tomorrow:**
+- `server/routes.ts` - Add endpoint to get form template by application type
+- `server/storage.ts` - Add method to fetch form templates by type
+- `client/src/lib/api.ts` - Add client methods for form templates
+
+---
+
+### 🎯 Previous Session Summary (2025-11-24 - Part 1)
 
 **Major Accomplishments:**
 1. ✅ Fixed Properties page bug - `getManagedProperties` SQL error
