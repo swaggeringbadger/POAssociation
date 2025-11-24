@@ -45,6 +45,7 @@ export interface IStorage {
   getApplicationCountForYear(tenantId: string, year: number): Promise<number>;
   listApplicationsForTenant(tenantId: string): Promise<schema.Application[]>;
   listApplicationsForUser(userId: string): Promise<schema.Application[]>;
+  listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<schema.Application[]>;
   createApplication(application: schema.InsertApplication): Promise<schema.Application>;
   updateApplicationStatus(
     id: string,
@@ -351,6 +352,36 @@ export class DbStorage implements IStorage {
 
   async listApplicationsForUser(userId: string): Promise<schema.Application[]> {
     return db.select().from(schema.applications).where(eq(schema.applications.submittedByUserId, userId));
+  }
+
+  async listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<schema.Application[]> {
+    // Homeowner: only see their own applications
+    if (role === 'homeowner' || role === 'delegated_rep') {
+      return db.select().from(schema.applications).where(
+        and(
+          eq(schema.applications.tenantId, tenantId),
+          eq(schema.applications.submittedByUserId, userId)
+        )
+      );
+    }
+
+    // Board members: see all applications for their tenant
+    if (role === 'poa_board_member' || role === 'poa_board_contributor' || role === 'hoa_board_member') {
+      return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+    }
+
+    // Management roles: see all applications for their managed tenants
+    if (role === 'management_rep' || role === 'management_manager' || role === 'account_admin') {
+      return db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
+    }
+
+    // Super admin: see all
+    if (role === 'super_admin') {
+      return db.select().from(schema.applications);
+    }
+
+    // Default: return empty
+    return [];
   }
 
   async createApplication(insertApplication: schema.InsertApplication): Promise<schema.Application> {

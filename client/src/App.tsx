@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
 import ApplicationTypeSelect from "@/pages/ApplicationTypeSelect";
+import Applications from "@/pages/Applications";
 import MarklandExample from "@/pages/MarklandExample";
 import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
@@ -55,7 +56,9 @@ function Router() {
           {/* Add other dashboard pages here similarly */}
           <Route path="/applications">
             <DashboardLayout>
-              <div className="p-8"><h1 className="text-2xl font-bold">Applications List (Placeholder)</h1></div>
+              <div className="p-8">
+                <Applications />
+              </div>
             </DashboardLayout>
           </Route>
 
