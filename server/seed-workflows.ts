@@ -14,7 +14,7 @@ export async function seedWorkflowTemplates(tenantId: string) {
         { title: "Application Submitted", role: "system", actions: ["proceed"] },
         { title: "Management Review", role: "management_rep|management_manager|account_admin", actions: ["approved", "rejected", "conditionally_approved"] },
         { title: "POA Board Review", role: "poa_board_member|poa_board_contributor", actions: ["approved", "rejected", "conditionally_approved"] },
-        { title: "Final Decision", role: "system", actions: [] },
+        { title: "Final Decision", role: "account_admin|super_admin", actions: ["approved"] },
       ],
     },
     {
@@ -25,7 +25,7 @@ export async function seedWorkflowTemplates(tenantId: string) {
         { title: "Application Submitted", role: "system", actions: ["proceed"] },
         { title: "Management Pre-Screening", role: "management_rep|management_manager|account_admin", actions: ["approved", "rejected"] },
         { title: "Board Review & Vote", role: "poa_board_member|poa_board_contributor", actions: ["approved", "rejected", "conditionally_approved"] },
-        { title: "Homeowner Notification", role: "system", actions: [] },
+        { title: "Homeowner Notification", role: "account_admin|super_admin", actions: ["approved"] },
       ],
     },
     {
@@ -47,7 +47,7 @@ export async function seedWorkflowTemplates(tenantId: string) {
         { title: "Initial Screening", role: "management_rep|management_manager|account_admin", actions: ["proceed", "rejected"] },
         { title: "Committee Review", role: "poa_board_contributor", actions: ["proceed", "rejected"] },
         { title: "Board Approval", role: "poa_board_member|poa_board_contributor", actions: ["approved", "rejected", "conditionally_approved"] },
-        { title: "Final Processing", role: "system", actions: [] },
+        { title: "Final Processing", role: "account_admin|super_admin", actions: ["approved"] },
       ],
     },
   ];
