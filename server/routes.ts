@@ -5,6 +5,7 @@ import { insertTenantSchema, insertFormTemplateSchema, insertApplicationSchema, 
 import { fromZodError } from "zod-validation-error";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { provisionDemoEcosystem } from "./provision";
+import { seedWorkflowTemplates } from "./seed-workflows";
 import { AdditionalInfoService } from "./additionalInfoService";
 import { z } from "zod";
 

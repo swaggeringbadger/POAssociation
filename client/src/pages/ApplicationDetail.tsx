@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { WorkflowSection } from "@/components/WorkflowSection";
+import { CommentThread } from "@/components/CommentThread";
 import type { Application } from "@shared/schema";
 
 export default function ApplicationDetail() {
@@ -151,6 +153,18 @@ export default function ApplicationDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Workflow Section */}
+      <div>
+        <h2 className="text-xl font-semibold mb-3">Workflow & Review Process</h2>
+        <WorkflowSection applicationId={applicationId} />
+      </div>
+
+      {/* Comment Thread */}
+      <div>
+        <h2 className="text-xl font-semibold mb-3">Discussion & Notes</h2>
+        <CommentThread applicationId={applicationId} />
+      </div>
     </div>
   );
 }
