@@ -10,6 +10,17 @@ import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
 import type { Application } from "@shared/schema";
 
+interface WorkflowData {
+  id: string;
+  applicationId: string;
+  workflowTemplateId: string;
+  currentStepIndex: number;
+  status: string;
+  template?: {
+    steps: Array<{ title: string; role: string; actions: string[] }>;
+  };
+}
+
 export default function ApplicationDetail() {
   const params = useParams();
   const applicationId = params.id as string;
@@ -21,6 +32,16 @@ export default function ApplicationDetail() {
       const res = await fetch(`/api/applications/${applicationId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch application");
       return res.json() as Promise<Application>;
+    },
+    enabled: !!applicationId,
+  });
+
+  const { data: workflow } = useQuery({
+    queryKey: [`/api/applications/${applicationId}/workflow`],
+    queryFn: async () => {
+      const res = await fetch(`/api/applications/${applicationId}/workflow`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch workflow");
+      return res.json() as Promise<WorkflowData>;
     },
     enabled: !!applicationId,
   });
@@ -55,15 +76,38 @@ export default function ApplicationDetail() {
 
   const tenantId = application.tenantId;
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-      under_review: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-      approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-      rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  const getWorkflowStageBadge = (workflowData?: WorkflowData) => {
+    if (!workflowData || !workflowData.template) {
+      return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400">No Stage</Badge>;
+    }
+
+    const steps = workflowData.template.steps || [];
+    const currentStep = steps[workflowData.currentStepIndex];
+    const workflowStage = currentStep?.title;
+
+    if (!workflowStage) {
+      return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400">Unknown</Badge>;
+    }
+
+    const stageVariants: Record<string, string> = {
+      "Application Submitted": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+      "Management Review": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Management Pre-Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Management Only": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Initial Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "POA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Board Review & Vote": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Committee Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Board Approval": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Final Decision": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Homeowner Notification": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Complete": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Final Processing": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
     };
+
+    const variantClass = stageVariants[workflowStage] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     return (
-      <Badge className={variants[status] || ""}>{status.replace("_", " ")}</Badge>
+      <Badge className={variantClass}>{workflowStage}</Badge>
     );
   };
 
@@ -89,7 +133,7 @@ export default function ApplicationDetail() {
               <CardTitle>Application Details</CardTitle>
               <CardDescription>Review the full application information</CardDescription>
             </div>
-            {getStatusBadge(application.status)}
+            {getWorkflowStageBadge(workflow)}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
