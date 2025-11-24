@@ -862,7 +862,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { action, stepIndex, notes } = req.body;
       const userId = req.session?.userId || req.user?.claims?.sub;
 
-      const workflow = await storage.advanceApplicationWorkflow(
+      // Get application to find tenant
+      const application = await storage.getApplication(applicationId);
+      if (!application) return res.status(404).json({ error: "Application not found" });
+
+      // Get workflow and template to check role requirements
+      const workflow = await storage.getApplicationWorkflow(applicationId);
+      if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+      
+      const template = await storage.getWorkflowTemplate(workflow.workflowTemplateId);
+      if (!template) return res.status(404).json({ error: "Workflow template not found" });
+
+      const steps = template.steps as any[];
+      const currentStep = steps[workflow.currentStepIndex];
+      
+      // Check if current step has role restrictions
+      if (currentStep?.role && currentStep.role !== "system") {
+        // Get user's roles for this tenant
+        const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+        const userRoleNames = userRoles.map(r => r.role);
+        
+        // Check if user has required role
+        const allowedRoles = currentStep.role.split("|").map((r: string) => r.trim());
+        const hasRequiredRole = allowedRoles.some((role: string) => userRoleNames.includes(role));
+        
+        if (!hasRequiredRole) {
+          return res.status(403).json({ 
+            error: `Unauthorized: This step requires one of the following roles: ${allowedRoles.join(", ")}. Your roles: ${userRoleNames.join(", ") || "none"}` 
+          });
+        }
+      }
+
+      const updatedWorkflow = await storage.advanceApplicationWorkflow(
         applicationId,
         action,
         userId,
@@ -870,7 +901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes
       );
       
-      res.json(workflow);
+      res.json(updatedWorkflow);
     } catch (error: any) {
       console.error("Error advancing workflow:", error);
       res.status(500).json({ error: error.message });

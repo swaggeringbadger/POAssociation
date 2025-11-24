@@ -2,10 +2,17 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ChevronRight, MessageSquare } from "lucide-react";
+import { Loader2, ChevronRight, MessageSquare, Lock } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
-export function WorkflowSection({ applicationId }: { applicationId: string }) {
+interface WorkflowSectionProps {
+  applicationId: string;
+  tenantId?: string;
+}
+
+export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProps) {
+  const { user } = useAuth();
   const [actionNotes, setActionNotes] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
 
@@ -27,6 +34,20 @@ export function WorkflowSection({ applicationId }: { applicationId: string }) {
       return res.json();
     },
     enabled: !!applicationId && !!workflow,
+  });
+
+  // Fetch user roles for the tenant
+  const { data: userRoles } = useQuery({
+    queryKey: [`/api/users/${user?.id}/roles/${tenantId}`],
+    queryFn: async () => {
+      if (!user?.id || !tenantId) return [];
+      const res = await fetch(`/api/users/${user.id}/tenants`, { credentials: "include" });
+      if (!res.ok) return [];
+      const tenants = await res.json();
+      const currentTenant = tenants.find((t: any) => t.tenant?.id === tenantId || t.tenantId === tenantId);
+      return currentTenant?.roles || [];
+    },
+    enabled: !!user?.id && !!tenantId,
   });
 
   const actionMutation = useMutation({
@@ -67,6 +88,12 @@ export function WorkflowSection({ applicationId }: { applicationId: string }) {
 
   const steps = workflow.template?.steps || [];
   const currentStep = steps[workflow.currentStepIndex];
+  
+  // Check if user has role for current step
+  const stepRequiresRole = currentStep?.role && currentStep.role !== "system";
+  const allowedRoles = stepRequiresRole ? currentStep.role.split("|").map((r: string) => r.trim()) : [];
+  const userHasRole = !stepRequiresRole || (userRoles && allowedRoles.some(role => userRoles.includes(role)));
+  const userRoleList = userRoles?.join(", ") || "none";
 
   return (
     <Card data-testid="card-workflow-section">
@@ -81,6 +108,11 @@ export function WorkflowSection({ applicationId }: { applicationId: string }) {
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase">Current Step</p>
               <p className="text-lg font-semibold mt-1">{currentStep?.title || "Starting"}</p>
+              {stepRequiresRole && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Requires: <span className="font-semibold">{allowedRoles.join(" or ")}</span>
+                </p>
+              )}
             </div>
             <Badge variant="outline" data-testid={`badge-workflow-${workflow.status}`}>
               {workflow.status}
@@ -91,8 +123,21 @@ export function WorkflowSection({ applicationId }: { applicationId: string }) {
           )}
         </div>
 
-        {/* Action Buttons */}
-        {currentStep?.actions && workflow.status === "in_progress" && (
+        {/* Action Buttons or Role Warning */}
+        {stepRequiresRole && !userHasRole ? (
+          <div className="border border-amber-200 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+              <Lock className="h-4 w-4" />
+              <span className="text-sm font-medium">Access Restricted</span>
+            </div>
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              Only users with the <strong>{allowedRoles.join(" or ")}</strong> role can take actions on this step.
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Your roles: <strong>{userRoleList}</strong>
+            </p>
+          </div>
+        ) : currentStep?.actions && workflow.status === "in_progress" && (
           <div className="space-y-3">
             <p className="text-sm font-medium">Actions:</p>
             <div className="flex flex-wrap gap-2">

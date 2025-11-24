@@ -53,6 +53,8 @@ export default function ApplicationDetail() {
     );
   }
 
+  const tenantId = application.tenantId;
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
       pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -157,7 +159,7 @@ export default function ApplicationDetail() {
       {/* Workflow Section */}
       <div>
         <h2 className="text-xl font-semibold mb-3">Workflow & Review Process</h2>
-        <WorkflowSection applicationId={applicationId} />
+        <WorkflowSection applicationId={applicationId} tenantId={tenantId} />
       </div>
 
       {/* Comment Thread */}
