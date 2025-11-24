@@ -102,11 +102,17 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     // 4. Assign User Roles
     console.log('Assigning user roles...');
     const userTenantRoles = await Promise.all([
-      // Emily (Manager) - access to all
+      // Emily (Manager + Account Admin) - access to all
       storage.assignUserRole({
         userId: demoUsers[0].id,
         tenantId: managementCompany.id,
         role: 'management_manager',
+        demoCodeId,
+      }),
+      storage.assignUserRole({
+        userId: demoUsers[0].id,
+        tenantId: managementCompany.id,
+        role: 'account_admin',
         demoCodeId,
       }),
       storage.assignUserRole({
@@ -122,11 +128,18 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         demoCodeId,
       }),
 
-      // Sarah (Board Member) - Markland only
+      // Sarah (Board Member + Homeowner) - Markland only
+      // She serves on the board AND owns property in the community
       storage.assignUserRole({
         userId: demoUsers[1].id,
         tenantId: markland.id,
         role: 'poa_board_member',
+        demoCodeId,
+      }),
+      storage.assignUserRole({
+        userId: demoUsers[1].id,
+        tenantId: markland.id,
+        role: 'homeowner',
         demoCodeId,
       }),
 

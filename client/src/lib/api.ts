@@ -66,6 +66,45 @@ class ApiClient {
     return response.json();
   }
 
+  async getManagedProperties(): Promise<Tenant[]> {
+    const response = await fetch(`${this.baseUrl}/properties`);
+    if (!response.ok) throw new Error("Failed to fetch managed properties");
+    return response.json();
+  }
+
+  async getAllTenants(): Promise<Tenant[]> {
+    const response = await fetch(`${this.baseUrl}/admin/tenants`);
+    if (!response.ok) throw new Error("Failed to fetch all tenants");
+    return response.json();
+  }
+
+  async createTenant(tenant: Partial<Tenant>): Promise<Tenant> {
+    const response = await fetch(`${this.baseUrl}/tenants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tenant),
+    });
+    if (!response.ok) throw new Error("Failed to create tenant");
+    return response.json();
+  }
+
+  async updateTenant(id: string, updates: Partial<Tenant>): Promise<Tenant> {
+    const response = await fetch(`${this.baseUrl}/tenants/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) throw new Error("Failed to update tenant");
+    return response.json();
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/tenants/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete tenant");
+  }
+
   async getFormTemplatesForTenant(tenantId: string): Promise<FormTemplate[]> {
     const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/forms`);
     if (!response.ok) throw new Error("Failed to fetch form templates");
@@ -195,6 +234,66 @@ class ApiClient {
   async getDemoCodeStats(id: string): Promise<any> {
     const response = await fetch(`${this.baseUrl}/admin/demo-codes/${id}/stats`);
     if (!response.ok) throw new Error("Failed to get demo code stats");
+    return response.json();
+  }
+
+  // User Management / Directory
+  async getTenantUsers(tenantId: string): Promise<(User & { roles: string[] })[]> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/users`);
+    if (!response.ok) throw new Error("Failed to fetch tenant users");
+    return response.json();
+  }
+
+  async inviteUser(data: {
+    tenantId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    roles: string[];
+  }): Promise<{ user: User; roleAssignments: any[] }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${data.tenantId}/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        roles: data.roles,
+      }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to invite user");
+    }
+    return response.json();
+  }
+
+  async assignUserRole(userId: string, tenantId: string, role: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/users/${userId}/roles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId, role }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to assign role");
+    }
+    return response.json();
+  }
+
+  async removeUserRole(userId: string, tenantId: string, role: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/users/${userId}/roles/${role}?tenantId=${tenantId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to remove role");
+    return response.json();
+  }
+
+  async removeUserFromTenant(tenantId: string, userId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/users/${userId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to remove user");
     return response.json();
   }
 

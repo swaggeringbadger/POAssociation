@@ -1,13 +1,407 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-11-23
-**Current Session:** Authentication Fixes & Subdomain Routing
+**Last Updated:** 2025-11-24
+**Current Session:** Global Property Filter for Management Companies
 
 ---
 
 ## Current Status
 
-### 🎯 Latest Session Summary (2025-11-23)
+### 🎯 Latest Session Summary (2025-11-24)
+
+**Major Accomplishments:**
+1. ✅ Fixed Properties page bug - `getManagedProperties` SQL error
+2. ✅ Implemented global property filter UI in sidebar
+3. 📋 TODO: Update data-fetching pages to respect property filter
+
+**Bug Fix Details:**
+- **Issue:** Properties page showing error: `malformed array literal`
+- **Root Cause:** `getManagedProperties` method in `server/storage.ts` was using SQL `ANY()` syntax incorrectly with Drizzle ORM
+- **Solution:**
+  - Replaced `sql ANY()` with `inArray()` at two locations (lines 174, 191)
+  - Updated method to return both management companies AND communities (for dropdown support)
+  - Added `inArray` to imports from drizzle-orm
+- **Result:** Emily Foster now sees both Markland POA and Whispering Pines HOA on /properties page
+
+**New Feature In Progress: Global Property Filter**
+
+**Requirement:**
+Management company users (like Emily Foster) need a property filter dropdown in the sidebar header that acts as a **global filter** across the entire application.
+
+**UI Placement:**
+- Located in sidebar header next to the logo/title (client/src/components/layout/DashboardLayout.tsx:148)
+- Shows in the `SidebarHeader` component area
+
+**Filter Behavior:**
+- **Default:** "All Properties" - shows all data across all managed properties
+- **When specific property selected:** Filters all application data to only that property:
+  - Applications list (only that property's applications)
+  - Directory (only users in that property)
+  - Forms (only forms for that property)
+  - Any other tenant-scoped data
+- Acts as a tenant context override for management company users
+
+**Implementation Status:**
+1. ✅ Added `selectedPropertyFilter` state to Zustand store (lib/store.ts)
+2. ✅ Created PropertyFilter dropdown in sidebar header (DashboardLayout.tsx)
+3. ✅ Dropdown populated with properties from `getManagedProperties` API
+4. ✅ Shows only for management company users (when currentTenant.type === 'management_company')
+5. 📋 TODO: Update data-fetching pages to respect the filter:
+   - Directory.tsx - Use `selectedPropertyFilter || currentTenant.id` for tenant ID
+   - Dashboard.tsx - Currently uses placeholder data, needs real API calls
+   - Any future pages that list tenant-scoped data
+
+**What Was Implemented:**
+- **Store (client/src/lib/store.ts):**
+  - Added `selectedPropertyFilter: string | null` to state
+  - Added `setSelectedPropertyFilter` action
+  - Resets to null on logout via `clearState()`
+
+- **UI (client/src/components/layout/DashboardLayout.tsx):**
+  - Added property filter dropdown in SidebarHeader (line 161-199)
+  - Fetches properties via `useQuery` with `getManagedProperties` API
+  - Shows "All Properties" by default (selectedPropertyFilter = null)
+  - Lists all communities (type='community') from managed properties
+  - Only visible when currentTenant.type === 'management_company'
+  - Uses Filter icon from lucide-react
+
+**How to Use the Filter in Other Pages:**
+```typescript
+import { useAppStore } from '@/lib/store';
+
+// In your component:
+const { currentTenant, selectedPropertyFilter } = useAppStore();
+
+// Use this for API calls instead of currentTenant.id:
+const effectiveTenantId = selectedPropertyFilter || currentTenant?.id;
+
+// Example in useQuery:
+const { data } = useQuery({
+  queryKey: ["applications", effectiveTenantId, selectedPropertyFilter],
+  queryFn: () => api.listApplicationsForTenant(effectiveTenantId),
+  enabled: !!effectiveTenantId,
+});
+```
+
+**Technical Details:**
+- Filter persists in Zustand (but maybe should NOT persist to localStorage for security)
+- Resets to "All Properties" when user changes tenants or logs out
+- Component placement: Inside `<SidebarHeader>` below the logo/title div
+- Uses existing property data from `getManagedProperties` API
+
+**Files Modified:**
+- ✅ `client/src/lib/store.ts` - Added selectedPropertyFilter state and setter
+- ✅ `client/src/components/layout/DashboardLayout.tsx` - Added PropertyFilter dropdown
+- ✅ `server/storage.ts` - Fixed getManagedProperties bug (inArray instead of SQL ANY)
+
+**Files That Need Updates (for future sessions):**
+- 📋 `client/src/pages/Directory.tsx` - Add `selectedPropertyFilter || currentTenant.id` logic
+- 📋 `client/src/pages/Dashboard.tsx` - Replace placeholder data with real API calls respecting filter
+- 📋 `client/src/pages/FormBuilder.tsx` - Respect property filter when listing forms
+- 📋 Any future pages showing tenant-scoped data
+
+---
+
+### 🎯 Previous Session Summary (2025-11-23 - Part 3)
+
+**Major Accomplishments:**
+1. ✅ Implemented Properties page with role-based filtering for account admins
+2. ✅ Built complete CRUD functionality for property management
+3. ✅ Added backend logic to get properties based on account_admin role
+4. ✅ Implemented support for two organizational structures (management company and POA board as account admin)
+
+**What Was Built:**
+
+#### 1. Backend Storage Layer
+**File:** `server/storage.ts`
+- Added `getManagedProperties(userId)` method to IStorage interface
+- Implements complex query logic:
+  - Gets all tenants where user has `account_admin` role
+  - If tenant is a community, includes that community
+  - If tenant is a management company, includes all communities under that company
+  - Returns deduplicated list of communities
+- Uses Drizzle ORM with SQL for efficient querying
+
+#### 2. API Endpoint
+**File:** `server/routes.ts`
+- Added `GET /api/properties` endpoint
+- Authenticated users only
+- Returns communities that the current user manages as account_admin
+- Supports both demo session auth and Replit OAuth auth
+
+#### 3. Client API Method
+**File:** `client/src/lib/api.ts`
+- Added `getManagedProperties()` method
+- Returns list of Tenant objects (communities)
+- Handles error responses appropriately
+
+#### 4. Properties Page Component
+**File:** `client/src/pages/Properties.tsx` (NEW)
+- Full CRUD interface for property management:
+  - **List View:** Table showing all managed properties
+  - **Search:** Filter by property name, subdomain, or management company
+  - **Create:** Form to add new property with subdomain validation
+  - **Edit:** Update existing property details
+  - **Delete:** Soft delete (deactivate) properties
+- Features:
+  - Shows property name, subdomain, management company, status, type (demo/production), creation date
+  - Management company dropdown for assignment
+  - Visual indicators (icons, badges) for property types
+  - Responsive UI with shadcn/ui components
+  - Loading states and error handling
+- **Role-Based Access:** Only shows properties where user is account_admin
+- **Organizational Flexibility:** Supports both scenarios:
+  1. Management company as account admin (sees all their communities)
+  2. POA board as account admin (sees just their community)
+
+#### 5. Route Configuration
+**File:** `client/src/App.tsx`
+- Added `/properties` route
+- Wrapped in DashboardLayout
+- Available to authenticated users
+
+**Technical Implementation Details:**
+
+**Backend Query Logic (storage.ts:140-194):**
+```typescript
+async getManagedProperties(userId: string): Promise<schema.Tenant[]> {
+  // 1. Get all tenants where user has account_admin role
+  const adminRoles = await db.select()
+    .from(schema.userTenantRoles)
+    .innerJoin(schema.tenants, eq(schema.userTenantRoles.tenantId, schema.tenants.id))
+    .where(and(
+      eq(schema.userTenantRoles.userId, userId),
+      eq(schema.userTenantRoles.role, 'account_admin')
+    ));
+
+  // 2. Collect community IDs and management company IDs
+  const communityIds = new Set<string>();
+  const managementCompanyIds: string[] = [];
+
+  for (const role of adminRoles) {
+    if (role.tenants.type === 'community') {
+      communityIds.add(role.tenants.id);
+    } else if (role.tenants.type === 'management_company') {
+      managementCompanyIds.push(role.tenants.id);
+    }
+  }
+
+  // 3. Get all communities managed by the management companies
+  if (managementCompanyIds.length > 0) {
+    const managedCommunities = await db.select()
+      .from(schema.tenants)
+      .where(and(
+        eq(schema.tenants.type, 'community'),
+        sql`${schema.tenants.managementCompanyId} = ANY(${managementCompanyIds})`
+      ));
+
+    for (const community of managedCommunities) {
+      communityIds.add(community.id);
+    }
+  }
+
+  // 4. Fetch all unique communities
+  return await db.select()
+    .from(schema.tenants)
+    .where(sql`${schema.tenants.id} = ANY(${Array.from(communityIds)})`);
+}
+```
+
+**Use Cases Supported:**
+1. **Emily (Management Manager)** - Has account_admin on "Apex Management Solutions"
+   - Sees all communities under Apex (Markland POA, Whispering Pines HOA)
+   - Can create new communities and assign them to Apex
+
+2. **POA Board with Account Admin** - Hypothetical board member with account_admin on specific community
+   - Sees only their community
+   - Can manage that community's details
+   - Can still assign it to a management company
+
+**Files Modified/Created:**
+- `server/storage.ts` - Added getManagedProperties method
+- `server/routes.ts` - Added GET /api/properties endpoint
+- `client/src/lib/api.ts` - Added getManagedProperties method
+- `client/src/pages/Properties.tsx` - **NEW** Full properties page
+- `client/src/App.tsx` - Added /properties route
+
+---
+
+### 🎯 Previous Session Summary (2025-11-23 - Part 2)
+
+**Major Accomplishments:**
+1. ✅ Implemented comprehensive role-based menu filtering
+2. ✅ Built multi-role support with context switcher
+3. ✅ Created full user management Directory with RBAC
+4. ✅ Implemented role-based permissions system
+5. ✅ Added API endpoints for user invitation and role assignment
+
+**What Was Built:**
+
+#### 1. Role-Based Navigation Menu Filtering
+- Added `roles` array to each navigation item specifying access
+- Menu items now dynamically filter based on `currentUserRole`
+- Homeowners only see: Dashboard, Applications, Submit Request
+- Board members see full management menus
+- Management roles see Properties and cross-community features
+
+#### 2. Multi-Role Context Switcher
+- **Store Updates:** Added `availableRolesForCurrentTenant` to track all user roles
+- **Role Hierarchy:** Automatic selection of highest privilege role as default
+- **UI Component:** Dropdown in sidebar footer for switching between roles
+- **Visual Indicators:** Role-specific emojis and badges
+- **Smart Detection:** Auto-updates when changing tenants
+
+**Sarah Chen (Board Member) now has dual roles:**
+- 👔 POA Board Member (sees all applications, can approve)
+- 🏠 Homeowner (sees only her applications)
+- Can switch context via sidebar dropdown
+
+#### 3. User Management Directory (Complete CRUD)
+**Backend:**
+- New storage methods: `getTenantUsers`, `removeUserRole`, `removeUserFromTenant`
+- 5 new API endpoints:
+  - GET `/api/tenants/:tenantId/users` - List all users
+  - POST `/api/tenants/:tenantId/users` - Invite/add user with roles
+  - POST `/api/users/:userId/roles` - Assign additional role
+  - DELETE `/api/users/:userId/roles/:role` - Remove specific role
+  - DELETE `/api/tenants/:tenantId/users/:userId` - Remove user entirely
+
+**Frontend:**
+- Full Directory page at `/directory` with:
+  - User list table with search/filter
+  - Add User modal with role selection checkboxes
+  - Edit User Roles modal (add/remove individual roles)
+  - Remove User confirmation dialog
+  - Role-based permission checks (who can do what)
+
+**Permission Matrix Implemented:**
+| Role | Can View | Can Invite | Can Assign Roles | Can Remove |
+|------|----------|------------|------------------|------------|
+| Board Contributor | ✅ | ❌ | ❌ | ❌ |
+| Board Member | ✅ | ✅ Homeowners | ✅ Some | ❌ |
+| Management Rep | ✅ | ✅ All | ✅ Most | ❌ |
+| Management Manager | ✅ | ✅ All | ✅ All | ✅ |
+| Account Admin | ✅ | ✅ All | ✅ All | ✅ |
+
+**Files Modified/Created:**
+- `server/storage.ts` - Added user management methods
+- `server/routes.ts` - Added 5 user management endpoints
+- `client/src/lib/api.ts` - Added client-side API methods
+- `client/src/lib/store.ts` - Added multi-role support
+- `client/src/hooks/useUserTenants.ts` - Added role detection logic
+- `client/src/components/layout/DashboardLayout.tsx` - Added role switcher UI
+- `client/src/lib/mock-data.ts` - Added roles to navigation items
+- `client/src/pages/Directory.tsx` - **NEW** Full directory page
+- `client/src/App.tsx` - Added /directory route
+- `server/provision.ts` - Sarah now gets both board_member and homeowner roles
+
+---
+
+## 🚀 Next Steps (Priority Order)
+
+### **Phase 1: Finalize RBAC & Directory (Testing)**
+**Status:** Code complete, needs testing
+**Priority:** High
+**Tasks:**
+1. Test Directory with all 4 demo personas (Emily, Sarah, James, Alex)
+2. Verify permission matrix enforced correctly
+3. Test role switcher with Sarah (dual roles)
+4. Test invite flow: can board members only assign homeowner/contributor roles?
+5. Test remove flow: can management manager remove users?
+6. Edge case: prevent removing user's last role
+7. Add user activity audit logging (who assigned/removed which role when)
+
+### **Phase 2: Document Storage Integration**
+**Status:** Not started
+**Priority:** High
+**Technology:** Azure Blob Storage
+**Requirements:**
+1. **Architecture Design:**
+   - Container structure (per-tenant? per-application?)
+   - Naming conventions for blobs
+   - Security: SAS tokens vs connection strings
+   - CDN integration for serving documents
+
+2. **Backend Implementation:**
+   - Azure SDK integration (`@azure/storage-blob`)
+   - Environment variables for connection string
+   - Upload endpoint: POST `/api/applications/:id/documents`
+   - Download endpoint: GET `/api/documents/:id`
+   - Delete endpoint: DELETE `/api/documents/:id`
+   - Storage methods: `uploadDocument`, `getDocumentUrl`, `deleteDocument`
+
+3. **Database Schema:**
+   - New table: `documents`
+     - id, applicationId, fileName, blobName, fileSize, mimeType, uploadedBy, uploadedAt
+   - Track all uploaded documents with metadata
+
+4. **Frontend Components:**
+   - File upload component with drag-and-drop
+   - Document list viewer in application detail
+   - Preview modal for PDFs/images
+   - Download button with progress indicator
+
+5. **Considerations:**
+   - File size limits (10MB? 50MB?)
+   - Allowed file types (PDF, JPG, PNG, DOCX?)
+   - Virus scanning integration?
+   - Retention policy (auto-delete after application closed?)
+
+### **Phase 3: AI-Driven Form Wizard Automation**
+**Status:** Not started
+**Priority:** Medium-High
+**Requirements:**
+1. **AI Form Generation:**
+   - User describes form requirements in natural language
+   - AI generates complete JSON schema (using Anthropic Claude API)
+   - Preview generated form before saving
+   - Iterate on form with AI if needed
+
+2. **Admin Monitoring Dashboard:**
+   - **CRITICAL:** Super admin needs visibility into AI activity
+   - Track all AI-generated forms:
+     - Who requested generation?
+     - What prompt was used?
+     - What form was generated?
+     - Was it accepted/rejected/modified?
+     - Token usage/cost per generation
+   - Audit log of all AI interactions
+   - Ability to review and approve before making live
+
+3. **Implementation:**
+   - New endpoint: POST `/api/ai/generate-form`
+   - Request body: `{ prompt: string, tenantId: string, requestedBy: string }`
+   - Response: Generated form schema + metadata
+   - Store AI activity in database:
+     - Table: `ai_form_generations`
+     - Fields: id, tenantId, userId, prompt, generatedSchema, status, tokensUsed, createdAt
+
+4. **Safety & Quality:**
+   - Prompt engineering for consistent form output
+   - Validation of AI-generated schemas
+   - Human review step before form goes live
+   - Rate limiting to prevent abuse
+   - Cost tracking per tenant
+
+5. **UI Components:**
+   - "Generate with AI" button in Form Builder
+   - AI prompt input modal
+   - Preview pane showing generated form
+   - Edit mode to tweak AI output
+   - Admin dashboard page: `/admin/ai-activity`
+
+### **Phase 4: Testing & Documentation**
+**Status:** Ongoing
+**Tasks:**
+1. Write integration tests for RBAC
+2. E2E tests for user management flow
+3. Document API endpoints (OpenAPI/Swagger?)
+4. Update deployment guide with Azure Blob setup
+5. Create admin guide for managing users and monitoring AI
+
+---
+
+### 🎯 Earlier Session Summary (2025-11-23 - Part 1)
 
 **Major Accomplishments:**
 1. ✅ Fixed all demo user authentication issues (401 errors)

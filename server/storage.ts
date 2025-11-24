@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import ws from "ws";
 
@@ -19,12 +19,19 @@ export interface IStorage {
   getTenant(id: string): Promise<schema.Tenant | undefined>;
   getTenantBySubdomain(subdomain: string): Promise<schema.Tenant | undefined>;
   listTenants(): Promise<schema.Tenant[]>;
+  listAllTenants(): Promise<schema.Tenant[]>;
+  getManagedProperties(userId: string): Promise<schema.Tenant[]>;
   createTenant(tenant: schema.InsertTenant): Promise<schema.Tenant>;
+  updateTenant(id: string, updates: Partial<schema.InsertTenant>): Promise<schema.Tenant>;
+  deleteTenant(id: string): Promise<void>;
   
   // User-Tenant-Roles
   getUserRolesForTenant(userId: string, tenantId: string): Promise<schema.UserTenantRole[]>;
   getUserTenants(userId: string): Promise<(schema.UserTenantRole & { tenant: schema.Tenant })[]>;
+  getTenantUsers(tenantId: string): Promise<(schema.User & { roles: string[] })[]>;
   assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole>;
+  removeUserRole(userId: string, tenantId: string, role: string): Promise<void>;
+  removeUserFromTenant(userId: string, tenantId: string): Promise<void>;
   
   // Form Templates
   getFormTemplate(id: string): Promise<schema.FormTemplate | undefined>;
@@ -104,9 +111,88 @@ export class DbStorage implements IStorage {
     return db.select().from(schema.tenants).where(eq(schema.tenants.isActive, true));
   }
 
+  async listAllTenants(): Promise<schema.Tenant[]> {
+    return db.select().from(schema.tenants);
+  }
+
   async createTenant(insertTenant: schema.InsertTenant): Promise<schema.Tenant> {
     const [tenant] = await db.insert(schema.tenants).values(insertTenant).returning();
     return tenant;
+  }
+
+  async updateTenant(id: string, updates: Partial<schema.InsertTenant>): Promise<schema.Tenant> {
+    const [tenant] = await db
+      .update(schema.tenants)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.tenants.id, id))
+      .returning();
+    return tenant;
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    // Soft delete - set isActive to false
+    await db
+      .update(schema.tenants)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(schema.tenants.id, id));
+  }
+
+  async getManagedProperties(userId: string): Promise<schema.Tenant[]> {
+    // Get all tenants where user has account_admin role
+    const adminRoles = await db
+      .select()
+      .from(schema.userTenantRoles)
+      .innerJoin(schema.tenants, eq(schema.userTenantRoles.tenantId, schema.tenants.id))
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.role, 'account_admin')
+        )
+      );
+
+    // Collect community IDs and management company IDs
+    const communityIds = new Set<string>();
+    const managementCompanyIds = new Set<string>();
+
+    for (const role of adminRoles) {
+      const tenant = role.tenants;
+      if (tenant.type === 'community') {
+        communityIds.add(tenant.id);
+      } else if (tenant.type === 'management_company') {
+        managementCompanyIds.add(tenant.id);
+      }
+    }
+
+    // Get all communities managed by the management companies
+    if (managementCompanyIds.size > 0) {
+      const managedCommunities = await db
+        .select()
+        .from(schema.tenants)
+        .where(
+          and(
+            eq(schema.tenants.type, 'community'),
+            inArray(schema.tenants.managementCompanyId, Array.from(managementCompanyIds))
+          )
+        );
+
+      for (const community of managedCommunities) {
+        communityIds.add(community.id);
+      }
+    }
+
+    // Fetch all unique tenants (both management companies and communities)
+    const allTenantIds = [...Array.from(managementCompanyIds), ...Array.from(communityIds)];
+
+    if (allTenantIds.length === 0) {
+      return [];
+    }
+
+    const tenants = await db
+      .select()
+      .from(schema.tenants)
+      .where(inArray(schema.tenants.id, allTenantIds));
+
+    return tenants;
   }
 
   // User-Tenant-Roles
@@ -135,6 +221,54 @@ export class DbStorage implements IStorage {
   async assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole> {
     const [role] = await db.insert(schema.userTenantRoles).values(assignment).returning();
     return role;
+  }
+
+  async getTenantUsers(tenantId: string): Promise<(schema.User & { roles: string[] })[]> {
+    // Get all user-role assignments for this tenant
+    const assignments = await db
+      .select()
+      .from(schema.userTenantRoles)
+      .innerJoin(schema.users, eq(schema.userTenantRoles.userId, schema.users.id))
+      .where(eq(schema.userTenantRoles.tenantId, tenantId));
+
+    // Group by user and aggregate roles
+    const userMap = new Map<string, schema.User & { roles: string[] }>();
+
+    for (const assignment of assignments) {
+      const userId = assignment.user_tenant_roles.userId;
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          ...assignment.users,
+          roles: []
+        });
+      }
+      userMap.get(userId)!.roles.push(assignment.user_tenant_roles.role);
+    }
+
+    return Array.from(userMap.values());
+  }
+
+  async removeUserRole(userId: string, tenantId: string, role: string): Promise<void> {
+    await db
+      .delete(schema.userTenantRoles)
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.role, role)
+        )
+      );
+  }
+
+  async removeUserFromTenant(userId: string, tenantId: string): Promise<void> {
+    await db
+      .delete(schema.userTenantRoles)
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.tenantId, tenantId)
+        )
+      );
   }
 
   // Form Templates

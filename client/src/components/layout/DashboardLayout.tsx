@@ -24,23 +24,30 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { NAV_ITEMS } from "@/lib/mock-data";
+import { NAV_ITEMS, SUPER_ADMIN_NAV_ITEMS } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
 import { api, queryClient } from "@/lib/api";
-import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket } from "lucide-react";
+import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { currentTenant, currentUserRole, availableTenants, setCurrentTenant, clearState } = useAppStore();
+  const { currentTenant, currentUserRole, availableTenants, availableRolesForCurrentTenant, selectedPropertyFilter, setCurrentTenant, setCurrentUserRole, setSelectedPropertyFilter, clearState } = useAppStore();
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
   const { isLoading: tenantsLoading } = useUserTenants();
   const { subdomain, isSubdomainMode } = useSubdomain();
+
+  // Fetch managed properties for property filter (management company users only)
+  const { data: managedProperties = [] } = useQuery({
+    queryKey: ["managedProperties"],
+    queryFn: () => api.getManagedProperties(),
+    enabled: !!user && (currentUserRole === 'management_manager' || currentUserRole === 'management_rep' || currentUserRole === 'account_admin'),
+  });
 
   // Handle logout - clear all state before redirecting
   const handleLogout = async () => {
@@ -96,6 +103,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .join(' ');
   };
 
+  // Get role icon/emoji
+  const getRoleIcon = (role: string) => {
+    const icons: Record<string, string> = {
+      'homeowner': '🏠',
+      'poa_board_member': '👔',
+      'poa_board_contributor': '📋',
+      'management_manager': '🏢',
+      'management_rep': '💼',
+      'account_admin': '⚙️',
+      'delegated_rep': '📝',
+      'super_admin': '👑',
+    };
+    return icons[role] || '👤';
+  };
+
   // Show loading state while tenants are loading
   if (tenantsLoading) {
     return (
@@ -108,8 +130,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  // Show message if no tenants available
-  if (!currentTenant) {
+  // Show message if no tenants available (but allow super admins through)
+  if (!currentTenant && !isSuperAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center max-w-md p-8">
@@ -130,11 +152,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen w-full bg-background text-foreground">
         {/* Sidebar */}
         <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-          <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border">
+          <SidebarHeader className="flex-col gap-2 p-2 border-b border-sidebar-border">
             <div className="flex items-center gap-2 font-bold text-lg text-sidebar-primary-foreground">
               <img src={logoImage} className="w-8 h-8 rounded" alt="Logo" />
               <span>POA Association</span>
             </div>
+
+            {/* Property Filter - Only show for management company users */}
+            {currentTenant?.type === 'management_company' && managedProperties.length > 0 && (
+              <div className="w-full px-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full justify-between bg-sidebar-accent/30 border-sidebar-border hover:bg-sidebar-accent">
+                      <span className="flex items-center gap-2 text-xs">
+                        <Filter className="h-3 w-3" />
+                        {selectedPropertyFilter
+                          ? managedProperties.find(p => p.id === selectedPropertyFilter)?.name || 'All Properties'
+                          : 'All Properties'
+                        }
+                      </span>
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel>Filter by Property</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setSelectedPropertyFilter(null)}>
+                      <span className={selectedPropertyFilter === null ? 'font-semibold' : ''}>
+                        All Properties
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {managedProperties.filter(p => p.type === 'community').map(property => (
+                      <DropdownMenuItem
+                        key={property.id}
+                        onClick={() => setSelectedPropertyFilter(property.id)}
+                      >
+                        <span className={selectedPropertyFilter === property.id ? 'font-semibold' : ''}>
+                          {property.name}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
           </SidebarHeader>
           
           <SidebarContent className="px-2 py-4">
@@ -177,7 +239,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Navigation */}
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
+              {NAV_ITEMS.filter(item =>
+                // Filter menu items based on user's role
+                currentUserRole && item.roles?.includes(currentUserRole)
+              ).map((item) => {
                 const isActive = location === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
@@ -196,35 +261,78 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               })}
             </SidebarMenu>
 
-            {/* Admin Section - Only visible to super admins */}
+            {/* System Admin Section - Only visible to super admins */}
             {isSuperAdmin && (
               <>
                 <Separator className="my-4" />
                 <div className="px-2 mb-2">
                   <div className="flex items-center gap-2 text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider">
                     <Shield className="h-3 w-3" />
-                    <span>Admin</span>
+                    <span>System Admin</span>
                   </div>
                 </div>
                 <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={location.startsWith('/admin/demo-codes')}
-                      className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                    >
-                      <Link href="/admin/demo-codes">
-                        <Ticket className="h-5 w-5" />
-                        <span>Demo Codes</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {SUPER_ADMIN_NAV_ITEMS.map((item) => {
+                    const isActive = location === item.href || location.startsWith(item.href);
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                        >
+                          <Link href={item.href}>
+                            <item.icon className="h-5 w-5" />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </>
             )}
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-sidebar-border p-4">
+          <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
+            {/* Role Switcher - Only show if user has multiple roles on current tenant */}
+            {availableRolesForCurrentTenant.length > 1 && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider px-2">
+                  Active Role
+                </label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between bg-sidebar-accent/50 border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-auto py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{getRoleIcon(currentUserRole)}</span>
+                        <span className="text-sm font-medium">{formatRole(currentUserRole)}</span>
+                      </div>
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64" align="start">
+                    <DropdownMenuLabel>Switch Role Context</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {availableRolesForCurrentTenant.map(role => (
+                      <DropdownMenuItem
+                        key={role}
+                        onClick={() => setCurrentUserRole(role)}
+                        className="cursor-pointer"
+                      >
+                        <span className="mr-2 text-base">{getRoleIcon(role)}</span>
+                        <span>{formatRole(role)}</span>
+                        {currentUserRole === role && (
+                          <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+
+            {/* User Profile Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 h-auto p-2 hover:bg-sidebar-accent">
@@ -237,7 +345,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="flex flex-col overflow-hidden text-left flex-1">
                     <span className="text-sm font-medium truncate">{displayName}</span>
                     <span className="text-xs text-sidebar-foreground/60 truncate">
-                      {currentUserRole ? formatRole(currentUserRole) : 'Loading...'}
+                      {availableRolesForCurrentTenant.length > 1 ? (
+                        `${availableRolesForCurrentTenant.length} roles`
+                      ) : (
+                        currentUserRole ? formatRole(currentUserRole) : 'Loading...'
+                      )}
                     </span>
                   </div>
                   <ChevronDown className="h-4 w-4 opacity-50" />

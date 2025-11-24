@@ -11,9 +11,13 @@ import ApplicationSubmit from "@/pages/ApplicationSubmit";
 import MarklandExample from "@/pages/MarklandExample";
 import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
+import Directory from "@/pages/Directory";
+import Properties from "@/pages/Properties";
 import DemoCodes from "@/pages/admin/DemoCodes";
 import DemoCodeForm from "@/pages/admin/DemoCodeForm";
 import DemoCodeStats from "@/pages/admin/DemoCodeStats";
+import ManagementCompanies from "@/pages/admin/ManagementCompanies";
+import Communities from "@/pages/admin/Communities";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -72,7 +76,31 @@ function Router() {
             </DashboardLayout>
           </Route>
 
+          <Route path="/directory">
+            <DashboardLayout>
+              <Directory />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/properties">
+            <DashboardLayout>
+              <Properties />
+            </DashboardLayout>
+          </Route>
+
           {/* Admin Routes */}
+          <Route path="/admin/management-companies">
+            <DashboardLayout>
+              <ManagementCompanies />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/admin/communities">
+            <DashboardLayout>
+              <Communities />
+            </DashboardLayout>
+          </Route>
+
           <Route path="/admin/demo-codes">
             <DashboardLayout>
               <DemoCodes />

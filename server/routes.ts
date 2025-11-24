@@ -152,6 +152,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get properties/communities managed by current user (account_admin role)
+  app.get("/api/properties", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+      const properties = await storage.getManagedProperties(userId);
+      res.json(properties);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/tenants", isAuthenticated, async (req, res) => {
     try {
       const validated = insertTenantSchema.parse(req.body);
@@ -161,6 +175,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.name === "ZodError") {
         return res.status(400).json({ error: fromZodError(error).message });
       }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/tenants/:id", isAuthenticated, async (req, res) => {
+    try {
+      const tenant = await storage.updateTenant(req.params.id, req.body);
+      res.json(tenant);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/tenants/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTenant(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
@@ -267,6 +299,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const tenants = await storage.getUserTenants(req.params.userId);
       res.json(tenants);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // User Management - Directory/RBAC endpoints
+
+  // Get all users for a tenant
+  app.get("/api/tenants/:tenantId/users", isAuthenticated, async (req, res) => {
+    try {
+      const users = await storage.getTenantUsers(req.params.tenantId);
+      res.json(users);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Invite/add new user to tenant with role(s)
+  app.post("/api/tenants/:tenantId/users", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { email, firstName, lastName, roles } = req.body;
+
+      if (!email || !firstName || !lastName || !roles || !Array.isArray(roles) || roles.length === 0) {
+        return res.status(400).json({ error: "Email, first name, last name, and at least one role are required" });
+      }
+
+      // Check if user already exists
+      let user = await storage.getUserByEmail(email);
+
+      // If user doesn't exist, create them
+      if (!user) {
+        user = await storage.upsertUser({
+          email,
+          firstName,
+          lastName,
+          profileImageUrl: null,
+        });
+      }
+
+      // Assign all roles to the user for this tenant
+      const roleAssignments = await Promise.all(
+        roles.map((role: string) =>
+          storage.assignUserRole({
+            userId: user!.id,
+            tenantId,
+            role,
+          })
+        )
+      );
+
+      res.json({ user, roleAssignments });
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(409).json({ error: "User already has one or more of these roles for this tenant" });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Assign additional role to existing user
+  app.post("/api/users/:userId/roles", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { tenantId, role } = req.body;
+
+      if (!tenantId || !role) {
+        return res.status(400).json({ error: "Tenant ID and role are required" });
+      }
+
+      const assignment = await storage.assignUserRole({
+        userId,
+        tenantId,
+        role,
+      });
+
+      res.json(assignment);
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(409).json({ error: "User already has this role for this tenant" });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove specific role from user
+  app.delete("/api/users/:userId/roles/:role", isAuthenticated, async (req, res) => {
+    try {
+      const { userId, role } = req.params;
+      const { tenantId } = req.query;
+
+      if (!tenantId) {
+        return res.status(400).json({ error: "Tenant ID is required" });
+      }
+
+      await storage.removeUserRole(userId, tenantId as string, role);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove user from tenant entirely (all roles)
+  app.delete("/api/tenants/:tenantId/users/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantId, userId } = req.params;
+      await storage.removeUserFromTenant(userId, tenantId);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -434,6 +574,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Admin: Tenant Management (Super Admin only)
+  app.get("/api/admin/tenants", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenants = await storage.listAllTenants();
+      res.json(tenants);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // List all demo codes
   app.get("/api/admin/demo-codes", isAuthenticated, requireSuperAdmin, async (req, res) => {
     try {
@@ -448,10 +598,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create demo code and provision ecosystem
   app.post("/api/admin/demo-codes", isAuthenticated, requireSuperAdmin, async (req: any, res) => {
     try {
-      const validated = insertDemoCodeSchema.parse({
+      // Convert date strings to Date objects before validation
+      const bodyWithDates = {
         ...req.body,
+        validFrom: new Date(req.body.validFrom),
+        validUntil: new Date(req.body.validUntil),
         createdBy: req.session?.userId || req.user?.claims?.sub,
-      });
+      };
+
+      const validated = insertDemoCodeSchema.parse(bodyWithDates);
 
       // Create demo code
       const demoCode = await storage.createDemoCode(validated);

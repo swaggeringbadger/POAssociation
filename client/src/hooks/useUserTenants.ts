@@ -5,10 +5,38 @@ import { useAppStore } from "@/lib/store";
 import { useEffect } from "react";
 import type { User } from "@shared/schema";
 
+// Role hierarchy for determining default role (highest privilege first)
+const ROLE_HIERARCHY = [
+  'super_admin',
+  'account_admin',
+  'management_manager',
+  'management_rep',
+  'poa_board_member',
+  'poa_board_contributor',
+  'delegated_rep',
+  'homeowner',
+];
+
+function getHighestPrivilegeRole(roles: string[]): string {
+  for (const hierarchyRole of ROLE_HIERARCHY) {
+    if (roles.includes(hierarchyRole)) {
+      return hierarchyRole;
+    }
+  }
+  return roles[0] || 'homeowner';
+}
+
 export function useUserTenants() {
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
-  const { setAvailableTenants, setCurrentTenant, setCurrentUserRole, currentTenant } = useAppStore();
+  const {
+    setAvailableTenants,
+    setCurrentTenant,
+    setCurrentUserRole,
+    setAvailableRolesForCurrentTenant,
+    currentTenant,
+    currentUserRole
+  } = useAppStore();
 
   const { data: userTenants, isLoading, error } = useQuery({
     queryKey: ['userTenants', user?.id],
@@ -30,32 +58,44 @@ export function useUserTenants() {
       // If no current tenant is set, set the first one
       if (!currentTenant || !tenants.find(t => currentTenant && t.id === currentTenant.id)) {
         setCurrentTenant(tenants[0]);
-        // Set the role for this tenant
-        const assignment = userTenants.find(ut => ut.tenantId === tenants[0].id);
-        if (assignment) {
-          setCurrentUserRole(assignment.role);
-        }
+        // Get ALL roles for this tenant
+        const rolesForTenant = userTenants
+          .filter(ut => ut.tenantId === tenants[0].id)
+          .map(ut => ut.role);
+        setAvailableRolesForCurrentTenant(rolesForTenant);
+        // Set the highest privilege role as default
+        const defaultRole = getHighestPrivilegeRole(rolesForTenant);
+        setCurrentUserRole(defaultRole);
       }
     }
-  }, [userTenants, setAvailableTenants, setCurrentTenant, setCurrentUserRole, currentTenant]);
+  }, [userTenants, setAvailableTenants, setCurrentTenant, setCurrentUserRole, setAvailableRolesForCurrentTenant, currentTenant]);
 
-  // Update role when tenant changes
+  // Update roles when tenant changes
   useEffect(() => {
     if (userTenants && currentTenant?.id) {
-      const assignment = userTenants.find(ut => ut.tenantId === currentTenant.id);
-      if (assignment && assignment.role !== useAppStore.getState().currentUserRole) {
-        setCurrentUserRole(assignment.role);
+      // Get ALL roles for current tenant
+      const rolesForTenant = userTenants
+        .filter(ut => ut.tenantId === currentTenant.id)
+        .map(ut => ut.role);
+      setAvailableRolesForCurrentTenant(rolesForTenant);
+
+      // If current role is not available for this tenant, pick the highest privilege role
+      if (!rolesForTenant.includes(currentUserRole)) {
+        const defaultRole = getHighestPrivilegeRole(rolesForTenant);
+        setCurrentUserRole(defaultRole);
       }
     }
-  }, [currentTenant, userTenants, setCurrentUserRole]);
+  }, [currentTenant, userTenants, currentUserRole, setCurrentUserRole, setAvailableRolesForCurrentTenant]);
 
-  // Get role for current tenant
-  const currentRole = currentTenant ? userTenants?.find(ut => ut.tenantId === currentTenant.id)?.role : undefined;
+  // Get all roles for current tenant
+  const rolesForCurrentTenant = currentTenant
+    ? userTenants?.filter(ut => ut.tenantId === currentTenant.id).map(ut => ut.role)
+    : [];
 
   return {
     userTenants,
     isLoading,
     error,
-    currentRole,
+    rolesForCurrentTenant,
   };
 }

@@ -1,5 +1,5 @@
 
-import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck } from "lucide-react";
+import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine } from "lucide-react";
 
 // Types for our mockup
 export type Role = 
@@ -42,14 +42,76 @@ export const TENANTS: Tenant[] = [
 ];
 
 export const NAV_ITEMS = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-  { label: 'Applications', icon: FileText, href: '/applications' },
-  { label: 'Submit Request', icon: FileText, href: '/apply' },
-  { label: 'Directory', icon: Users, href: '/directory' },
-  { label: 'Properties', icon: Building2, href: '/properties' },
-  { label: 'Compliance', icon: ShieldCheck, href: '/compliance' },
-  { label: 'Form Wizard', icon: Settings, href: '/admin/form-builder' },
-  { label: 'Settings', icon: Settings, href: '/settings' },
+  {
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    href: '/dashboard',
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Applications',
+    icon: FileText,
+    href: '/applications',
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Submit Request',
+    icon: FileText,
+    href: '/apply',
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member']
+  },
+  {
+    label: 'Directory',
+    icon: Users,
+    href: '/directory',
+    roles: ['poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Properties',
+    icon: Building2,
+    href: '/properties',
+    roles: ['management_rep', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Compliance',
+    icon: ShieldCheck,
+    href: '/compliance',
+    roles: ['poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Form Wizard',
+    icon: Settings,
+    href: '/admin/form-builder',
+    roles: ['poa_board_member', 'management_manager', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Settings',
+    icon: Settings,
+    href: '/settings',
+    roles: ['poa_board_member', 'management_manager', 'account_admin', 'super_admin']
+  },
+];
+
+// Super Admin only navigation items
+export const SUPER_ADMIN_NAV_ITEMS = [
+  {
+    label: 'Management Companies',
+    icon: Building,
+    href: '/admin/management-companies',
+    roles: ['super_admin']
+  },
+  {
+    label: 'Communities',
+    icon: TreePine,
+    href: '/admin/communities',
+    roles: ['super_admin']
+  },
+  {
+    label: 'Demo Codes',
+    icon: ShieldCheck,
+    href: '/admin/demo-codes',
+    roles: ['super_admin']
+  },
 ];
 
 // Placeholder for the "Revolutionary Form Wizard" JSON structure

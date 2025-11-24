@@ -39,6 +39,9 @@ export const insertDemoCodeSchema = createInsertSchema(demoCodes).omit({
   currentUses: true,
   isProvisioned: true,
   provisionedAt: true,
+}).extend({
+  validFrom: z.coerce.date(),
+  validUntil: z.coerce.date(),
 });
 
 export type InsertDemoCode = z.infer<typeof insertDemoCodeSchema>;
