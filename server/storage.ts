@@ -422,22 +422,24 @@ export class DbStorage implements IStorage {
       applications = await db.select().from(schema.applications);
     }
 
-    // Enrich with workflow stage info
+    // Enrich with workflow stage and tenant name info
     const enriched = await Promise.all(
       applications.map(async (app) => {
         const workflow = await this.getApplicationWorkflow(app.id);
+        const tenant = await this.getTenant(app.tenantId);
+        
+        let workflowStage: string | undefined;
         if (workflow) {
           const template = await this.getWorkflowTemplate(workflow.workflowTemplateId);
           const steps = (template?.steps as any[]) || [];
           const currentStep = steps[workflow.currentStepIndex];
-          return {
-            ...app,
-            workflowStage: currentStep?.title || 'Unknown'
-          };
+          workflowStage = currentStep?.title || 'Unknown';
         }
+        
         return {
           ...app,
-          workflowStage: undefined
+          workflowStage,
+          tenantName: tenant?.name
         };
       })
     );

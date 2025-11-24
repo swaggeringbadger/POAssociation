@@ -211,9 +211,10 @@ export default function Applications() {
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-lg">{app.title}</h3>
                       <Badge variant="outline" className="text-xs">{app.applicationNumber}</Badge>
+                      {app.tenantName && <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400">{app.tenantName}</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground">{app.propertyAddress}</p>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
