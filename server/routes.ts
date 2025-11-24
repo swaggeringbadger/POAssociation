@@ -305,6 +305,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Applications - Protected routes
+  // Note: /list must come before /:id to avoid route collision in Express
+  app.get("/api/applications/list", isAuthenticated, async (req: any, res) => {
+    try {
+      const { role = 'homeowner', tenantId, userId } = req.query;
+
+      if (!tenantId || !userId) {
+        return res.status(400).json({ error: "tenantId and userId query parameters are required" });
+      }
+
+      const applications = await storage.listApplicationsByRole(role, tenantId, userId);
+      res.json(applications);
+    } catch (error: any) {
+      console.error("Error fetching applications:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/applications/:id", isAuthenticated, async (req, res) => {
     try {
       const application = await storage.getApplication(req.params.id);
@@ -360,22 +377,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.name === "ZodError") {
         return res.status(400).json({ error: fromZodError(error).message });
       }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/applications/list", isAuthenticated, async (req: any, res) => {
-    try {
-      const { role = 'homeowner', tenantId, userId } = req.query;
-
-      if (!tenantId || !userId) {
-        return res.status(400).json({ error: "tenantId and userId query parameters are required" });
-      }
-
-      const applications = await storage.listApplicationsByRole(role, tenantId, userId);
-      res.json(applications);
-    } catch (error: any) {
-      console.error("Error fetching applications:", error);
       res.status(500).json({ error: error.message });
     }
   });
