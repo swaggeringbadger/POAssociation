@@ -489,3 +489,47 @@ export class DbStorage implements IStorage {
 }
 
 export const storage = new DbStorage();
+
+  // Workflow Templates
+  async getWorkflowTemplate(id: string): Promise<schema.WorkflowTemplate | undefined> {
+    const [template] = await db.select().from(schema.workflowTemplates).where(eq(schema.workflowTemplates.id, id));
+    return template;
+  }
+
+  async listWorkflowTemplatesForTenant(tenantId: string): Promise<schema.WorkflowTemplate[]> {
+    return db.select().from(schema.workflowTemplates).where(eq(schema.workflowTemplates.tenantId, tenantId));
+  }
+
+  async createWorkflowTemplate(template: schema.InsertWorkflowTemplate): Promise<schema.WorkflowTemplate> {
+    const [created] = await db.insert(schema.workflowTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateTenantWorkflow(tenantId: string, workflowTemplateId: string): Promise<schema.Tenant> {
+    const [updated] = await db.update(schema.tenants).set({ workflowTemplateId }).where(eq(schema.tenants.id, tenantId)).returning();
+    return updated;
+  }
+
+  // Comments
+  async addComment(comment: schema.InsertComment): Promise<schema.Comment> {
+    const [created] = await db.insert(schema.comments).values(comment).returning();
+    return created;
+  }
+
+  async getApplicationComments(applicationId: string): Promise<(schema.Comment & { user: schema.User })[]> {
+    return db.select().from(schema.comments)
+      .innerJoin(schema.users, eq(schema.comments.userId, schema.users.id))
+      .where(eq(schema.comments.applicationId, applicationId))
+      .orderBy(schema.comments.createdAt);
+  }
+
+  // Application Workflows
+  async createApplicationWorkflow(workflow: schema.InsertApplicationWorkflow): Promise<schema.ApplicationWorkflow> {
+    const [created] = await db.insert(schema.applicationWorkflows).values(workflow).returning();
+    return created;
+  }
+
+  async getApplicationWorkflow(applicationId: string): Promise<schema.ApplicationWorkflow | undefined> {
+    const [workflow] = await db.select().from(schema.applicationWorkflows).where(eq(schema.applicationWorkflows.applicationId, applicationId));
+    return workflow;
+  }

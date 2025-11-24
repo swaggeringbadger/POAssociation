@@ -69,6 +69,7 @@ export const tenants = pgTable("tenants", {
   type: text("type").notNull(), // 'management_company' | 'community'
   subdomain: text("subdomain").notNull().unique(),
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
+  workflowTemplateId: varchar("workflow_template_id").references((): any => null), // Will be set after workflow templates exist
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -190,3 +191,90 @@ export const insertDemoSessionSchema = createInsertSchema(demoSessions).omit({
 
 export type InsertDemoSession = z.infer<typeof insertDemoSessionSchema>;
 export type DemoSession = typeof demoSessions.$inferSelect;
+
+// Workflow Templates table - predefined workflow configurations
+export const workflowTemplates = pgTable("workflow_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // e.g., "Standard 3-Step Review", "Management + Board"
+  description: text("description"),
+  steps: jsonb("steps").notNull(), // [{title, role, allowEdit, actions}]
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertWorkflowTemplateSchema = createInsertSchema(workflowTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWorkflowTemplate = z.infer<typeof insertWorkflowTemplateSchema>;
+export type WorkflowTemplate = typeof workflowTemplates.$inferSelect;
+
+// Application Workflows table - tracks which workflow an application is using and current step
+export const applicationWorkflows = pgTable("application_workflows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  workflowTemplateId: varchar("workflow_template_id").notNull().references(() => workflowTemplates.id),
+  currentStepIndex: integer("current_step_index").notNull().default(0),
+  status: text("status").notNull().default("in_progress"), // 'in_progress', 'completed', 'halted'
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertApplicationWorkflowSchema = createInsertSchema(applicationWorkflows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertApplicationWorkflow = z.infer<typeof insertApplicationWorkflowSchema>;
+export type ApplicationWorkflow = typeof applicationWorkflows.$inferSelect;
+
+// Comments table - threaded comments for applications
+export const comments = pgTable("comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  text: text("text").notNull(),
+  parentCommentId: varchar("parent_comment_id").references((): any => comments.id, { onDelete: "cascade" }),
+  isResolved: boolean("is_resolved").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCommentSchema = createInsertSchema(comments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertComment = z.infer<typeof insertCommentSchema>;
+export type Comment = typeof comments.$inferSelect;
+
+// Workflow Step Actions table - logs transitions through workflow
+export const workflowStepActions = pgTable("workflow_step_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationWorkflowId: varchar("application_workflow_id").notNull().references(() => applicationWorkflows.id, { onDelete: "cascade" }),
+  stepIndex: integer("step_index").notNull(),
+  action: text("action").notNull(), // 'approved', 'rejected', 'conditionally_approved', 'sent_back', 'progressed'
+  userId: varchar("user_id").notNull().references(() => users.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertWorkflowStepActionSchema = createInsertSchema(workflowStepActions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWorkflowStepAction = z.infer<typeof insertWorkflowStepActionSchema>;
+export type WorkflowStepAction = typeof workflowStepActions.$inferSelect;
+
+// Add workflowTemplateId to tenants - track which workflow is active for a community
+export const updateTenantWorkflowTemplateId = () => {
+  // This is a marker - actual migration handled by npm run db:push
+};
