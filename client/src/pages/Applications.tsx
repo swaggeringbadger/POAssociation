@@ -37,7 +37,7 @@ export default function Applications() {
       });
       const res = await fetch(`/api/applications/list?${params}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch applications");
-      return res.json() as Promise<Application[]>;
+      return res.json() as Promise<ApplicationWithWorkflow[]>;
     },
     enabled: !!currentTenant && !!user,
   });
@@ -55,21 +55,36 @@ export default function Applications() {
         app.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.propertyAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.applicationNumber.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = !statusFilter || app.status === statusFilter;
+      const matchesStatus = !statusFilter || (app.workflowStage && app.workflowStage.toLowerCase() === statusFilter.toLowerCase());
       const matchesProperty = !propertyFilter || app.propertyAddress === propertyFilter;
       return matchesSearch && matchesStatus && matchesProperty;
     });
   }, [applications, searchTerm, statusFilter, propertyFilter]);
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-      under_review: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-      approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-      rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  const getWorkflowStageBadge = (workflowStage?: string) => {
+    if (!workflowStage) {
+      return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400">No Stage</Badge>;
+    }
+
+    const stageVariants: Record<string, string> = {
+      "Application Submitted": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+      "Management Review": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Management Pre-Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Management Only": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "Initial Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      "POA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Board Review & Vote": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Committee Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Board Approval": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "Final Decision": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Homeowner Notification": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Complete": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      "Final Processing": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
     };
+
+    const variantClass = stageVariants[workflowStage] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     return (
-      <Badge className={variants[status] || ""}>{status.replace("_", " ")}</Badge>
+      <Badge className={variantClass}>{workflowStage}</Badge>
     );
   };
 
@@ -137,18 +152,18 @@ export default function Applications() {
                 </DropdownMenu>
               )}
 
-              {/* Status Filter */}
+              {/* Workflow Stage Filter */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-filter-status">
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-filter-stage">
                     <Filter className="h-4 w-4" />
-                    Status
-                    {statusFilter && <Badge variant="secondary" className="ml-1">{statusFilter.replace("_", " ")}</Badge>}
+                    Stage
+                    {statusFilter && <Badge variant="secondary" className="ml-1">{statusFilter}</Badge>}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                  <DropdownMenuLabel>Filter by Workflow Stage</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {statusFilter && (
                     <>
@@ -156,14 +171,20 @@ export default function Applications() {
                       <DropdownMenuSeparator />
                     </>
                   )}
-                  {["pending", "under_review", "approved", "rejected"].map(status => (
+                  {Array.from(
+                    new Set(
+                      applications
+                        ?.map(app => app.workflowStage)
+                        .filter(Boolean) as string[]
+                    )
+                  ).sort().map(stage => (
                     <DropdownMenuItem
-                      key={status}
-                      onClick={() => setStatusFilter(status)}
-                      className={statusFilter === status ? "bg-accent" : ""}
-                      data-testid={`status-${status}`}
+                      key={stage}
+                      onClick={() => setStatusFilter(stage)}
+                      className={statusFilter === stage ? "bg-accent" : ""}
+                      data-testid={`stage-${stage}`}
                     >
-                      {status.replace("_", " ")}
+                      {stage}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -201,7 +222,7 @@ export default function Applications() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-3">
-                    {getStatusBadge(app.status)}
+                    {getWorkflowStageBadge(app.workflowStage)}
                     <Link href={`/applications/${app.id}`}>
                       <Button variant="outline" size="sm" className="gap-2" data-testid={`view-${app.id}`}>
                         <Eye className="h-4 w-4" />
