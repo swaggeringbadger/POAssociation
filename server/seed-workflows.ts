@@ -14,7 +14,7 @@ export async function seedWorkflowTemplates(tenantId: string) {
         { title: "Application Submitted", role: "system", actions: ["proceed"] },
         { title: "Management Review", role: "management_rep|management_manager|account_admin", actions: ["approved", "rejected", "conditionally_approved"] },
         { title: "POA Board Review", role: "poa_board_member|poa_board_contributor", actions: ["approved", "rejected", "conditionally_approved"] },
-        { title: "Final Decision", role: "account_admin|super_admin", actions: ["approved"] },
+        { title: "Final Inspection", role: "account_admin|super_admin", actions: ["approved"] },
       ],
     },
     {
