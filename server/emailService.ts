@@ -23,7 +23,7 @@ interface EmailPayload {
 export class EmailService {
   private apiKey: string;
   private apiUrl = 'https://api.smtp2go.com/v3/email/send';
-  private fromEmail = 'noreply@civicflow.com';
+  private fromEmail = 'noreply@poassociation.com';
   private fromName = 'CivicFlow';
 
   constructor() {
@@ -59,7 +59,7 @@ export class EmailService {
       console.log('[EmailService] Sending to SMTP2GO with payload:', { 
         to: requestBody.to, 
         subject: requestBody.subject,
-        from: requestBody.from 
+        sender: requestBody.sender 
       });
 
       const response = await fetch(this.apiUrl, {
