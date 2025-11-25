@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, db } from "./storage";
 import { insertTenantSchema, insertFormTemplateSchema, insertApplicationSchema, insertDemoCodeSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -8,6 +8,8 @@ import { provisionDemoEcosystem } from "./provision";
 import { seedWorkflowTemplates } from "./seed-workflows";
 import { AdditionalInfoService } from "./additionalInfoService";
 import { z } from "zod";
+import * as schema from "@shared/schema";
+import { eq, and, desc } from "drizzle-orm";
 
 // Initialize services
 const additionalInfoService = new AdditionalInfoService(storage);

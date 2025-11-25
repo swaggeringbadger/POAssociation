@@ -3,6 +3,15 @@
  * Handles sending transactional emails for CivicFlow
  */
 
+import {
+  buildEmailTemplate,
+  applicationSubmittedTemplate,
+  applicationApprovedTemplate,
+  applicationRejectedTemplate,
+  stepAssignmentTemplate,
+  commentNotificationTemplate,
+} from './emailTemplates';
+
 interface EmailPayload {
   to: string | string[];
   subject: string;
@@ -85,16 +94,15 @@ export class EmailService {
     homeownerEmail: string,
     applicationTitle: string,
     applicantName: string,
-    communityName: string
+    communityName: string,
+    applicationLink?: string
   ): Promise<{ success: boolean; error?: string }> {
-    const html = `
-      <h2>Application Received</h2>
-      <p>Hi ${applicantName},</p>
-      <p>We have received your application for <strong>"${applicationTitle}"</strong> in ${communityName}.</p>
-      <p>Your application is now under review. You can check the status anytime by logging into your account.</p>
-      <p>We will notify you via email when there are any updates.</p>
-      <p>Thank you,<br>CivicFlow Team</p>
-    `;
+    const html = applicationSubmittedTemplate(
+      applicantName,
+      applicationTitle,
+      communityName,
+      applicationLink || 'https://civicflow.com'
+    );
 
     return this.send({
       to: homeownerEmail,
@@ -110,16 +118,15 @@ export class EmailService {
     homeownerEmail: string,
     applicationTitle: string,
     applicantName: string,
-    communityName: string
+    communityName: string,
+    applicationLink?: string
   ): Promise<{ success: boolean; error?: string }> {
-    const html = `
-      <h2>Application Approved</h2>
-      <p>Hi ${applicantName},</p>
-      <p>Great news! Your application for <strong>"${applicationTitle}"</strong> in ${communityName} has been <strong>approved</strong>.</p>
-      <p>You can proceed with your project. Please keep a copy of your approval for your records.</p>
-      <p>If you have any questions, please don't hesitate to contact us.</p>
-      <p>Thank you,<br>CivicFlow Team</p>
-    `;
+    const html = applicationApprovedTemplate(
+      applicantName,
+      applicationTitle,
+      communityName,
+      applicationLink || 'https://civicflow.com'
+    );
 
     return this.send({
       to: homeownerEmail,
@@ -136,18 +143,16 @@ export class EmailService {
     applicationTitle: string,
     applicantName: string,
     communityName: string,
-    reason?: string
+    reason?: string,
+    applicationLink?: string
   ): Promise<{ success: boolean; error?: string }> {
-    const reasonText = reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '';
-    
-    const html = `
-      <h2>Application Status Update</h2>
-      <p>Hi ${applicantName},</p>
-      <p>We regret to inform you that your application for <strong>"${applicationTitle}"</strong> in ${communityName} has been <strong>rejected</strong>.</p>
-      ${reasonText}
-      <p>Please review the feedback and consider resubmitting with the requested changes, or contact us to discuss further.</p>
-      <p>Thank you,<br>CivicFlow Team</p>
-    `;
+    const html = applicationRejectedTemplate(
+      applicantName,
+      applicationTitle,
+      communityName,
+      reason,
+      applicationLink || 'https://civicflow.com'
+    );
 
     return this.send({
       to: homeownerEmail,
@@ -167,14 +172,13 @@ export class EmailService {
     communityName: string,
     applicationLink: string
   ): Promise<{ success: boolean; error?: string }> {
-    const html = `
-      <h2>New Application Step Assignment</h2>
-      <p>Hi ${recipientName},</p>
-      <p>You have been assigned to review the <strong>"${stepTitle}"</strong> step for the application <strong>"${applicationTitle}"</strong> in ${communityName}.</p>
-      <p><a href="${applicationLink}" style="background-color: #1e3a8a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">View Application</a></p>
-      <p>Please review and take appropriate action as soon as possible.</p>
-      <p>Thank you,<br>CivicFlow Team</p>
-    `;
+    const html = stepAssignmentTemplate(
+      recipientName,
+      applicationTitle,
+      stepTitle,
+      communityName,
+      applicationLink
+    );
 
     return this.send({
       to: recipientEmail,
@@ -194,16 +198,13 @@ export class EmailService {
     comment: string,
     applicationLink: string
   ): Promise<{ success: boolean; error?: string }> {
-    const html = `
-      <h2>New Comment on Application</h2>
-      <p>Hi ${recipientName},</p>
-      <p><strong>${commenterName}</strong> commented on <strong>"${applicationTitle}"</strong>:</p>
-      <blockquote style="border-left: 4px solid #1e3a8a; padding-left: 15px; margin: 15px 0; color: #666;">
-        ${comment}
-      </blockquote>
-      <p><a href="${applicationLink}" style="background-color: #1e3a8a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">View Conversation</a></p>
-      <p>Thank you,<br>CivicFlow Team</p>
-    `;
+    const html = commentNotificationTemplate(
+      recipientName,
+      commenterName,
+      applicationTitle,
+      comment,
+      applicationLink
+    );
 
     return this.send({
       to: recipientEmail,
