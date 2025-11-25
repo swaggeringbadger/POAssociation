@@ -13,9 +13,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
-import { Loader2, Filter, ChevronDown, Eye } from "lucide-react";
+import { Loader2, Filter, ChevronDown, Eye, MoreVertical, Trash2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Application } from "@shared/schema";
 
 type ApplicationWithWorkflow = Application & { workflowStage?: string; tenantName?: string };
@@ -23,9 +34,13 @@ type ApplicationWithWorkflow = Application & { workflowStage?: string; tenantNam
 export default function Applications() {
   const { user } = useAuth();
   const { currentUserRole, currentTenant } = useAppStore();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [propertyFilter, setPropertyFilter] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedAppToDelete, setSelectedAppToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ["/api/applications/list", currentUserRole, currentTenant?.id, user?.id],
@@ -60,6 +75,32 @@ export default function Applications() {
       return matchesSearch && matchesStatus && matchesProperty;
     });
   }, [applications, searchTerm, statusFilter, propertyFilter]);
+
+  const handleDeleteApplication = async () => {
+    if (!selectedAppToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/applications/${selectedAppToDelete}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        throw new Error("Failed to delete application");
+      }
+      
+      toast.success("Application deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["/api/applications/list"] });
+      setDeleteDialogOpen(false);
+      setSelectedAppToDelete(null);
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      toast.error("Failed to delete application");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const getWorkflowStageBadge = (workflowStage?: string) => {
     if (!workflowStage) {
@@ -224,12 +265,36 @@ export default function Applications() {
                   </div>
                   <div className="flex flex-col items-end gap-3">
                     {getWorkflowStageBadge(app.workflowStage)}
-                    <Link href={`/applications/${app.id}`}>
-                      <Button variant="outline" size="sm" className="gap-2" data-testid={`view-${app.id}`}>
-                        <Eye className="h-4 w-4" />
-                        View
-                      </Button>
-                    </Link>
+                    <div className="flex gap-2">
+                      <Link href={`/applications/${app.id}`}>
+                        <Button variant="outline" size="sm" className="gap-2" data-testid={`view-${app.id}`}>
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Button>
+                      </Link>
+                      {currentUserRole === 'account_admin' && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" data-testid={`menu-${app.id}`}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedAppToDelete(app.id);
+                                setDeleteDialogOpen(true);
+                              }}
+                              className="text-red-600 dark:text-red-400"
+                              data-testid={`delete-${app.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -247,6 +312,29 @@ export default function Applications() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Application?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the application. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteApplication}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="confirm-delete"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

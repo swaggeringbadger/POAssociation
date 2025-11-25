@@ -344,6 +344,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/applications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const applicationId = req.params.id;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      // Get the application to check authorization
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+      
+      // Get user's role for this application's tenant
+      const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+      const hasAdminRole = userRoles.some(r => r.role === 'account_admin');
+      
+      // Only account_admin can delete applications
+      if (!hasAdminRole) {
+        return res.status(403).json({ error: "Only account admins can delete applications" });
+      }
+      
+      await storage.deleteApplication(applicationId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error("Error deleting application:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/applications", isAuthenticated, async (req, res) => {
     try {
       // Get form template to extract version and config
