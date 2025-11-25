@@ -8,8 +8,9 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
-import { Info } from 'lucide-react';
-import type { AdditionalInfoConfig, AdditionalInfoField, FormData, RelevantBylaws } from '@shared/additionalInfoTypes';
+import { Info, BookOpen } from 'lucide-react';
+import type { AdditionalInfoConfig, AdditionalInfoField, FormData } from '@shared/additionalInfoTypes';
+import type { BylawReference } from '@shared/formTypes';
 import { apiRequest } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,13 +25,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface DynamicAdditionalInfoFormProps {
@@ -208,49 +203,55 @@ export function DynamicAdditionalInfoForm({
   };
 
   /**
-   * Render bylaw reference dialog
+   * Render bylaw reference hover card
    */
-  const renderBylawReference = (bylaws: string | RelevantBylaws) => {
-    const bylawContent = typeof bylaws === 'string'
-      ? { primary: bylaws, additionalReferences: [] }
-      : bylaws;
-
+  const renderBylawReference = (bylaws: BylawReference) => {
     return (
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 text-xs">
+      <HoverCard>
+        <HoverCardTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
+          >
             <Info className="h-3 w-3 mr-1" />
-            Relevant Bylaws
+            Bylaws
           </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Relevant Bylaws & Covenants</DialogTitle>
-          </DialogHeader>
-          <div className="mt-4 space-y-4">
-            {bylawContent.primary && (
-              <div className="prose prose-sm max-w-none">
-                <p className="text-sm leading-relaxed">{bylawContent.primary}</p>
-              </div>
+        </HoverCardTrigger>
+        <HoverCardContent className="w-96" align="end">
+          <div className="space-y-3">
+            {bylaws.reference && (
+              <h4 className="text-sm font-semibold flex items-center text-primary">
+                <BookOpen className="h-3 w-3 mr-2" />
+                {bylaws.reference}
+              </h4>
             )}
-            {bylawContent.additionalReferences && bylawContent.additionalReferences.length > 0 && (
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-semibold mb-2">Additional References:</h4>
-                <ul className="list-disc list-inside space-y-1">
-                  {bylawContent.additionalReferences.map((ref, idx) => (
-                    <li key={idx} className="text-sm text-muted-foreground">{ref}</li>
+            {bylaws.requirement && (
+              <p className="text-xs font-medium">{bylaws.requirement}</p>
+            )}
+            {bylaws.keyRestrictions && bylaws.keyRestrictions.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold">Key Restrictions:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-xs text-muted-foreground">
+                  {bylaws.keyRestrictions.map((restriction, idx) => (
+                    <li key={idx}>{restriction}</li>
                   ))}
                 </ul>
               </div>
             )}
-            {bylawContent.reference && (
-              <div className="border-t pt-4">
-                <p className="text-sm text-muted-foreground italic">{bylawContent.reference}</p>
+            {bylaws.note && (
+              <div className="bg-muted p-2 rounded text-xs text-muted-foreground italic">
+                Note: {bylaws.note}
+              </div>
+            )}
+            {bylaws.quote && (
+              <div className="border-l-2 border-primary pl-2 text-xs italic text-muted-foreground">
+                "{bylaws.quote}"
               </div>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </HoverCardContent>
+      </HoverCard>
     );
   };
 

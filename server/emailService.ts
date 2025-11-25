@@ -56,6 +56,12 @@ export class EmailService {
         ...(payload.replyTo && { reply_to: payload.replyTo }),
       };
 
+      console.log('[EmailService] Sending to SMTP2GO with payload:', { 
+        to: requestBody.to, 
+        subject: requestBody.subject,
+        from: requestBody.from 
+      });
+
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
