@@ -427,6 +427,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the entire application creation if workflow setup fails
       }
 
+      // Send application submitted email notification
+      try {
+        const userId = req.session?.userId || req.user?.claims?.sub;
+        const user = userId ? await storage.getUser(userId) : null;
+        const tenant = await storage.getTenant(req.body.tenantId);
+        
+        if (user && tenant && user.email) {
+          const { emailService } = await import('./emailService');
+          const applicationLink = `https://${tenant.subdomain}.civicflow.com/applications/${application.id}`;
+          const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
+          
+          await emailService.sendApplicationSubmitted(
+            user.email,
+            req.body.title || 'Modification Application',
+            applicantName,
+            tenant.name,
+            applicationLink
+          );
+        }
+      } catch (emailError) {
+        console.warn("Warning: Failed to send application submission email:", emailError);
+        // Don't fail the entire application creation if email fails
+      }
+
       res.status(201).json(application);
     } catch (error: any) {
       if (error.name === "ZodError") {

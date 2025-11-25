@@ -188,18 +188,26 @@ export default function FormWizard() {
       [applicationType]: { ...prev[applicationType], isGenerating: true }
     }));
 
-    try {
-      toast.info("Fetching your design guidelines...", { duration: 2000 });
+    // Show persistent loading toast
+    const loadingToast = toast.loading(
+      "AI is analyzing design guidelines and generating your custom form... This usually takes 30-60 seconds. You can navigate away if needed.",
+      {
+        duration: Infinity,
+      }
+    );
 
+    try {
       const result = await api.generateForm(effectiveTenantId, applicationType);
 
-      toast.success(`Form generated successfully! Used ${result.tokensUsed} tokens (~$${result.estimatedCost})`, {
+      toast.dismiss(loadingToast);
+      toast.success(`Version ${result.version} generated successfully! Used ${result.tokensUsed} tokens (~$${result.estimatedCost.toFixed(4)})`, {
         duration: 5000,
       });
 
       // Refresh form templates
       await refetchTemplates();
     } catch (error: any) {
+      toast.dismiss(loadingToast);
       toast.error(error.message || "Failed to generate form", {
         duration: 5000,
       });
