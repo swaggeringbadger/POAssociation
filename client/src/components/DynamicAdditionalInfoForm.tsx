@@ -279,7 +279,7 @@ export function DynamicAdditionalInfoForm({
                     {field.label}
                     {field.required && <span className="text-destructive ml-1">*</span>}
                   </Label>
-                  {field.relevantBylaws && renderBylawReference(field.relevantBylaws)}
+                  {field.relevantBylaws && typeof field.relevantBylaws !== 'string' && renderBylawReference(field.relevantBylaws as BylawReference)}
                 </div>
 
                 {/* Field Description */}

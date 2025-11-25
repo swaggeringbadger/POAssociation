@@ -430,8 +430,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send application submitted email notification
       try {
         const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+        console.log(`[Email] Application submission - userId: ${userId}`);
+        
         const user = userId ? await storage.getUser(userId) : null;
         const tenant = await storage.getTenant(req.body.tenantId);
+        
+        console.log(`[Email] User fetched - id: ${user?.id}, email: "${user?.email}", firstName: ${user?.firstName}, lastName: ${user?.lastName}`);
+        console.log(`[Email] Tenant fetched - id: ${tenant?.id}, name: ${tenant?.name}`);
         
         // Only send email if we have a valid email address (skip demo users without email)
         if (user && tenant && user.email) {
@@ -439,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const applicationLink = `https://${tenant.subdomain}.civicflow.com/applications/${application.id}`;
           const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
           
-          console.log(`[Email] Attempting to send application submitted email to: ${user.email}`);
+          console.log(`[Email] SENDING to: ${user.email}, app: ${req.body.title}`);
           const emailResult = await emailService.sendApplicationSubmitted(
             user.email,
             req.body.title || 'Modification Application',
@@ -449,10 +454,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           console.log(`[Email] Email send result:`, emailResult);
         } else {
-          console.log(`[Email] Skipping email - user: ${!!user}, tenant: ${!!tenant}, email: ${user?.email || 'missing'}`);
+          console.log(`[Email] SKIPPED - user exists: ${!!user}, tenant exists: ${!!tenant}, has email: ${!!user?.email}`);
+          if (user) console.log(`[Email] User email value: "${user.email}" (type: ${typeof user.email})`);
         }
       } catch (emailError) {
-        console.error("Error sending application submission email:", emailError);
+        console.error("[Email] Error sending application submission email:", emailError);
         // Don't fail the entire application creation if email fails
       }
 
