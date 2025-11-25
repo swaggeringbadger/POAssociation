@@ -50,7 +50,7 @@ export class EmailService {
       const requestBody = {
         api_key: this.apiKey,
         to: recipients,
-        from: payload.from || this.fromEmail,
+        sender: payload.from || this.fromEmail,
         subject: payload.subject,
         html_body: payload.html,
         ...(payload.replyTo && { reply_to: payload.replyTo }),

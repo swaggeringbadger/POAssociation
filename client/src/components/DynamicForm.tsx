@@ -7,17 +7,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Badge } from "@/components/ui/badge";
 import { Info, BookOpen, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import type { BylawReference } from '@shared/formTypes';
 
-interface Bylaws {
-  reference?: string;
-  requirement?: string;
-  note?: string;
-  quote?: string;
-}
+interface Bylaws extends BylawReference {}
 
 interface Field {
   id: string;
@@ -73,6 +75,106 @@ export default function DynamicForm({ schema, onSubmit, readOnly = false, isSubm
     console.log("Form Data:", data);
   };
 
+  /**
+   * Render bylaw reference dialog (click to open, works on mobile)
+   */
+  const renderBylawReference = (bylaws: BylawReference) => {
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
+          >
+            <Info className="h-3 w-3 mr-1" />
+            Relevant Bylaws
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-primary" />
+              Relevant Bylaws & Covenants
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            {bylaws.reference && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Reference</h4>
+                <p className="text-sm">{bylaws.reference}</p>
+              </div>
+            )}
+            {bylaws.requirement && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Requirement</h4>
+                <p className="text-sm leading-relaxed">{bylaws.requirement}</p>
+              </div>
+            )}
+            {bylaws.requirements && bylaws.requirements.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Requirements</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.requirements.map((req, idx) => (
+                    <li key={idx}>{req}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.keyRestrictions && bylaws.keyRestrictions.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Key Restrictions</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.keyRestrictions.map((restriction, idx) => (
+                    <li key={idx}>{restriction}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.approvedMaterials && bylaws.approvedMaterials.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Approved Materials</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.approvedMaterials.map((material, idx) => (
+                    <li key={idx}>{material}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.preferredStyles && bylaws.preferredStyles.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Preferred Styles</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.preferredStyles.map((style, idx) => (
+                    <li key={idx}>{style}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.prohibited && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-destructive">Prohibited</h4>
+                <p className="text-sm">{bylaws.prohibited}</p>
+              </div>
+            )}
+            {bylaws.note && (
+              <div className="bg-muted p-3 rounded-lg">
+                <p className="text-sm italic text-muted-foreground">
+                  <span className="font-semibold not-italic">Note:</span> {bylaws.note}
+                </p>
+              </div>
+            )}
+            {bylaws.quote && (
+              <div className="border-l-4 border-primary pl-4 py-2 bg-muted/30">
+                <p className="text-sm italic text-muted-foreground">"{bylaws.quote}"</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   return (
     <div className="space-y-8">
         {/* Header Section with Bylaws Context */}
@@ -82,20 +184,74 @@ export default function DynamicForm({ schema, onSubmit, readOnly = false, isSubm
                 {schema.description && <p className="text-lg text-muted-foreground">{schema.description}</p>}
             </div>
 
+            {/* Top-level Relevant Bylaws */}
             {schema.relevantBylaws && (
                 <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
                     <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    <AlertTitle className="text-blue-800 dark:text-blue-300 font-semibold">
-                        Governing Documents: {schema.relevantBylaws.primary.document}
-                    </AlertTitle>
-                    <AlertDescription className="mt-2 text-blue-700 dark:text-blue-400">
-                        <p className="mb-2 font-medium">{schema.relevantBylaws.primary.summary}</p>
-                        <ul className="list-disc list-inside text-sm space-y-1 opacity-90">
-                            {schema.relevantBylaws.primary.keyRequirements.slice(0, 3).map((req, idx) => (
-                                <li key={idx}>{req}</li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
+                    <div className="space-y-3">
+                        <div>
+                            <h3 className="text-blue-800 dark:text-blue-300 font-semibold text-base mb-1">
+                                Governing Documents: {schema.relevantBylaws.primary?.document}
+                            </h3>
+                            <p className="text-sm text-blue-700 dark:text-blue-400 mb-2">
+                                {schema.relevantBylaws.primary?.summary}
+                            </p>
+                            {schema.relevantBylaws.primary?.quote && (
+                                <div className="border-l-4 border-blue-400 pl-3 py-2 bg-blue-100/50 dark:bg-blue-950/50 mb-3">
+                                    <p className="text-sm italic text-blue-700 dark:text-blue-300">
+                                        "{schema.relevantBylaws.primary.quote}"
+                                    </p>
+                                </div>
+                            )}
+                            {schema.relevantBylaws.primary?.keyRequirements && (
+                                <div className="space-y-1">
+                                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Key Requirements:</p>
+                                    <ul className="list-disc list-inside text-sm space-y-1 text-blue-700 dark:text-blue-400">
+                                        {schema.relevantBylaws.primary.keyRequirements.map((req, idx) => (
+                                            <li key={idx}>{req}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {schema.relevantBylaws.additionalReferences && schema.relevantBylaws.additionalReferences.length > 0 && (
+                            <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" className="mt-2">
+                                        <Info className="h-4 w-4 mr-2" />
+                                        View Additional References ({schema.relevantBylaws.additionalReferences.length})
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                                    <DialogHeader>
+                                        <DialogTitle>Additional Bylaw References</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="mt-4 space-y-6">
+                                        {schema.relevantBylaws.additionalReferences.map((ref, idx) => (
+                                            <div key={idx} className="border-l-4 border-primary pl-4 space-y-2">
+                                                <div>
+                                                    <h4 className="font-semibold text-primary">{ref.document}</h4>
+                                                    <p className="text-sm text-muted-foreground">{ref.section}</p>
+                                                </div>
+                                                <p className="text-sm">{ref.summary}</p>
+                                                {ref.keyProvisions && ref.keyProvisions.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-semibold">Key Provisions:</p>
+                                                        <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
+                                                            {ref.keyProvisions.map((provision, pIdx) => (
+                                                                <li key={pIdx}>{provision}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+                    </div>
                 </Alert>
             )}
         </div>
@@ -122,30 +278,7 @@ export default function DynamicForm({ schema, onSubmit, readOnly = false, isSubm
                         </div>
                         
                         {/* Bylaws Helper */}
-                        {field.relevantBylaws && (
-                            <HoverCard>
-                                <HoverCardTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300">
-                                        <Info className="h-3 w-3 mr-1" />
-                                        Bylaws
-                                    </Button>
-                                </HoverCardTrigger>
-                                <HoverCardContent className="w-80" align="end">
-                                    <div className="space-y-2">
-                                        <h4 className="text-sm font-semibold flex items-center text-primary">
-                                            <BookOpen className="h-3 w-3 mr-2" />
-                                            {field.relevantBylaws.reference}
-                                        </h4>
-                                        <p className="text-xs font-medium">{field.relevantBylaws.requirement}</p>
-                                        {field.relevantBylaws.note && (
-                                            <div className="bg-muted p-2 rounded text-xs text-muted-foreground italic">
-                                                Note: {field.relevantBylaws.note}
-                                            </div>
-                                        )}
-                                    </div>
-                                </HoverCardContent>
-                            </HoverCard>
-                        )}
+                        {field.relevantBylaws && renderBylawReference(field.relevantBylaws as BylawReference)}
                     </div>
                     
                     {/* Field Rendering Logic */}

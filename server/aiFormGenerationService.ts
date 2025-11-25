@@ -107,6 +107,9 @@ CRITICAL REQUIREMENTS:
 3. Create "sections" array with appropriate field groups
 4. Each field must have: id, label, type, required, and relevant properties
 5. Extract ACTUAL QUOTES from the design guidelines for the "quote" fields
+   - ALWAYS include the specific location (page number, section number, or article) where the quote comes from
+   - Format quotes like: "Quote text here" (Section 3.2, Page 15)
+   - If the location is in the section/document field, that's acceptable too
 6. Include "required_documents" array listing needed documentation
 7. Create "scoring_weights" object mapping field IDs to numerical weights
 8. Add "complianceNotes" with criticalReminders and commonViolations arrays
@@ -141,8 +144,13 @@ Instructions:
 1. Read through the design guidelines carefully
 2. Identify all requirements, restrictions, and approval processes relevant to ${applicationType}
 3. Extract actual bylaw quotes and section references
+   - IMPORTANT: When including quotes, ALWAYS cite the specific location (page, section, article, or paragraph number)
+   - Example: "All exterior modifications require ARB approval" (Section 4.2, Page 12)
+   - Example: reference: "Design Guidelines Section 3.4 - Color Standards"
+   - This helps homeowners find the original source material for verification
 4. Create form fields that collect all required information
 5. Include relevant bylaw references for each field where applicable
+   - Always include the specific section/article/page reference in the "reference" field
 6. Organize fields into logical sections
 7. Create appropriate field types and options based on the guidelines
 8. Set scoring weights based on field importance
