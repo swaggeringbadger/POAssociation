@@ -464,45 +464,194 @@ async getManagedProperties(userId: string): Promise<schema.Tenant[]> {
 ### **Phase 3: AI-Driven Form Wizard Automation**
 **Status:** Not started
 **Priority:** Medium-High
-**Requirements:**
-1. **AI Form Generation:**
-   - User describes form requirements in natural language
-   - AI generates complete JSON schema (using Anthropic Claude API)
-   - Preview generated form before saving
-   - Iterate on form with AI if needed
 
-2. **Admin Monitoring Dashboard:**
-   - **CRITICAL:** Super admin needs visibility into AI activity
-   - Track all AI-generated forms:
-     - Who requested generation?
-     - What prompt was used?
-     - What form was generated?
-     - Was it accepted/rejected/modified?
-     - Token usage/cost per generation
-   - Audit log of all AI interactions
-   - Ability to review and approve before making live
+**Vision:** Properties specify their design guidelines URL, then AI generates custom application forms by reading their actual rules and creating structured JSON forms matching the REFERENCE_ARCHITECTURE.md specification.
 
-3. **Implementation:**
-   - New endpoint: POST `/api/ai/generate-form`
-   - Request body: `{ prompt: string, tenantId: string, requestedBy: string }`
-   - Response: Generated form schema + metadata
-   - Store AI activity in database:
-     - Table: `ai_form_generations`
-     - Fields: id, tenantId, userId, prompt, generatedSchema, status, tokensUsed, createdAt
+**Key Principle:** NOT open-ended prompts where users describe what they want. Instead, structured generation where AI reads the property's actual published guidelines and generates forms based on their real rules.
 
-4. **Safety & Quality:**
-   - Prompt engineering for consistent form output
-   - Validation of AI-generated schemas
-   - Human review step before form goes live
-   - Rate limiting to prevent abuse
-   - Cost tracking per tenant
+**Architecture:**
 
-5. **UI Components:**
-   - "Generate with AI" button in Form Builder
-   - AI prompt input modal
-   - Preview pane showing generated form
-   - Edit mode to tweak AI output
-   - Admin dashboard page: `/admin/ai-activity`
+1. **Property Settings - Design Guidelines URL:**
+   - New tenant setting: `designGuidelinesUrl` (string, nullable)
+   - URL points to publicly posted covenants/design standards
+   - Examples: Property website, HOA documents portal, Dropbox folder, etc.
+   - AI will fetch and parse all content from this URL
+
+2. **Form Generation Process:**
+   - Property admin navigates to Form Wizard
+   - Sees list of 6 application categories with status:
+     - Exterior Modifications (✓ Custom form exists / ⚠ Using default / ➕ Generate custom)
+     - Structural Changes
+     - Landscaping
+     - Fencing & Barriers
+     - Outdoor Structures
+     - Signage
+   - For each category, options:
+     - **View/Edit** existing form (if one exists)
+     - **Generate with AI** - creates custom form from their guidelines
+     - **Use Default** - use generic template
+
+3. **AI Generation Flow:**
+   ```
+   Input:
+   - tenantId (to get designGuidelinesUrl)
+   - applicationType (e.g., "exterior-modifications")
+   - Reference architecture JSON structure
+
+   AI Process:
+   1. Fetch tenant's designGuidelinesUrl from database
+   2. Use WebFetch to read all content from that URL (and linked pages)
+   3. Parse property-specific rules, requirements, restrictions, bylaws
+   4. Call Anthropic API with structured prompt:
+      - "Generate a {applicationType} form matching this JSON structure"
+      - "Base it on these design guidelines: {fetched content}"
+      - "Include actual bylaw quotes in relevantBylaws fields"
+      - "Create appropriate fields for their specific requirements"
+   5. Receive generated JSON matching REFERENCE_ARCHITECTURE structure
+   6. Validate against schema
+   7. Return to frontend for preview/editing
+
+   Output Structure (see /ref_docs/REFERENCE_ARCHITECTURE.md):
+   {
+     "title": "...",
+     "description": "...",
+     "relevantBylaws": {
+       "primary": { section, document, summary, keyRequirements, quote },
+       "additionalReferences": [...]
+     },
+     "sections": [
+       {
+         "title": "...",
+         "fields": [
+           { id, label, type, required, options, description, relevantBylaws, ... }
+         ]
+       }
+     ],
+     "required_documents": [...],
+     "scoring_weights": { fieldId: weight, ... },
+     "complianceNotes": { ... }
+   }
+   ```
+
+4. **Reference Examples:**
+   - See `/ref_docs/REFERENCE_ARCHITECTURE.md` for complete JSON schema documentation
+   - See `/ref_docs/*.json` for 6 vision examples (target quality):
+     - exterior-modifications.json (very detailed, includes Markland-specific bylaws)
+     - structural-changes.json (comprehensive structural requirements)
+     - landscaping.json
+     - fencing.json
+     - outdoor-structures.json
+     - signage.json
+   - All generated forms must match this exact structure
+
+5. **Backend Implementation:**
+   - **Database Schema Changes:**
+     - Add `designGuidelinesUrl` to tenants table (nullable varchar)
+     - Create `ai_form_generations` table:
+       - id, tenantId, applicationType, designGuidelinesUrl (snapshot)
+       - generatedSchema (jsonb), status (draft/approved/rejected)
+       - tokensUsed, cost, createdBy, createdAt, approvedBy, approvedAt
+
+   - **New API Endpoints:**
+     - `GET /api/tenants/:id/design-guidelines` - Get tenant's guidelines URL
+     - `PUT /api/tenants/:id/design-guidelines` - Update guidelines URL
+     - `POST /api/ai/generate-form` - Generate form
+       - Request: `{ tenantId, applicationType }`
+       - Response: `{ generatedForm, generationId, tokensUsed, cost }`
+     - `GET /api/admin/ai-generations` - List all AI generations (admin dashboard)
+     - `GET /api/admin/ai-generations/:id` - Get specific generation details
+
+   - **AdditionalInfoService Updates:**
+     - Existing: `getAdditionalInfoConfig(projectType)` loads from `/server/config/additional-info/*.json`
+     - New: Check if tenant has custom form first, fallback to default
+     - New: `generateCustomForm(tenantId, applicationType)` - AI generation logic
+     - New: `saveCustomForm(tenantId, applicationType, formJson)` - Save to database
+
+6. **Frontend Implementation:**
+
+   - **Property Settings Page Updates:**
+     - Add "Design Guidelines" section
+     - Input field for designGuidelinesUrl
+     - Validation: URL format, accessibility check
+     - Save button updates tenant settings
+
+   - **Form Wizard Page (NEW):**
+     - Location: `/admin/form-wizard` or `/forms/wizard`
+     - Layout: Grid of 6 application type cards
+     - Each card shows:
+       - Type name and icon
+       - Current status (custom/default/none)
+       - "View/Edit" button (if form exists)
+       - "Generate with AI" button
+       - "Use Default" button
+     - Click "Generate with AI":
+       - Shows loading modal "Fetching your guidelines..."
+       - "Reading design standards..."
+       - "Generating custom form..."
+       - Shows preview of generated form
+       - Options: Save, Edit, Regenerate, Cancel
+     - Form editor: JSON editor or visual form builder
+
+   - **Admin AI Activity Dashboard:**
+     - Location: `/admin/ai-activity`
+     - Table of all AI generations across all properties
+     - Columns: Date, Property, Type, Status, Tokens, Cost, Generated By
+     - Filters: Property, Date range, Status
+     - Click row: View generated form, approval actions
+
+7. **Safety & Quality:**
+   - **Prompt Engineering:**
+     - Structured system prompt defining JSON schema requirements
+     - Clear instructions to extract and cite actual bylaws
+     - Examples of good vs bad form generation
+     - Validation rules for field types and required properties
+
+   - **Schema Validation:**
+     - TypeScript interfaces for form structure
+     - Runtime validation using Zod
+     - Reject malformed JSON before saving
+
+   - **Human Review Workflow:**
+     - Generated forms start in "draft" status
+     - Property admin can preview, edit, approve
+     - Optional: Require super admin approval before activation
+
+   - **Rate Limiting:**
+     - Max X generations per tenant per day
+     - Max Y generations per tenant per month
+     - Prevents abuse and cost overruns
+
+   - **Cost Tracking:**
+     - Track tokens per generation
+     - Calculate cost (tokens * price per token)
+     - Monthly reports per tenant
+     - Budget alerts for super admin
+
+8. **Fallback & Error Handling:**
+   - If designGuidelinesUrl not set: Show message, prompt to add URL
+   - If URL fetch fails: Show error, offer to retry or use default
+   - If AI generation fails: Log error, offer to retry or use default
+   - If AI returns malformed JSON: Validate, show errors, offer to regenerate
+   - Always have default forms available as fallback
+
+9. **UI/UX Flow Example:**
+   ```
+   Property Admin Flow:
+   1. Go to Settings → Design Guidelines
+   2. Enter URL: https://marklandpoa.com/design-standards
+   3. Save
+   4. Go to Form Wizard
+   5. See 6 cards: "Exterior Modifications" shows "Using Default Form"
+   6. Click "Generate with AI"
+   7. Modal: "Reading your design guidelines from marklandpoa.com..."
+   8. Modal: "Analyzing architectural standards and bylaw requirements..."
+   9. Modal: "Generating custom form..."
+   10. Preview appears: Shows generated form with Markland-specific fields
+   11. Review: See bylaw quotes, field options match their rules
+   12. Click "Save Custom Form"
+   13. Confirmation: "Custom form saved! Now active for Exterior Modifications."
+   14. Homeowners now use this custom form when submitting applications
+   ```
 
 ### **Phase 4: Testing & Documentation**
 **Status:** Ongoing

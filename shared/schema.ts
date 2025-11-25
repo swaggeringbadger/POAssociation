@@ -70,6 +70,7 @@ export const tenants = pgTable("tenants", {
   subdomain: text("subdomain").notNull().unique(),
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
   workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
+  designGuidelinesUrl: text("design_guidelines_url"), // URL to property's design guidelines/covenants
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
