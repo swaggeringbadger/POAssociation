@@ -213,7 +213,7 @@ Generate the complete JSON form configuration now:`;
 
     try {
       const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 16000,
         temperature: 0.3, // Lower temperature for more consistent, structured output
         system: systemPrompt,
@@ -370,7 +370,7 @@ Generate the complete JSON form configuration now:`;
       const endTime = Date.now();
       const generationTimeMs = endTime - startTime;
 
-      // Pricing for Claude Sonnet 4 (as of May 2024)
+      // Pricing for Claude Sonnet 4.5 (as of September 2025)
       // Input: $3 per million tokens, Output: $15 per million tokens
       // This is a simplified calculation - adjust based on actual token breakdown
       const estimatedCost = ((tokensUsed / 1000000) * 9).toFixed(4); // Average cost
