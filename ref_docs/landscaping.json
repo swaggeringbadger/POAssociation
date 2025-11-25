@@ -1,0 +1,793 @@
+{
+  "title": "Landscaping Project Additional Information - Markland POA",
+  "description": "Please provide detailed information about your landscaping project to ensure compliance with Markland Design Standards and Guidelines and community environmental sustainability requirements",
+  "relevantBylaws": {
+    "primary": {
+      "section": "Section 5 - Landscape Standards",
+      "document": "Markland Design Standards and Guidelines (Revision 2021)",
+      "summary": "Comprehensive landscape requirements covering all aspects of residential landscaping including plant selection, irrigation, foundation plantings, tree requirements, and maintenance standards. All landscaping work requires ARB approval through the Design Review Application process.",
+      "keyRequirements": [
+        "All landscape modifications require ARB application and approval before installation",
+        "Plant selection must focus on low water demand species from the recommended plant palette",
+        "Foundation planting must include both 3-gallon and 7-gallon shrubs with specific height and spacing requirements",
+        "All areas from roadway curb to property lines must receive landscape treatment",
+        "Specific minimum tree caliper inch requirements per lot type must be met",
+        "St. Augustine or Zoysia grass required for all sod zones",
+        "Irrigation must provide 100% coverage with automatic controllers and rain sensors recommended"
+      ],
+      "quote": "Plant selection shall focus on low water demand species as indicated in the plant palette and landscape zones found in these guidelines."
+    },
+    "additionalReferences": [
+      {
+        "section": "Section 2.4 - Landscape Plan Requirements",
+        "document": "Design Standards and Guidelines",
+        "summary": "Detailed submittal requirements for landscape plans including scale, plant specifications, and compliance documentation",
+        "keyProvisions": ["Plans must show accurate lot dimensions with 1\"=10' or 1\"=20' scale", "Location and common names of all new landscape material required", "Table accounting for St. Johns County tree credit requirements"]
+      },
+      {
+        "section": "Section 5.10 - Recommended Plant Palette",
+        "document": "Design Standards and Guidelines", 
+        "summary": "Extensive approved plant list organized by categories including large trees, small/medium trees, palms, shrubs, groundcovers, and native grasses",
+        "keyProvisions": ["Alternative species acceptable subject to ARB review", "Native and ornamental grasses section included", "Turf limited to St. Augustine (residential) and Zoysia (common areas)"]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "title": "Project Scope and Design",
+      "fields": [
+        {
+          "id": "lot_type_classification",
+          "label": "Markland Lot Type Classification",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Conventional Lots (93 ft. Width)",
+            "Conventional Lots (83 ft. Width)", 
+            "Conventional Lots (73 ft. Width)",
+            "Conventional Lots (63 ft. Width)",
+            "Traditional Type 1 Lots (58 ft. width - rear garage access)",
+            "Traditional Type 2 Lots (73 ft. width - rear garages)",
+            "Lakefront Lots",
+            "Back to Back Lots",
+            "Conservation Lots", 
+            "Perimeter Lots - International Golf Parkway",
+            "Corner Lots",
+            "Unsure of lot type"
+          ],
+          "description": "Your lot type determines specific landscape requirements and restrictions",
+          "relevantBylaws": {
+            "reference": "Section 3 - Lot Types and Section 8 - Special Lot Conditions",
+            "requirement": "Different lot types have specific landscape requirements, setbacks, and plant placement rules",
+            "note": "Lakefront lots require 4 trees minimum in rear yard within 20 feet of lake easement. Back to Back lots require rear buffer plantings within 15 feet of rear property line.",
+            "quote": "There are a variety of housing types, lot sizes, lot orientations and special lot conditions in Markland. The relevance of this diversity in the context of these standards is their application throughout the project."
+          }
+        },
+        {
+          "id": "arb_application_status",
+          "label": "ARB Application Status",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Not yet submitted - planning to submit",
+            "Application submitted - awaiting approval", 
+            "Application approved - proceeding with work",
+            "Unsure if ARB approval required"
+          ],
+          "description": "All landscaping modifications require Architectural Review Board approval before installation",
+          "relevantBylaws": {
+            "reference": "Section 2.1 - New Construction and Section 2.4 - Landscape Plan Requirements",
+            "requirement": "No construction or landscaping work can commence until applicants receive final ARB approval",
+            "note": "Landscape plans must include location, caliper, size and common names of all new landscape material",
+            "quote": "No construction of any kind shall commence until applicants receive their final approval."
+          }
+        },
+        {
+          "id": "landscaping_type",
+          "label": "Primary Type of Landscaping Work",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Tree Planting (New Trees)",
+            "Tree Removal/Replacement",
+            "Tree Pruning/Trimming",
+            "Flower Bed/Garden Installation",
+            "Lawn Installation/Replacement",
+            "Lawn Renovation/Overseeding",
+            "Shrub/Bush Installation",
+            "Hardscape Installation (Pavers/Stone)",
+            "Retaining Wall Installation",
+            "Pathway/Walkway Installation",
+            "Irrigation System Installation",
+            "Irrigation System Modification",
+            "Landscape Lighting Installation",
+            "Mulch/Ground Cover Installation",
+            "Drainage Improvement",
+            "Complete Landscape Redesign",
+            "Foundation Planting Modification",
+            "Vegetable Garden Installation",
+            "Other Landscaping Project"
+          ],
+          "description": "Select the primary type of landscaping work being performed",
+          "relevantBylaws": {
+            "reference": "Section 5.1 - General Landscape Design Requirements and Section 5.8 - Vegetable Gardens",
+            "requirement": "All landscape work must comply with specific ARB standards and use approved plant materials",
+            "note": "Vegetable gardens must be integrated into landscape composition with screening from lakefront views",
+            "quote": "Plant selection shall focus on low water demand species as indicated in the plant palette and landscape zones found in these guidelines."
+          }
+        },
+        {
+          "id": "secondary_work",
+          "label": "Additional Work Included",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Soil amendment/preparation",
+            "Grading/leveling",
+            "Mulching",
+            "Edging installation",
+            "Fertilizer application",
+            "Pest/weed treatment",
+            "Seasonal color plantings"
+          ],
+          "description": "Check any additional landscaping work being performed",
+          "relevantBylaws": {
+            "reference": "Section 5.9 - Mulch/Ornamental Landscape Edging",
+            "requirement": "All mulch and edging materials must be approved by ARB according to community standards",
+            "note": "Landscape edging reveal must be no higher than 1 inch above mulch or lawn surface"
+          }
+        },
+        {
+          "id": "project_areas",
+          "label": "Areas of Property Being Landscaped",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Front yard/entrance area",
+            "Side yards",
+            "Backyard", 
+            "Foundation plantings",
+            "Property border/perimeter",
+            "Courtyard/patio area",
+            "Pool/spa surroundings",
+            "Driveway/walkway borders",
+            "Street tree planting area",
+            "Rear lot buffer area"
+          ],
+          "description": "Select all areas of the property that will be landscaped",
+          "relevantBylaws": {
+            "reference": "Section 5.1(l) - All areas of the lot from the roadway curb to all the side and rear property lines shall receive landscape treatment",
+            "requirement": "Complete landscape treatment required from street to all property boundaries",
+            "note": "Foundation shrubs must wrap around all four corners and be planted along entirety of all four walls"
+          }
+        },
+        {
+          "id": "total_area_size",
+          "label": "Total Area Size",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g., 500 square feet, 0.1 acres",
+          "description": "Approximate total area being landscaped in square feet or acres",
+          "relevantBylaws": {
+            "reference": "Section 5.1(d) - Minimum 30% of roadway frontage must be landscape bed",
+            "requirement": "Landscape beds with ground cover plants required along roadway edge for conventional lots",
+            "note": "Removal of required landscape beds subject to ARB approval according to community standards"
+          }
+        },
+        {
+          "id": "design_style",
+          "label": "Landscape Design Style",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Native/Natural Florida Landscape",
+            "Traditional Formal Garden",
+            "Contemporary/Modern",
+            "Tropical/Resort Style", 
+            "Cottage Garden Style",
+            "Mediterranean Style",
+            "Xeriscape/Drought-Resistant",
+            "Wildlife/Pollinator Garden",
+            "Edible/Vegetable Garden",
+            "Mixed Style"
+          ],
+          "description": "What style best describes your landscaping design approach?",
+          "relevantBylaws": {
+            "reference": "Section 5.10 - Recommended Plant Palette",
+            "requirement": "Alternative species are acceptable and subject to review by the ARB",
+            "note": "Plant palette focuses on low water demand species suitable for local climate conditions"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Plant Specifications and Selection",
+      "fields": [
+        {
+          "id": "tree_specifications",
+          "label": "Tree Specifications (if applicable)",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Species: Live Oak (Quercus virginiana)\nQuantity: 2\nSize at planting: 4.5 inch caliper, 14-16 ft height\nMature size: 40-60 feet tall, 60-80 feet wide\nLocation: Front yard corners, 15 feet from house",
+          "description": "List each tree species, quantity, planting size, mature size, and specific locations",
+          "relevantBylaws": {
+            "reference": "Section 5.4 - Street Tree Plantings and Section 5.5 - Minimum Tree Requirements",
+            "requirement": "Live oaks: 14-16 ft height, minimum 4.5 inch caliper, Florida Fancy Grade A required for street trees",
+            "note": "Each lot has specific minimum tree caliper inch requirements that must be met per St. Johns County requirements",
+            "quote": "The number of street trees for each lot varies based on location and lot width."
+          }
+        },
+        {
+          "id": "shrub_specifications",
+          "label": "Shrub and Bush Specifications",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Species: Firebush (Hamelia patens)\nQuantity: 10\nSize at planting: 3-gallon containers\nMature size: 6-8 feet tall, 4-6 feet wide\nSpacing: 4 feet on center",
+          "description": "List shrub species, quantities, sizes, and spacing details",
+          "relevantBylaws": {
+            "reference": "Section 5.1(c) - Foundation Planting Requirements",
+            "requirement": "Foundation planting must include both 3-gallon and 7-gallon shrubs with 36\" minimum height within 20 feet of front corner",
+            "note": "3-gallon plants installed 18\" on center max, 7-gallon plants 36\" on center max, staggered grid pattern required",
+            "quote": "Foundation planting must include both three (3) gallon and seven (7) gallon shrubs."
+          }
+        },
+        {
+          "id": "perennial_specifications", 
+          "label": "Perennial and Flower Specifications",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Species: Coontie (Zamia floridana)\nQuantity: 15\nSize at planting: 1-gallon containers\nMature size: 3 feet tall, 4 feet wide\nBloom period: N/A (cycad)",
+          "description": "List perennial flowers, ornamental grasses, and other plantings",
+          "relevantBylaws": {
+            "reference": "Section 5.10 - Recommended Plant Palette includes extensive groundcover and native grass options",
+            "requirement": "Plants must be selected from approved palette or submitted for ARB review",
+            "note": "Native grasses section includes Muhly Grass, Fakahatchee Grass, and other approved species"
+          }
+        },
+        {
+          "id": "grass_specifications",
+          "label": "Grass/Lawn Specifications", 
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Type: St. Augustine grass (per Markland requirements)\nArea: 1,200 square feet\nInstallation method: Sod\nIrrigation requirements: 100% coverage automatic system",
+          "description": "Specify grass type, area coverage, and installation method",
+          "relevantBylaws": {
+            "reference": "Section 5.1(b) - Turf Requirements",
+            "requirement": "St. Augustine or Zoysia grass shall be used for all sod zones on home lots for full and immediate coverage",
+            "note": "Zoysia sod used in common areas and neighborhood parks. Encourage minimizing turf area to reduce water demand",
+            "quote": "St. Augustine or Zoysia grass shall be used for all sod zones on home lots and lake bank edges where required for full and immediate coverage at Markland."
+          }
+        },
+        {
+          "id": "hardscape_materials",
+          "label": "Hardscape Materials (if applicable)",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Material: Natural flagstone\nArea: 200 square feet walkway\nBase: 4-inch compacted gravel base\nJoints: Polymeric sand",
+          "description": "Describe any pavers, stones, concrete, or other hardscape materials",
+          "relevantBylaws": {
+            "reference": "Section 7.5 - Sidewalks and Other Pedestrian Paving", 
+            "requirement": "All horizontal site paving that encroaches into property setbacks requires ARB approval",
+            "note": "Arrival areas and prominent walkways encouraged to use brick, stone, colored concrete, or patterned materials"
+          }
+        },
+        {
+          "id": "mature_size_planning",
+          "label": "Mature Size and Spacing Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Explain how plant placement accounts for mature sizes, utility clearances, and sight lines per Markland requirements...",
+          "description": "Demonstrate understanding of how plants will grow and interact at maturity",
+          "relevantBylaws": {
+            "reference": "Section 5.1(f)(g)(h) - Foundation and Layout Requirements",
+            "requirement": "Foundation beds must undulate in shape with sufficient depth, wrap around all building corners, and account for mature plant sizes",
+            "note": "Two-tiered landscaping required where foundation walls exceed 3 feet in height"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Environmental Considerations",
+      "fields": [
+        {
+          "id": "native_plant_percentage",
+          "label": "Percentage of Native Plants",
+          "type": "select",
+          "required": true,
+          "options": [
+            "75-100% native plants",
+            "50-74% native plants", 
+            "25-49% native plants",
+            "Less than 25% native plants",
+            "No native plants planned"
+          ],
+          "description": "Native plants support local wildlife and require less water and maintenance",
+          "relevantBylaws": {
+            "reference": "Section 5.10 - Recommended Plant Palette includes extensive native options",
+            "requirement": "Recommended palette emphasizes native Florida species adapted to local conditions",
+            "note": "Native options include Live Oak, Bald Cypress, Coontie, and native grasses like Muhly Grass"
+          }
+        },
+        {
+          "id": "water_management_strategy",
+          "label": "Water Management Strategy",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Drought-tolerant plants only",
+            "Rain gardens for stormwater management", 
+            "Efficient irrigation with timers/sensors",
+            "Mulching for water retention",
+            "Mixed water needs with zoned irrigation",
+            "High water use plantings"
+          ],
+          "description": "How will the landscape manage water usage and conservation?",
+          "relevantBylaws": {
+            "reference": "Section 5.1(a) and Section 5.6 - Water Conservation Requirements", 
+            "requirement": "Plant selection shall focus on low water demand species. Irrigation systems must be designed for water efficiency",
+            "note": "Soil moisture sensing and rain sensing override devices are recommended for automatic controllers",
+            "quote": "Every effort should be made to implement water conservation techniques in both the landscape design and the design and operation of the irrigation system."
+          }
+        },
+        {
+          "id": "soil_conditions",
+          "label": "Existing Soil Conditions",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Sandy soil, well-draining, pH 6.5, needs organic matter amendment per local conditions...",
+          "description": "Describe current soil type, drainage, pH, and any amendments needed"
+        },
+        {
+          "id": "drainage_modifications",
+          "label": "Drainage System Modifications",
+          "type": "textarea", 
+          "required": true,
+          "placeholder": "Installation of French drain along property line, regrading for positive drainage per Markland drainage requirements...",
+          "description": "Describe any changes to drainage patterns, grading, or stormwater management",
+          "relevantBylaws": {
+            "reference": "Section 4.6 - Earthwork and Drainage",
+            "requirement": "Positive drainage must be provided and cannot be diverted onto adjacent lots. Drainage patterns must comply with Neighborhood Grading and Drainage Plan",
+            "note": "Landscape mounding limited to 1.5 feet height with smooth transitions and cannot disturb swale drainage",
+            "quote": "Positive drainage must be provided and drainage cannot be diverted or directed onto adjacent lots."
+          }
+        },
+        {
+          "id": "tree_preservation",
+          "label": "Existing Tree Preservation",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Protecting existing 30-inch oak tree with 10-foot protection zone per Markland tree protection standards...",
+          "description": "Plans for protecting or working around existing significant trees",
+          "relevantBylaws": {
+            "reference": "Section 4.5 - Site Preparation - Existing Vegetation and Tree Protection",
+            "requirement": "Protected trees must be identified, located, and properly protected with silt barriers. Tree protection fencing required per St. Johns County regulations",
+            "note": "Filling, grading and disturbances not permitted within drip line of protected tree species",
+            "quote": "Prior to site work those protected trees to remain must be identified on plans, located on site and properly protected with silt barriers."
+          }
+        },
+        {
+          "id": "wildlife_considerations", 
+          "label": "Wildlife and Pollinator Benefits",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Native plant species for local wildlife",
+            "Pollinator-friendly flowers",
+            "Bird-attracting plants and trees",
+            "Butterfly garden plants", 
+            "Native fruit trees for wildlife",
+            "Habitat creation features"
+          ],
+          "description": "Ways the landscape will support local wildlife and pollinators"
+        }
+      ]
+    },
+    {
+      "title": "Installation Planning and Timeline",
+      "fields": [
+        {
+          "id": "installation_method",
+          "label": "Installation Method",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Licensed landscape contractor",
+            "Homeowner self-installation",
+            "Combination of professional and DIY",
+            "Volunteer/community group installation"
+          ],
+          "description": "Who will be performing the landscaping installation?"
+        },
+        {
+          "id": "landscaping_contractor",
+          "label": "Landscaping Contractor Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "Green Thumb Landscaping LLC - License #FL-LC123456",
+          "description": "Name and license number of landscaping contractor (if using professional)",
+          "relevantBylaws": {
+            "reference": "Section 4.1 - Responsibility for Compliance",
+            "requirement": "Fee simple property owner ultimately responsible for compliance with all guidelines and applicable codes",
+            "note": "All contractors must comply with construction standards and community requirements"
+          }
+        },
+        {
+          "id": "contractor_insurance",
+          "label": "Contractor Insurance Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "General liability: ABC Insurance, Policy #123456",
+          "description": "Contractor liability insurance details (required for professional installation)"
+        },
+        {
+          "id": "installation_start_date",
+          "label": "Installation Start Date",
+          "type": "date",
+          "required": true,
+          "description": "When will landscaping installation begin?",
+          "relevantBylaws": {
+            "reference": "Section 2.1 - No construction of any kind shall commence until applicants receive their final approval",
+            "requirement": "ARB approval must be received before any work begins",
+            "note": "Site work cannot commence until site plan approved and builder has met with Developer representative onsite"
+          }
+        },
+        {
+          "id": "installation_completion_date",
+          "label": "Expected Completion Date", 
+          "type": "date",
+          "required": true,
+          "description": "When will all landscaping work be completed?"
+        },
+        {
+          "id": "seasonal_timing",
+          "label": "Seasonal Timing Considerations",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Planting trees in fall for better root establishment, installing cool-season annuals per Florida climate...",
+          "description": "How does the timing align with optimal planting seasons for different plants?"
+        },
+        {
+          "id": "installation_phases",
+          "label": "Installation Phases",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Phase 1: Site prep and hardscape (Week 1), Phase 2: Tree and shrub planting (Week 2), Phase 3: Flowers and mulch (Week 3)",
+          "description": "Outline installation phases and timeline if work will be done in stages"
+        }
+      ]
+    },
+    {
+      "title": "Irrigation and Maintenance Systems",
+      "fields": [
+        {
+          "id": "irrigation_system",
+          "label": "Irrigation System",
+          "type": "select", 
+          "required": true,
+          "options": [
+            "Extending existing sprinkler system",
+            "New automatic irrigation system", 
+            "Drip irrigation system",
+            "Soaker hoses",
+            "Hand watering only",
+            "Rain-dependent (no irrigation)",
+            "Combination of methods"
+          ],
+          "description": "How will the landscaped areas be watered?",
+          "relevantBylaws": {
+            "reference": "Section 5.6 - Irrigation Requirements",
+            "requirement": "Irrigation shall provide 100% coverage of all turf zones and all new planted areas. Automatic irrigation controllers required with separate programs for different irrigation needs",
+            "note": "System must deliver water efficiently and uniformly with proper sprinkler head placement to minimize overspray",
+            "quote": "Irrigation shall provide 100% coverage of all turf zones; all new planted areas including turf, tree, shrub and groundcover plantings shall be irrigated."
+          }
+        },
+        {
+          "id": "irrigation_design",
+          "label": "Irrigation Design Details",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "3 new zones added to existing controller, drip lines for shrub beds, pop-up sprinklers for lawn areas per Markland standards...",
+          "description": "Describe irrigation system design, zones, and coverage (if applicable)",
+          "relevantBylaws": {
+            "reference": "Section 5.6 - Irrigation design must deliver water based on specific water demand of each planting zone",
+            "requirement": "System designed with zones for different irrigation needs. Drip emitters, soakers and bubblers recommended for trees",
+            "note": "Soil moisture sensing and rain sensing override devices are recommended for water conservation"
+          }
+        },
+        {
+          "id": "water_source",
+          "label": "Water Source",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "City/municipal water",
+            "Well water", 
+            "Reclaimed/recycled water",
+            "Rainwater collection system",
+            "Combination of sources"
+          ],
+          "description": "What water source will be used for irrigation?"
+        },
+        {
+          "id": "maintenance_schedule",
+          "label": "Long-term Maintenance Schedule",
+          "type": "textarea", 
+          "required": true,
+          "placeholder": "Monthly: pruning and deadheading, Quarterly: fertilization, Annually: mulch refresh, tree pruning per Markland standards...",
+          "description": "Detailed plan for ongoing landscape maintenance including timing and responsibilities"
+        },
+        {
+          "id": "maintenance_responsibility",
+          "label": "Maintenance Responsibility",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Homeowner will maintain",
+            "Professional landscape maintenance service", 
+            "Combination of homeowner and professional",
+            "Community/HOA maintenance",
+            "To be determined"
+          ],
+          "description": "Who will be responsible for ongoing landscape maintenance?"
+        }
+      ]
+    },
+    {
+      "title": "Compliance and Impact Assessment",
+      "fields": [
+        {
+          "id": "arb_plant_compliance",
+          "label": "ARB Plant List Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "All plants are on ARB approved list",
+            "Most plants are approved, some need approval",
+            "Several plants need ARB approval",
+            "Requesting approval for non-listed plants",
+            "Unsure of ARB plant requirements"
+          ],
+          "description": "How do your plant selections align with Markland Design Standards plant palette?",
+          "relevantBylaws": {
+            "reference": "Section 5.10 - Recommended Plant Palette",
+            "requirement": "Alternative species are acceptable and subject to review by the ARB",
+            "note": "Extensive approved plant list includes native and adapted species organized by size and function",
+            "quote": "The recommended plant palette is intended to provide the Owner/Builder a baseline for planting. Alternative species are acceptable and subject to review by the ARB."
+          }
+        },
+        {
+          "id": "utility_line_clearance",
+          "label": "Utility Line Clearance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No utilities in project area",
+            "Utilities located and marked (811 called)",
+            "Will call 811 before digging",
+            "Working around known utility locations", 
+            "Utility relocation required"
+          ],
+          "description": "Have underground utilities been located for any digging work?",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3(l) - Owner/Builder responsible for ensuring no disruption to existing utility systems",
+            "requirement": "Must call for utility locates as required to avoid damage to existing utilities",
+            "note": "Cost for repairs to utility damage paid by Owner/Builder that caused the damage"
+          }
+        },
+        {
+          "id": "setback_compliance",
+          "label": "Property Setback Compliance", 
+          "type": "textarea",
+          "required": true,
+          "placeholder": "All plantings maintain required setbacks per Markland lot type requirements, trees placed per street tree spacing guidelines...",
+          "description": "How do plantings comply with property line setbacks and easements?",
+          "relevantBylaws": {
+            "reference": "Section 4.7 - Easements and Section 6.2.4 - Setbacks",
+            "requirement": "ARB approval required for fences and plantings erected within easements. Must comply with minimum setbacks per approved engineering plans",
+            "note": "Different restrictions apply to drainage easements, landscape easements, FPL easements, and lake maintenance easements"
+          }
+        },
+        {
+          "id": "neighbor_impact",
+          "label": "Neighbor Impact Assessment",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "New trees will not block neighbors' views, drainage improvements will not affect adjacent properties per Markland requirements...",
+          "description": "Assess potential impacts on neighboring properties including views, drainage, and root systems",
+          "relevantBylaws": {
+            "reference": "Section 4.6(b) - Positive drainage must be provided and drainage cannot be diverted onto adjacent lots",
+            "requirement": "Cannot redirect drainage to neighboring properties. Grading not permitted outside property line",
+            "note": "Adjustments to side yard conditions may be necessary to ensure positive drainage as adjacent lots are developed"
+          }
+        },
+        {
+          "id": "special_lot_conditions",
+          "label": "Special Lot Condition Requirements",
+          "type": "checkbox", 
+          "required": false,
+          "options": [
+            "Lakefront lot - 4 tree minimum in rear yard",
+            "Back to back lot - rear buffer planting required",
+            "Conservation lot - silt fence protection required",
+            "Corner lot - side elevation architectural treatment needed",
+            "Perimeter lot - masonry wall maintenance clearance",
+            "Traditional Type 1/2 lot - specific landscape template required",
+            "No special conditions apply"
+          ],
+          "description": "Check any special lot conditions that apply to your property",
+          "relevantBylaws": {
+            "reference": "Section 8 - Special Lot Conditions",
+            "requirement": "Various special conditions apply specific landscape requirements based on lot location and type",
+            "note": "Each special condition has detailed requirements for plantings, setbacks, and design treatments"
+          }
+        },
+        {
+          "id": "permits_required",
+          "label": "Permits Required",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "ARB Design Review Application (required for all work)",
+            "Tree removal permit",
+            "Irrigation permit", 
+            "Grading/drainage permit",
+            "Right-of-way work permit",
+            "St. Johns County permits",
+            "No additional permits required"
+          ],
+          "description": "Check any permits required for this landscaping project",
+          "relevantBylaws": {
+            "reference": "Section 2.2 - Application Form & Fees",
+            "requirement": "Completed Design Review Application Form required. Refundable Performance Deposit required",
+            "note": "Performance Deposit refundable at successful completion and compliance with Design Standards and Guidelines"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Long-term Planning and Sustainability",
+      "fields": [
+        {
+          "id": "five_year_vision",
+          "label": "5-Year Landscape Vision",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Mature tree canopy providing shade, established shrub beds requiring minimal maintenance, naturalized areas per Markland character...",
+          "description": "Describe how you envision the landscape will look and function in 5 years",
+          "relevantBylaws": {
+            "reference": "Section 5.1(a) - Focus on low water demand species and water conservation",
+            "requirement": "Long-term planning should emphasize sustainable, low-maintenance landscapes that support community character",
+            "note": "Consider mature plant sizes and ongoing maintenance requirements in planning"
+          }
+        },
+        {
+          "id": "sustainability_features",
+          "label": "Sustainability Features",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Composting area for yard waste",
+            "Rain garden for stormwater management",
+            "Native plant propagation area",
+            "Organic gardening practices only",
+            "Integrated pest management approach",
+            "Reduced lawn area for lower maintenance",
+            "Water-efficient irrigation zones",
+            "Mulching for water retention"
+          ],
+          "description": "Sustainable landscape features being incorporated",
+          "relevantBylaws": {
+            "reference": "Section 5.6 - Water conservation techniques encouraged in landscape design and irrigation operation",
+            "requirement": "Implementation of water conservation techniques encouraged",
+            "note": "Soil moisture sensing and rain sensing override devices recommended for irrigation systems"
+          }
+        },
+        {
+          "id": "budget_range",
+          "label": "Project Budget Range",
+          "type": "select",
+          "required": false,
+          "options": [
+            "Under $1,000",
+            "$1,000 - $5,000",
+            "$5,000 - $10,000",
+            "$10,000 - $25,000",
+            "$25,000 - $50,000",
+            "Over $50,000"
+          ],
+          "description": "Approximate budget range for the landscaping project (optional)"
+        },
+        {
+          "id": "performance_deposit_understanding",
+          "label": "Performance Deposit Understanding",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Understand deposit required and refund process",
+            "Need more information about deposit requirements",
+            "Unsure about deposit amount for this project"
+          ],
+          "description": "Do you understand the ARB Performance Deposit requirements?",
+          "relevantBylaws": {
+            "reference": "Section 2.2 - Refundable Performance Deposit",
+            "requirement": "Refundable Performance Deposit required, amount posted on Design Review Application Form",
+            "note": "Deposit refundable at successful completion of all work and compliance with Design Standards and Guidelines",
+            "quote": "The Performance Deposit is refundable at successful completion of all work and compliance with the Design Standards and Guidelines."
+          }
+        }
+      ]
+    }
+  ],
+  "required_documents": [
+    "Completed Markland ARB Design Review Application Form",
+    "Landscape plan with accurate lot dimensions, north arrow and scale (1\"=10' or 1\"=20')",
+    "Complete plant list with botanical names, quantities, sizes, and caliper specifications",
+    "Location and common names of all existing trees to be saved",
+    "Table accounting for compliance with St. Johns County tree credit requirements",
+    "Property lines, easement lines, setback lines clearly marked",
+    "Drainage and grading plan (if applicable)",
+    "Irrigation system design with zone layout (if applicable)",
+    "Professional landscaper license and insurance (if using contractor)",
+    "Tree removal permits (if applicable)",
+    "Soil test results (recommended)",
+    "Photos of existing conditions",
+    "ARB Performance Deposit (amount per application form)",
+    "Digital samples of mulch and hardscape materials for ARB approval"
+  ],
+  "complianceNotes": {
+    "criticalReminders": [
+      "NO WORK CAN BEGIN WITHOUT ARB APPROVAL - All landscaping modifications require completed Design Review Application and ARB approval before installation",
+      "Performance Deposit Required - Refundable deposit required per application form, refunded upon successful completion and compliance inspection",
+      "Plant Palette Compliance - All plants must be from approved Markland plant palette or submitted for ARB review and approval",
+      "St. Augustine or Zoysia Grass Only - Required for all sod zones on home lots for immediate, full coverage",
+      "100% Irrigation Coverage Required - All new planted areas including turf, trees, shrubs and groundcover must be irrigated",
+      "Foundation Planting Standards - Must include both 3-gallon and 7-gallon shrubs with specific height and spacing requirements",
+      "Lot-Specific Tree Requirements - Each lot has minimum tree caliper inch requirements that must be met per St. Johns County standards",
+      "Special Lot Conditions - Lakefront, corner, conservation and other special lots have additional specific requirements",
+      "Drainage Compliance - Cannot redirect drainage to neighboring properties, must maintain positive drainage patterns",
+      "Utility Clearance Required - Must call 811 and locate utilities before any digging work begins"
+    ],
+    "commonViolations": [
+      "Starting work before ARB approval received",
+      "Using non-approved plant species without ARB review",
+      "Installing wrong grass type (must be St. Augustine or Zoysia)",
+      "Inadequate irrigation coverage for new plantings",
+      "Incorrect foundation planting sizing and spacing",
+      "Not meeting minimum tree caliper inch requirements",
+      "Improper setbacks from property lines and easements",
+      "Redirecting drainage to neighboring properties",
+      "Not protecting existing trees during construction",
+      "Using non-approved mulch or hardscape materials",
+      "Failing to complete work within approved timeline",
+      "Not scheduling compliance inspection before deposit refund"
+    ]
+  },
+  "scoring_weights": {
+    "lot_type_classification": 10,
+    "arb_application_status": 15,
+    "landscaping_type": 8,
+    "project_areas": 8,
+    "total_area_size": 6,
+    "design_style": 8,
+    "tree_specifications": 12,
+    "shrub_specifications": 10,
+    "mature_size_planning": 12,
+    "native_plant_percentage": 10,
+    "water_management_strategy": 10,
+    "soil_conditions": 8,
+    "drainage_modifications": 12,
+    "installation_method": 6,
+    "installation_start_date": 8,
+    "seasonal_timing": 8,
+    "irrigation_system": 10,
+    "maintenance_schedule": 8,
+    "arb_plant_compliance": 15,
+    "utility_line_clearance": 12,
+    "setback_compliance": 12,
+    "neighbor_impact": 10,
+    "special_lot_conditions": 12,
+    "five_year_vision": 8,
+    "maintenance_responsibility": 6,
+    "performance_deposit_understanding": 10
+  }
+}

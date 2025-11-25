@@ -1,0 +1,783 @@
+{
+  "title": "Markland POA Signage Project Application",
+  "description": "Please provide comprehensive details about your signage project to ensure compliance with Markland POA Design Standards and Guidelines, and local sign ordinances. ALL SIGNAGE REQUIRES ARB APPROVAL BEFORE INSTALLATION.",
+  "relevantBylaws": {
+    "primary": {
+      "section": "Section 7.15 Prohibited Sign Formats & Section 7.15.1 Real Estate Marketing Signs",
+      "document": "Markland Design Standards and Guidelines (Revision 2021)",
+      "summary": "Markland has extremely restrictive sign policies. Most signage is prohibited except for specific real estate marketing signs with exact specifications. The ARB has sole discretion to approve or deny any signage based on overall aesthetic impact to the community.",
+      "keyRequirements": [
+        "ARB approval required for ALL signage before installation",
+        "Only ONE sign permitted per property for real estate marketing",
+        "Sign must be located ON the property for sale",
+        "10-foot minimum setback from edge of any roadway required",
+        "Specific material, color, and size specifications must be followed exactly",
+        "Most decorative, business, and personal signage is prohibited",
+        "Performance deposit required with ARB application"
+      ],
+      "quote": "Only one sign shall be permitted for each property and the sign must be located on the property for sale. The sign shall be set back at least 10 feet from the edge of any roadway."
+    },
+    "additionalReferences": [
+      {
+        "section": "Section 1 Document Purpose",
+        "document": "Markland Design Standards and Guidelines",
+        "summary": "ARB has ultimate authority to approve or deny applications based on overall aesthetic impact, even if individual criteria are met",
+        "keyProvisions": ["ARB may waive specific provisions if overall aesthetic impact is acceptable", "Approval of one application does not create obligation to approve similar designs"]
+      },
+      {
+        "section": "Section 2.2 Application Form & Fees",
+        "document": "Markland Design Standards and Guidelines", 
+        "summary": "All improvements require formal ARB application process with performance deposit",
+        "keyProvisions": ["Completed Design Review Application Form required", "Refundable Performance Deposit required", "Unsigned applications considered incomplete"]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "title": "Sign Type and Purpose",
+      "fields": [
+        {
+          "id": "sign_type",
+          "label": "Primary Sign Type",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Real Estate Marketing/For Sale Sign (APPROVED TYPE)",
+            "Address/House Number Sign (REQUIRES SPECIAL APPROVAL)",
+            "Property Name Sign (LIKELY PROHIBITED)",
+            "Family Name Sign (LIKELY PROHIBITED)",
+            "Home Business Sign (PROHIBITED)",
+            "Professional Services Sign (PROHIBITED)",
+            "Security System Sign (REQUIRES SPECIAL APPROVAL)",
+            "Warning/Safety Sign (REQUIRES SPECIAL APPROVAL)",
+            "Decorative/Artistic Sign (LIKELY PROHIBITED)",
+            "Directional Sign (LIKELY PROHIBITED)",
+            "Historical Marker Sign (REQUIRES SPECIAL APPROVAL)",
+            "Garden/Landscape Sign (LIKELY PROHIBITED)",
+            "Political Campaign Sign (LIKELY PROHIBITED)",
+            "Construction/Contractor Sign (REQUIRES SPECIAL APPROVAL)",
+            "Other Sign Type (REQUIRES SPECIAL APPROVAL)"
+          ],
+          "description": "Select the primary type of sign being installed. NOTE: Most sign types are prohibited or heavily restricted in Markland.",
+          "relevantBylaws": {
+            "reference": "Section 7.15 Prohibited Sign Formats",
+            "requirement": "Only real estate marketing signs are explicitly permitted with specific design requirements",
+            "note": "All other signage types require special ARB approval and most will likely be denied",
+            "quote": "Real Estate Marketing and For Sale Signs - Only one sign shall be permitted for each property"
+          }
+        },
+        {
+          "id": "sign_purpose",
+          "label": "Sign Purpose and Content",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "For real estate marketing only, or detailed justification for other signage types",
+          "description": "Describe the purpose of the sign and what information it will display. If not real estate marketing, provide detailed justification for necessity.",
+          "relevantBylaws": {
+            "reference": "ARB Design Review Process",
+            "requirement": "Must demonstrate purpose aligns with community aesthetic standards",
+            "note": "ARB evaluates total effect and aesthetic impact on community"
+          }
+        },
+        {
+          "id": "sign_text_content",
+          "label": "Sign Text Content",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "FOR SALE\n[Agent Name]\n[Phone Number]",
+          "description": "Provide the exact text that will appear on the sign. For real estate signs, text must be minimal and professional."
+        },
+        {
+          "id": "sign_graphics_symbols",
+          "label": "Graphics, Logos, or Symbols",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Real estate company logo only (for approved real estate signs)",
+          "description": "Describe any graphics, logos, or symbols. Excessive graphics may be prohibited.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs",
+            "requirement": "Specific logo and lettering color requirements must be followed",
+            "note": "Logo: PMC 548C, Border: PMC 548C, Other lettering: Black"
+          }
+        },
+        {
+          "id": "temporary_or_permanent",
+          "label": "Temporary or Permanent Installation",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Temporary real estate marketing (APPROVED)",
+            "Temporary construction/contractor (REQUIRES APPROVAL)",
+            "Permanent installation (REQUIRES SPECIAL APPROVAL)",
+            "Seasonal installation (LIKELY PROHIBITED)",
+            "Event-specific installation (LIKELY PROHIBITED)"
+          ],
+          "description": "Most permanent signage is prohibited in Markland except real estate marketing during active sales."
+        },
+        {
+          "id": "temporary_duration",
+          "label": "Temporary Sign Duration",
+          "type": "text",
+          "required": false,
+          "placeholder": "During active real estate listing only",
+          "description": "If temporary, specify the expected duration. Real estate signs only permitted during active listings."
+        }
+      ]
+    },
+    {
+      "title": "Sign Design and Specifications",
+      "fields": [
+        {
+          "id": "sign_dimensions",
+          "label": "Sign Dimensions",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Width: 18 inches\nHeight: 12 inches\nThickness: As specified\nTotal area: Must comply with Markland specifications",
+          "description": "Provide detailed sign dimensions. Real estate signs have specific size requirements per Markland specifications.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs Exhibit",
+            "requirement": "Specific dimensions required: 12\"X18\" Sign with 4\"X4\" PT Post and 2\"X4\"X24\" PT Support arm",
+            "note": "Exact specifications must be followed for approved sign types"
+          }
+        },
+        {
+          "id": "sign_materials",
+          "label": "Sign Materials",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Wood with PT posts (APPROVED for real estate signs)",
+            "Metal (aluminum) - REQUIRES APPROVAL",
+            "Plastic/Acrylic - LIKELY PROHIBITED",
+            "Vinyl banner - PROHIBITED",
+            "Composite materials - REQUIRES APPROVAL",
+            "Stone/Carved stone - REQUIRES APPROVAL",
+            "Other materials - REQUIRES SPECIAL APPROVAL"
+          ],
+          "description": "Real estate signs must use specified materials: 4\"X4\" PT Post with decorative dado.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs",
+            "requirement": "Materials specified: 4\"X4\" PT Post with decorative dado, 2\"X4\"X24\" PT Support arm rabbit jointed",
+            "note": "Exact material specifications must be followed"
+          }
+        },
+        {
+          "id": "material_specifications",
+          "label": "Material Specifications",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "4\"X4\" Pressure-treated post with decorative dado\n2\"X4\"X24\" PT Support arm rabbit jointed\n12\"X18\" Sign panel",
+          "description": "Must follow exact Markland specifications for approved sign types."
+        },
+        {
+          "id": "sign_colors",
+          "label": "Sign Colors",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Post: PMS 548C\nSign: White\nLogo: PMC 548C\nBorder: PMC 548C\nOther lettering: Black\nDecorative dado: White",
+          "description": "Real estate signs must use exact color specifications. All colors must be ARB approved.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs",
+            "requirement": "Exact color specifications: Post: PMS 548C, Sign: White, Logo: PMC 548C, Border: PMC 548C, Other lettering: Black, Decorative dado: White",
+            "note": "No deviations from specified colors allowed for real estate signs"
+          }
+        },
+        {
+          "id": "lettering_style",
+          "label": "Lettering Style and Font",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Font: Goudy Old Style Bold (for real estate signs)\nSize: As specified in Markland guidelines\nColor: Black lettering",
+          "description": "Real estate signs must use Goudy Old Style Bold font as specified.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs",
+            "requirement": "Font: Goudy Old Style Bold",
+            "note": "Exact font specification must be followed for approved signs"
+          }
+        },
+        {
+          "id": "illumination",
+          "label": "Sign Illumination",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No illumination (PREFERRED)",
+            "Solar lighting (REQUIRES APPROVAL)",
+            "Low-voltage LED lighting (REQUIRES APPROVAL)",
+            "Standard electrical lighting (LIKELY PROHIBITED)",
+            "Internally illuminated (PROHIBITED)",
+            "Reflective materials only (REQUIRES APPROVAL)"
+          ],
+          "description": "Illuminated signage is generally prohibited or heavily restricted in Markland."
+        },
+        {
+          "id": "illumination_details",
+          "label": "Illumination Details",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Must comply with Section 7.16 Lighting requirements if approved",
+          "description": "Any lighting must comply with Markland lighting standards and requires ARB approval."
+        }
+      ]
+    },
+    {
+      "title": "Sign Location and Mounting",
+      "fields": [
+        {
+          "id": "lot_type_classification",
+          "label": "Markland Lot Type Classification",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Conventional Lot (93 ft width)",
+            "Conventional Lot (83 ft width)", 
+            "Conventional Lot (73 ft width)",
+            "Conventional Lot (63 ft width)",
+            "Traditional Type 1 Lot (58 ft width)",
+            "Traditional Type 2 Lot (73 ft width)",
+            "Lakefront Lot",
+            "Corner Lot",
+            "Conservation Lot",
+            "Perimeter Lot (IGP)",
+            "Perimeter Lot (North Francis Road)",
+            "Other/Unknown"
+          ],
+          "description": "Lot type affects signage restrictions and setback requirements.",
+          "relevantBylaws": {
+            "reference": "Section 3 Lot Types",
+            "requirement": "Different lot types may have specific signage restrictions",
+            "note": "Corner lots and special lot conditions may have additional requirements"
+          }
+        },
+        {
+          "id": "sign_location",
+          "label": "Sign Location on Property",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Front yard, oriented parallel to primary road, minimum 10 feet from roadway edge, on property for sale...",
+          "description": "Must comply with Markland setback and orientation requirements.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs",
+            "requirement": "Sign must be located on the property for sale, set back at least 10 feet from edge of roadway, oriented parallel to primary road if one sign face used",
+            "note": "Setback requirements strictly enforced"
+          }
+        },
+        {
+          "id": "mounting_method",
+          "label": "Mounting Method",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Post-mounted per Markland specifications (APPROVED for real estate)",
+            "Wall-mounted on house (REQUIRES APPROVAL)",
+            "Ground-mounted on base (REQUIRES APPROVAL)",
+            "Other mounting method (REQUIRES SPECIAL APPROVAL)"
+          ],
+          "description": "Real estate signs must use specified post-mounting method."
+        },
+        {
+          "id": "mounting_specifications",
+          "label": "Mounting Specifications",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "4\"X4\" Pressure-treated post, 2\"X4\"X24\" PT Support arm rabbit jointed, 5' off grade per Markland specifications",
+          "description": "Must follow exact mounting specifications from Markland Design Standards.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs Exhibit",
+            "requirement": "Specific mounting: 4\"X4\" PT Post with decorative dado, 2\"X4\"X24\" PT Support arm rabbit jointed, 5' OFF GRADE",
+            "note": "Exact specifications must be followed"
+          }
+        },
+        {
+          "id": "sign_height",
+          "label": "Sign Height Above Ground",
+          "type": "text",
+          "required": true,
+          "placeholder": "5 feet off grade (per Markland specifications)",
+          "description": "Real estate signs must be 5 feet off grade per Markland specifications."
+        },
+        {
+          "id": "setback_distances",
+          "label": "Setback Distances",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Minimum 10 feet from edge of roadway (REQUIRED)\nCompliance with all property line setbacks\nNo encroachment into easements",
+          "description": "Must comply with Markland minimum setback requirements and not encroach into easements.",
+          "relevantBylaws": {
+            "reference": "Section 7.15.1 Real Estate Marketing Signs & Section 4.7 Easements",
+            "requirement": "Minimum 10-foot setback from roadway edge required, no encroachment into easements permitted",
+            "note": "Setback violations will result in immediate removal requirement"
+          }
+        },
+        {
+          "id": "utility_clearance",
+          "label": "Utility and Easement Clearance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No utilities or easements in sign area",
+            "Utilities located and sign placement avoids conflicts",
+            "Will call 811 before installation (REQUIRED)",
+            "Easement conflicts identified and resolved",
+            "FPL easement considerations addressed"
+          ],
+          "description": "Must avoid all utility easements and underground utilities.",
+          "relevantBylaws": {
+            "reference": "Section 4.7 Easements",
+            "requirement": "No encroachment upon easements permitted, ARB approval required for any improvements within easements",
+            "note": "FPL electrical easements occur on front of all lots along property line"
+          }
+        }
+      ]
+    },
+    {
+      "title": "ARB Compliance and Application Process",
+      "fields": [
+        {
+          "id": "arb_application_status",
+          "label": "ARB Application Status",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Not yet submitted (REQUIRED BEFORE INSTALLATION)",
+            "Application in preparation",
+            "Submitted and under review",
+            "Approved with conditions",
+            "Approved - final",
+            "Denied - revising application"
+          ],
+          "description": "ARB approval is MANDATORY before any sign installation in Markland.",
+          "relevantBylaws": {
+            "reference": "Section 2 Application Review Process",
+            "requirement": "No construction of any kind shall commence until applicants receive their final approval",
+            "note": "Violations result in immediate stop-work orders and potential fines"
+          }
+        },
+        {
+          "id": "performance_deposit_status",
+          "label": "Performance Deposit Status",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Not yet submitted",
+            "Deposit amount confirmed with ARB",
+            "Deposit submitted and confirmed",
+            "Deposit refund pending completion",
+            "Deposit forfeited due to non-compliance"
+          ],
+          "description": "Refundable performance deposit required with ARB application.",
+          "relevantBylaws": {
+            "reference": "Section 2.2 Application Form & Fees",
+            "requirement": "Refundable Performance Deposit required, refundable at successful completion and compliance with Design Standards",
+            "note": "Deposit forfeited if work not brought into compliance within 90 days"
+          }
+        },
+        {
+          "id": "design_review_application",
+          "label": "Design Review Application Form",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Not yet obtained from ARB",
+            "Form obtained and being completed",
+            "Form completed and ready for submission",
+            "Form submitted with application",
+            "Form approved"
+          ],
+          "description": "Completed Design Review Application Form required from ARB.",
+          "relevantBylaws": {
+            "reference": "Section 2.2 Application Form & Fees",
+            "requirement": "Completed Design Review Application Form required, unsigned applications considered incomplete",
+            "note": "Forms provided by ARB upon request"
+          }
+        },
+        {
+          "id": "arb_meeting_coordination",
+          "label": "ARB Meeting Coordination",
+          "type": "text",
+          "required": false,
+          "placeholder": "Meeting date scheduled, submission deadline confirmed",
+          "description": "Coordinate with ARB for review meeting if required."
+        },
+        {
+          "id": "compliance_inspection_plan",
+          "label": "Compliance Inspection Plan",
+          "type": "textarea", 
+          "required": true,
+          "placeholder": "Will notify ARB when installation complete for final inspection\nUnderstand inspection required before deposit refund",
+          "description": "Final compliance inspection required before performance deposit refund.",
+          "relevantBylaws": {
+            "reference": "Section 2.2 Application Form & Fees",
+            "requirement": "Prior to issuance of refundable performance deposit, all requirements will be inspected for compliance",
+            "note": "Applicant must notify when ready for inspection"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Regulatory Compliance",
+      "fields": [
+        {
+          "id": "hoa_sign_compliance",
+          "label": "Markland Design Standards Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Sign fully complies with all Markland specifications",
+            "Sign requires ARB approval for variations",
+            "Major deviations requiring special consideration",
+            "Non-compliant sign type (likely prohibited)",
+            "Unsure of specific Markland requirements"
+          ],
+          "description": "Compliance with Markland Design Standards and Guidelines is mandatory."
+        },
+        {
+          "id": "local_sign_ordinance",
+          "label": "St. Johns County Sign Ordinance Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Sign complies with all St. Johns County ordinances",
+            "Sign requires county permits/approvals",
+            "Variances needed for compliance",
+            "Under review with county authorities",
+            "Unsure of county sign requirements"
+          ],
+          "description": "Must also comply with St. Johns County sign ordinances in addition to Markland requirements.",
+          "relevantBylaws": {
+            "reference": "Section 1 Document Purpose",
+            "requirement": "All new construction must conform to applicable governmental codes, ordinances, regulations, permits and laws",
+            "note": "Both Markland and county requirements must be met"
+          }
+        },
+        {
+          "id": "sign_permits_required",
+          "label": "Required Permits and Approvals",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Markland ARB approval (MANDATORY)",
+            "St. Johns County sign permit",
+            "Building permit (if structural)",
+            "Right-of-way permit (if near roadway)",
+            "Special use permit (for business signs)"
+          ],
+          "description": "Markland ARB approval is always required, additional permits may be needed."
+        },
+        {
+          "id": "permit_details",
+          "label": "Permit Details and Status",
+          "type": "text",
+          "required": false,
+          "placeholder": "ARB Application #[number], County permit #[number] if applicable",
+          "description": "Provide permit numbers and status for all required approvals."
+        },
+        {
+          "id": "business_sign_restrictions",
+          "label": "Business/Commercial Sign Restrictions",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Home business signs generally prohibited in Markland residential community",
+          "description": "Business signage is generally prohibited in Markland residential areas.",
+          "relevantBylaws": {
+            "reference": "Section 7.15 Prohibited Sign Formats",
+            "requirement": "Most business and commercial signage prohibited in residential community",
+            "note": "Home occupation signage typically not permitted"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Installation Planning",
+      "fields": [
+        {
+          "id": "installation_method",
+          "label": "Installation Method",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Homeowner self-installation (must follow specifications)",
+            "Professional sign installer",
+            "General contractor installation",
+            "Handyman installation"
+          ],
+          "description": "Installation must follow exact Markland specifications regardless of installer."
+        },
+        {
+          "id": "installer_information",
+          "label": "Installer Information and Licensing",
+          "type": "text",
+          "required": false,
+          "placeholder": "Installer name and license if using professional service",
+          "description": "Professional installer licensing may be required for certain sign types."
+        },
+        {
+          "id": "construction_hours_compliance",
+          "label": "Construction Hours Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Will comply with St. Johns County construction hours",
+            "Will follow any additional Markland time restrictions",
+            "Installation during weekends (may have restrictions)",
+            "Holiday installation (may be restricted)"
+          ],
+          "description": "Must comply with construction hour restrictions.",
+          "relevantBylaws": {
+            "reference": "Section 4.2.1 Construction Hours",
+            "requirement": "Construction hours shall generally comply with St. Johns County regulations, Developer and Association reserve right to limit weekend/holiday hours",
+            "note": "Additional restrictions may apply as residents occupy community"
+          }
+        },
+        {
+          "id": "installation_timeline",
+          "label": "Installation Timeline",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Installation date: [date]\nDuration: [time]\nWork hours: Comply with Markland construction hours\nARB approval received: [date]",
+          "description": "Installation timeline must account for ARB approval process and construction hour restrictions."
+        },
+        {
+          "id": "site_preparation",
+          "label": "Site Preparation and Access",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Minimal site disturbance\nUtility marking completed\nNo damage to common area improvements\nAccess coordinated to avoid disruption",
+          "description": "Site preparation must minimize impact and avoid damage to common areas.",
+          "relevantBylaws": {
+            "reference": "Section 4.2.2 Site Access for Construction",
+            "requirement": "Must coordinate to avoid disruption to common area improvements, responsible for maintaining clean construction site",
+            "note": "Owner/Builder responsible for protection/replacement of damaged common area enhancements"
+          }
+        },
+        {
+          "id": "cleanup_and_maintenance",
+          "label": "Site Cleanup and Maintenance Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Immediate cleanup of installation area\nRemoval of all debris and materials\nDaily cleanup during installation\nNo debris left on adjacent properties",
+          "description": "Must maintain clean site and remove all debris immediately.",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3 Construction Activities",
+            "requirement": "Maintain clean and orderly construction site, clean any debris from neighborhood streets, trash must be picked up every day",
+            "note": "Debris and construction spillage must be cleaned from community streets"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Community Integration and Aesthetic Compliance",
+      "fields": [
+        {
+          "id": "neighborhood_character",
+          "label": "Markland Community Character Compatibility",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Sign design maintains Markland's high-quality residential character, follows approved specifications exactly...",
+          "description": "Sign must maintain Markland's distinctive community character and aesthetic standards.",
+          "relevantBylaws": {
+            "reference": "Section 1 Document Purpose",
+            "requirement": "ARB evaluates each application for total effect and overall aesthetic impact, decisions based on matters of judgment and taste",
+            "note": "Sign might meet individual criteria but still be denied if overall aesthetic impact unacceptable"
+          }
+        },
+        {
+          "id": "architectural_harmony",
+          "label": "Architectural Harmony Assessment",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Sign complements approved architectural styles in Markland, maintains quality standards...",
+          "description": "Sign must harmonize with Markland's approved architectural character."
+        },
+        {
+          "id": "visibility_safety",
+          "label": "Visibility and Traffic Safety",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Sign placement ensures clear sight lines, appropriate height for safety, no traffic obstruction...",
+          "description": "Sign must not create safety hazards or obstruct traffic visibility."
+        },
+        {
+          "id": "neighbor_impact",
+          "label": "Neighbor Impact Assessment",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Sign maintains community standards, no negative impact on adjacent properties, professional appearance...",
+          "description": "Sign must not negatively impact neighboring properties or community standards."
+        },
+        {
+          "id": "neighbor_feedback",
+          "label": "Neighbor Communication",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Neighbors informed and supportive",
+            "No significant neighbor concerns",
+            "Will address any neighbor concerns",
+            "Real estate sign - standard practice",
+            "No neighbor notification needed for compliant signs"
+          ],
+          "description": "Consider neighbor impact, especially for non-standard signage requests."
+        }
+      ]
+    },
+    {
+      "title": "Maintenance and Compliance Monitoring",
+      "fields": [
+        {
+          "id": "weather_resistance",
+          "label": "Weather Resistance and Durability",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Materials specified in Markland guidelines",
+            "UV-resistant finishes as specified",
+            "Weather-sealed construction per specifications",
+            "Wind-resistant mounting per guidelines",
+            "Corrosion-resistant hardware as specified"
+          ],
+          "description": "Must use weather-resistant materials specified in Markland guidelines."
+        },
+        {
+          "id": "maintenance_schedule",
+          "label": "Sign Maintenance Schedule",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Regular inspection and maintenance\nPrompt repair of any damage\nReplacement when worn or non-compliant\nRemoval when no longer needed (real estate signs)",
+          "description": "Ongoing maintenance required to maintain compliance with Markland standards."
+        },
+        {
+          "id": "compliance_monitoring",
+          "label": "Ongoing Compliance Monitoring",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Understand ongoing compliance responsibility",
+            "Will promptly address any compliance issues",
+            "Agree to remove sign if becomes non-compliant",
+            "Will coordinate with ARB for any modifications"
+          ],
+          "description": "Ongoing compliance with Markland standards is required.",
+          "relevantBylaws": {
+            "reference": "Section 2.6 Design Standards and Guidelines Checklist",
+            "requirement": "If work deemed not in compliance, correspondence issued with 90 days to remedy, failure results in deposit retention",
+            "note": "Ongoing compliance monitoring and enforcement by ARB"
+          }
+        },
+        {
+          "id": "sign_removal_plan",
+          "label": "Sign Removal Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "For real estate signs: immediate removal when property sale complete\nFor other signs: removal when no longer needed or if required by ARB\nComplete site restoration upon removal",
+          "description": "Plan for eventual sign removal and site restoration.",
+          "relevantBylaws": {
+            "reference": "Real Estate Marketing Sign Requirements",
+            "requirement": "Real estate signs must be removed promptly when property is no longer for sale",
+            "note": "Temporary signs must be removed when purpose fulfilled"
+          }
+        }
+      ]
+    }
+  ],
+  "complianceNotes": {
+    "criticalReminders": [
+      "ARB APPROVAL IS MANDATORY BEFORE ANY SIGN INSTALLATION - No exceptions",
+      "Most signage types are PROHIBITED in Markland except real estate marketing signs",
+      "Real estate signs must follow EXACT specifications - no deviations allowed",
+      "Minimum 10-foot setback from roadway edge required for all signage",
+      "Performance deposit required and refundable only after compliance inspection",
+      "90-day compliance deadline - non-compliance results in deposit forfeiture",
+      "Must comply with both Markland standards AND St. Johns County ordinances"
+    ],
+    "commonViolations": [
+      "Installing signs without ARB approval (immediate violation)",
+      "Using non-approved materials, colors, or fonts for real estate signs",
+      "Incorrect setback distances from roadways or property lines",
+      "Business or commercial signage in residential areas (prohibited)",
+      "Illuminated signage without specific approval",
+      "Signs that encroach into utility or drainage easements",
+      "Failing to remove temporary signs when no longer needed",
+      "Multiple signs per property (only one real estate sign allowed)",
+      "Decorative or artistic signage without special approval",
+      "Political campaign signs (generally prohibited)",
+      "Construction/contractor signs without proper approval"
+    ]
+  },
+  "required_documents": [
+    "Completed Markland Design Review Application Form (from ARB)",
+    "Performance deposit payment confirmation",
+    "Sign design plans showing exact specifications per Markland guidelines",
+    "Material specifications matching approved Markland requirements",
+    "Installation plans with mounting details per specifications", 
+    "Site plan showing sign location with accurate setback measurements",
+    "Utility location markings (811 call confirmation)",
+    "St. Johns County sign permits (if required)",
+    "Professional installer license and insurance (if applicable)",
+    "Color samples and material samples (if deviating from standard)",
+    "ARB approval letter before installation begins",
+    "Post-installation compliance inspection confirmation"
+  ],
+  "arbApplicationProcess": {
+    "step1": "Contact ARB to obtain Design Review Application Form",
+    "step2": "Complete application with all required documentation and plans",
+    "step3": "Submit refundable performance deposit with application", 
+    "step4": "Wait for ARB review and decision (allow adequate time)",
+    "step5": "Receive written approval before beginning any work",
+    "step6": "Install sign exactly per approved specifications",
+    "step7": "Notify ARB when installation complete for inspection",
+    "step8": "Pass compliance inspection to receive deposit refund",
+    "timeline": "Allow minimum 2-4 weeks for ARB review process",
+    "contact": "Contact ARB for current submittal deadlines and meeting schedules"
+  },
+  "lotTypeSpecialConsiderations": {
+    "cornerLots": {
+      "reference": "Section 8.2 Condition 2 - Conventional Corner Lots",
+      "requirements": "Corner lots may have additional aesthetic requirements for street-facing facades",
+      "note": "Side facades facing streets must meet higher design standards"
+    },
+    "lakefrontLots": {
+      "reference": "Section 8.1 Condition 1 - Lakefront Lots",
+      "requirements": "Special landscape and aesthetic requirements may affect signage placement",
+      "note": "Filtered views and landscape screening requirements may restrict signage"
+    },
+    "traditionalLots": {
+      "reference": "Section 8.5-8.8 Traditional Type Lots",
+      "requirements": "Traditional lots may have specific design character requirements",
+      "note": "Signage must complement traditional architectural character"
+    },
+    "perimeterLots": {
+      "reference": "Section 5.2.4 Perimeter Lots IGP",
+      "requirements": "Perimeter lots may have additional screening and aesthetic requirements",
+      "note": "Enhanced architectural standards may affect signage approval"
+    }
+  },
+  "scoring_weights": {
+    "sign_type": 20,
+    "arb_application_status": 25,
+    "sign_location": 15,
+    "setback_distances": 20,
+    "lot_type_classification": 12,
+    "performance_deposit_status": 15,
+    "design_review_application": 15,
+    "sign_dimensions": 12,
+    "sign_materials": 12,
+    "sign_colors": 10,
+    "mounting_specifications": 12,
+    "construction_hours_compliance": 8,
+    "utility_clearance": 12,
+    "hoa_sign_compliance": 20,
+    "local_sign_ordinance": 15,
+    "neighborhood_character": 15,
+    "compliance_monitoring": 12,
+    "site_preparation": 10,
+    "cleanup_and_maintenance": 8,
+    "installation_timeline": 8,
+    "weather_resistance": 8,
+    "maintenance_schedule": 8,
+    "sign_removal_plan": 10,
+    "neighbor_impact": 8,
+    "architectural_harmony": 10,
+    "visibility_safety": 10
+  }
+}

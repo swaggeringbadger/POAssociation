@@ -1,0 +1,388 @@
+{
+  "title": "Fencing Additional Information",
+  "description": "Please provide detailed information about your fencing project",
+  "relevantBylaws": {
+    "primary": {
+      "section": "7.7 Fences (Exhibit 7.7)",
+      "document": "Design Standards and Guidelines (2021)",
+      "summary": "Comprehensive fencing requirements including 4 specific fence types, permitted locations, height restrictions, and approval requirements. All fences require ARB application and approval.",
+      "keyRequirements": [
+        "All fences require application and approval by the ARB",
+        "4 fence types permitted: Type 1 (4.5' black ornamental aluminum), Type 2 (6' tan vinyl privacy), Type 3 (6' white vinyl with open pickets), Type 4 (3' white picket front yard)",
+        "Chain link fences prohibited except at dog park",
+        "Fence locations vary by lot type and must comply with specific restrictions",
+        "Fence must not encroach into neighboring property"
+      ],
+      "quote": "All fences require application and approval by the ARB... Chain link fences are prohibited except at dog park."
+    },
+    "additionalReferences": [
+      {
+        "section": "7.7B Fence Types and Locations",
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "Specific fence type requirements based on lot location - lakefront lots only Type 1, perimeter lots have specific requirements, traditional lots have different options",
+        "keyProvisions": [
+          "Lakefront and Conventional Corner Lots - Type 1 only permitted",
+          "Back to Back Lots - Phase 1: Type 2 permitted in rear (except Lots 47-48), Phase 2: Type 1 or 2 permitted",
+          "Traditional Type 1 Lots - Type 3 (rear/side yards), Type 4 (front yard) permitted",
+          "Side yard fencing depths limited to 20 feet from back corner of home"
+        ]
+      },
+      {
+        "section": "4.7 Easements",
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "ARB approval required for fences within easements, and property owner responsible for replacement if damaged during utility maintenance",
+        "quote": "ARB approval is required for fences and plantings erected within easements by the Owner/Builder. Replacement of fences, landscaping or any other improvements within easements is the responsibility of the Property Owner."
+      },
+      {
+        "section": "2.1-2.6 Application Review Process",
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "Required documentation and approval process for all improvements including fences, with refundable performance deposit requirements",
+        "keyRequirements": [
+          "Completed Design Review Application Form required",
+          "Refundable Performance Deposit required",
+          "Site plan must show all fencing locations with elevations",
+          "90 days to bring work into conformance after non-compliance notice"
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "title": "Fence Specifications",
+      "fields": [
+        {
+          "id": "fence_type",
+          "label": "Type of Fence",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Type 1 - Black Ornamental Aluminum (4.5')",
+            "Type 2 - Tan Vinyl Privacy Fence (6')",
+            "Type 3 - White Vinyl with Open Pickets (6')",
+            "Type 4 - White Wide Picket Front Yard (3')",
+            "Other (requires special approval)"
+          ],
+          "description": "Select from approved Markland fence types. Chain link prohibited except at dog park.",
+          "relevantBylaws": {
+            "reference": "Section 7.7B - There are 4 different fence types at Markland",
+            "note": "Each lot type has specific fence type restrictions - check your lot classification"
+          }
+        },
+        {
+          "id": "fence_height",
+          "label": "Fence Height",
+          "type": "select",
+          "required": true,
+          "options": [
+            "3 feet (Type 4 only)",
+            "4.5 feet (Type 1 only)",
+            "6 feet (Types 2 & 3 only)",
+            "Other height (requires special approval)"
+          ],
+          "description": "Height must match approved fence type specifications",
+          "relevantBylaws": {
+            "reference": "Section 7.7B - Specific heights defined for each fence type",
+            "requirement": "Fence heights are fixed by type and cannot be modified without ARB approval"
+          }
+        },
+        {
+          "id": "fence_material",
+          "label": "Fence Material and Color",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Must match approved specifications: Type 1 (black aluminum), Type 2 (tan vinyl), Type 3 (white vinyl), Type 4 (white picket)",
+          "description": "Materials and colors are predetermined by fence type selection",
+          "relevantBylaws": {
+            "reference": "Section 7.7A & 7.7B - Exhibit 7.7A and Exhibit 7.7B for fence specifications",
+            "requirement": "Colors and materials are fixed by fence type and cannot be customized"
+          }
+        },
+        {
+          "id": "linear_footage",
+          "label": "Total Linear Footage",
+          "type": "number",
+          "required": true,
+          "placeholder": "Enter total feet of fencing",
+          "description": "Total length of fence to be installed"
+        }
+      ]
+    },
+    {
+      "title": "Location and Boundaries",
+      "fields": [
+        {
+          "id": "lot_type",
+          "label": "Your Lot Type",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Lakefront Lot",
+            "Conventional Corner Lot", 
+            "Back to Back Lot (Phase 1)",
+            "Back to Back Lot (Phase 2)",
+            "Traditional Type 1 Lot",
+            "Traditional Type 2 Lot",
+            "Perimeter Lot (SW Corner 32-43)",
+            "Perimeter Lot (Francis Road 14-31)",
+            "Lot Adjacent to Park",
+            "Other/Unsure"
+          ],
+          "description": "Your lot type determines which fence types are permitted",
+          "relevantBylaws": {
+            "reference": "Section 7.7B - Permitted locations for fence types vary at Markland",
+            "keyRestrictions": [
+              "Lakefront & Corner Lots: Type 1 only",
+              "Traditional Lots 61-69: Type 3 required between driveway and rear of home",
+              "Side yard fencing limited to 20 feet from back corner of home"
+            ]
+          }
+        },
+        {
+          "id": "fence_location",
+          "label": "Fence Location on Property", 
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Specify front yard, back yard, side yard, and specific boundaries. Note any special restrictions for your lot type.",
+          "description": "Location restrictions apply based on lot type - check relevant bylaws",
+          "relevantBylaws": {
+            "reference": "Section 7.7B & 7.7C - Location restrictions by lot type",
+            "keyRequirements": [
+              "Side yard fencing depths limited to 20 feet from back corner of home",
+              "Fences must not encroach into neighboring property",
+              "Fences must interface structures at 90° angles"
+            ]
+          }
+        },
+        {
+          "id": "property_line_setback",
+          "label": "Distance from Property Line",
+          "type": "text",
+          "required": true,
+          "placeholder": "Distance in feet from property boundary (minimum 3 feet required)",
+          "description": "Must maintain minimum setbacks and not encroach on neighbor's property",
+          "relevantBylaws": {
+            "reference": "Section 7.6B & 7.7G - Site wall and fence setback requirements",
+            "quote": "In no case shall any site wall be built within three (3) feet of a property line... Fences constructed alongside yards must not encroach into the neighboring property."
+          }
+        },
+        {
+          "id": "survey_confirmation",
+          "label": "Property Survey Confirmation",
+          "type": "radio",
+          "required": true,
+          "options": ["Recent survey available", "Will obtain survey", "Using existing markers", "Boundary dispute exists"],
+          "description": "Accurate boundary identification required to prevent encroachment"
+        },
+        {
+          "id": "neighbor_notification",
+          "label": "Neighbor Notification",
+          "type": "radio",
+          "required": true,
+          "options": ["Neighbors notified and agree", "Neighbors notified, awaiting response", "Will notify before installation", "Not applicable (no adjacent neighbors)"],
+          "description": "Good neighbor policy recommended for shared boundary fences"
+        }
+      ]
+    },
+    {
+      "title": "Gates and Access",
+      "fields": [
+        {
+          "id": "gates_included",
+          "label": "Gates Included",
+          "type": "radio",
+          "required": true,
+          "options": ["Yes", "No"],
+          "description": "Will the fence include any gates?"
+        },
+        {
+          "id": "gate_details",
+          "label": "Gate Details",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Describe gate locations, sizes, and access purposes. Gates must match fence specifications.",
+          "description": "Gates must be consistent with approved fence type and style"
+        },
+        {
+          "id": "utility_access",
+          "label": "Utility Access Considerations",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "How will utility companies access meters, lines, or equipment?",
+          "description": "Critical for easement areas - utility access must be maintained",
+          "relevantBylaws": {
+            "reference": "Section 4.7 Easements",
+            "requirement": "Easement areas must remain accessible for utility maintenance, and fence owner responsible for repairs if damaged during utility work"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Installation and Compliance", 
+      "fields": [
+        {
+          "id": "professional_installation",
+          "label": "Installation Method",
+          "type": "radio",
+          "required": true,
+          "options": ["Licensed contractor", "Homeowner installation", "Mixed professional/DIY"],
+          "description": "Installation must meet design standards regardless of installer"
+        },
+        {
+          "id": "contractor_info",
+          "label": "Contractor Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "Contractor name and license number",
+          "description": "Required if using professional installation"
+        },
+        {
+          "id": "installation_timeline",
+          "label": "Installation Timeline", 
+          "type": "text",
+          "required": true,
+          "placeholder": "Start date and estimated completion",
+          "description": "Must coordinate with ARB approval and performance deposit requirements",
+          "relevantBylaws": {
+            "reference": "Section 2.6 Design Standards Checklist",
+            "requirement": "90 days from correspondence to bring work into conformance with Design Standards"
+          }
+        },
+        {
+          "id": "permit_status",
+          "label": "Building Permit Status",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Not required for this fence",
+            "Will apply after HOA approval", 
+            "Application submitted",
+            "Permit approved"
+          ],
+          "description": "Check local requirements - ARB approval required regardless of permit status"
+        },
+        {
+          "id": "arb_application_status",
+          "label": "ARB Application Status",
+          "type": "select", 
+          "required": true,
+          "options": [
+            "Not yet submitted",
+            "Application in progress",
+            "Submitted awaiting review",
+            "Approved",
+            "Approved with conditions",
+            "Denied - revising"
+          ],
+          "description": "ARB approval required before any fence installation",
+          "relevantBylaws": {
+            "reference": "Section 7.7A - All fences require application and approval by the ARB",
+            "process": "Submit completed Design Review Application Form with refundable performance deposit"
+          }
+        },
+        {
+          "id": "hoa_compliance",
+          "label": "HOA Guidelines Compliance",
+          "type": "radio",
+          "required": true,
+          "options": ["Fully compliant with guidelines", "Minor variations requested", "Major variations requested", "Unsure of guidelines"],
+          "description": "Must comply with specific fence type requirements for your lot classification"
+        }
+      ]
+    },
+    {
+      "title": "Special Considerations",
+      "fields": [
+        {
+          "id": "fence_installation_requirements",
+          "label": "Fence Installation Requirements",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Confirm fence top level installation, proper interface with house at 90° angles, and landscape buffering requirements",
+          "description": "Must meet specific installation standards",
+          "relevantBylaws": {
+            "reference": "Section 7.7E, 7.7G, 7.7H - Installation requirements",
+            "keyRequirements": [
+              "Fence top must be horizontally level, not slope with grade",
+              "Fences must interface structures at 90° angles and terminate at sidewalls",
+              "All fences must be complemented with appropriate landscape buffering"
+            ]
+          }
+        },
+        {
+          "id": "drainage_impact",
+          "label": "Drainage Impact",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Will the fence affect water drainage or runoff? Consider swale and easement impacts.",
+          "description": "Fence installation cannot disrupt drainage patterns or easement functions"
+        },
+        {
+          "id": "maintenance_plan",
+          "label": "Maintenance Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "How will you maintain the fence over time? Include cleaning, repairs, and replacement schedules.",
+          "description": "Owner responsible for ongoing maintenance and compliance with design standards"
+        },
+        {
+          "id": "architectural_harmony",
+          "label": "Architectural Harmony",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "How does the selected fence type complement your home's architecture and neighborhood character?",
+          "description": "Fence selection must be appropriate for architectural style and community aesthetics",
+          "relevantBylaws": {
+            "reference": "Section 1 Document Purpose",
+            "quote": "ARB will be evaluating each proposed improvement application for total effect... It is possible that a proposed improvement might meet individual criteria and still not receive approval if its overall aesthetic impact is unacceptable."
+          }
+        }
+      ]
+    }
+  ],
+  "required_documents": [
+    "Completed Design Review Application Form (required by ARB)",
+    "Site plan showing fence location, setbacks, and elevations", 
+    "Property survey confirming boundaries",
+    "Refundable Performance Deposit (amount per Application Form)",
+    "Fence type specifications (must match approved types)",
+    "Contractor license and insurance (if using contractor)",
+    "Building permit (if required by jurisdiction)",
+    "Neighbor acknowledgment letters (recommended)"
+  ],
+  "scoring_weights": {
+    "fence_type": 15,
+    "fence_height": 10,
+    "fence_material": 10,
+    "lot_type": 20,
+    "linear_footage": 5,
+    "fence_location": 15,
+    "property_line_setback": 15,
+    "survey_confirmation": 10,
+    "neighbor_notification": 5,
+    "utility_access": 10,
+    "arb_application_status": 25,
+    "installation_timeline": 5,
+    "hoa_compliance": 20,
+    "fence_installation_requirements": 15,
+    "maintenance_plan": 5,
+    "architectural_harmony": 10
+  },
+  "complianceNotes": {
+    "criticalReminders": [
+      "NO fence installation allowed without ARB approval",
+      "Fence types are strictly defined - custom designs require special approval", 
+      "Lot type determines which fence types are permitted",
+      "Chain link fences prohibited (except dog park)",
+      "Performance deposit required and refundable upon compliance",
+      "90-day correction period for non-compliance issues"
+    ],
+    "commonViolations": [
+      "Installing fence without ARB approval",
+      "Using wrong fence type for lot classification", 
+      "Encroaching on neighbor's property",
+      "Incorrect fence height or materials",
+      "Failing to maintain level fence top",
+      "Inadequate setback from property lines"
+    ]
+  }
+}

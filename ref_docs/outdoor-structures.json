@@ -1,0 +1,918 @@
+{
+  "title": "Outdoor Structures Additional Information",
+  "description": "Please provide comprehensive details about your outdoor structure project to ensure compliance with safety, building codes, and community standards",
+  "relevantBylaws": {
+    "primary": {
+      "section": "Section 6.3.3 Outbuildings and Structures",
+      "document": "Markland Design Standards and Guidelines (Revision 2021)",
+      "summary": "All detached, stand-alone outbuildings must be designed consistent with the main house style and require ARB review and approval. Prefabricated outbuildings are prohibited.",
+      "keyRequirements": [
+        "ARB review and approval required for all outdoor structures",
+        "Design must be consistent with main house architectural style",
+        "Prefabricated outbuildings are prohibited",
+        "Garages, workshops, pool houses, summer-kitchen structures require specific approval",
+        "All structures subject to setback requirements and lot coverage limits"
+      ],
+      "quote": "Detached, stand-alone outbuildings are acceptable at Markland and must be designed in a manner consistent with the style of the main house."
+    },
+    "additionalReferences": [
+      {
+        "section": "Section 2 Application Review Process",
+        "document": "Design Standards and Guidelines",
+        "summary": "No construction of any kind shall commence until applicants receive final approval. Refundable performance deposit required.",
+        "keyProvisions": [
+          "Completed Design Review Application Form required",
+          "Refundable Performance Deposit required (amount on application form)",
+          "Site plan, landscape plan, and architectural plans must be submitted",
+          "ARB inspection required before deposit refund"
+        ]
+      },
+      {
+        "section": "Section 7.9 Fountains & Garden Ornaments / Section 7.10 Gazebos and Garden Structures",
+        "document": "Design Standards and Guidelines",
+        "summary": "Gazebos and garden structures are permitted but require ARB approval for design and placement",
+        "keyProvisions": [
+          "All garden structures require ARB approval",
+          "Must complement overall landscape design",
+          "Location and size restrictions may apply"
+        ]
+      },
+      {
+        "section": "Section 4.1 Responsibility for Compliance",
+        "document": "Design Standards and Guidelines", 
+        "summary": "Property owner ultimately responsible for ensuring compliance with all applicable codes, ordinances, regulations, permits and laws",
+        "keyProvisions": [
+          "Fee simple property owner has ultimate responsibility for compliance",
+          "Must comply with St. Johns County regulations and codes",
+          "All federal, state, and local requirements must be met"
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "title": "Structure Type and Design",
+      "relevantBylaws": {
+        "reference": "Section 6.3.3 - Outbuildings must be consistent with main house style",
+        "requirement": "All outdoor structures require ARB approval and architectural consistency",
+        "note": "Prefabricated structures are specifically prohibited in Markland"
+      },
+      "fields": [
+        {
+          "id": "structure_type",
+          "label": "Primary Structure Type",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Wooden Deck (Attached)",
+            "Wooden Deck (Freestanding)",
+            "Composite Deck",
+            "Stone/Concrete Patio",
+            "Covered Patio/Lanai",
+            "Gazebo (Open)",
+            "Gazebo (Screened)",
+            "Pergola/Arbor",
+            "Storage Shed",
+            "Workshop/Tool Shed",
+            "Playhouse/Play Structure",
+            "Pool House/Cabana", 
+            "Outdoor Kitchen Structure",
+            "Fire Pit Area/Outdoor Fireplace",
+            "Greenhouse/Garden Structure",
+            "Carport/Parking Structure",
+            "Trellis/Garden Arbor",
+            "Outdoor Bar/Entertainment Area",
+            "Hot Tub/Spa Enclosure",
+            "Other Outdoor Structure"
+          ],
+          "description": "Select the primary type of outdoor structure being constructed",
+          "relevantBylaws": {
+            "reference": "Section 6.3.3 and Section 7.10",
+            "requirement": "All structure types require ARB approval - gazebos, pool houses, workshops, and garden structures specifically mentioned",
+            "note": "Prefabricated structures are prohibited"
+          }
+        },
+        {
+          "id": "structure_purpose",
+          "label": "Structure Purpose and Use",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Family entertainment, storage, gardening, outdoor dining, etc.",
+          "description": "Describe the intended use and purpose of the structure"
+        },
+        {
+          "id": "structure_dimensions",
+          "label": "Structure Dimensions",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Length: 16 feet\nWidth: 12 feet\nHeight: 10 feet (peak)\nFloor area: 192 square feet",
+          "description": "Provide detailed dimensions including length, width, height, and total square footage",
+          "relevantBylaws": {
+            "reference": "Section 6.2.1 - Maximum building height 35 feet",
+            "requirement": "All structures subject to 35-foot maximum height limit measured from lowest point of finish grade",
+            "note": "Dimensions must be included in required site plan submission to ARB"
+          }
+        },
+        {
+          "id": "structure_style",
+          "label": "Architectural Style",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Matches existing home architecture",
+            "Traditional/Classic design",
+            "Contemporary/Modern design",
+            "Rustic/Natural design",
+            "Mediterranean style",
+            "Craftsman style",
+            "Minimalist design",
+            "Custom/Unique design"
+          ],
+          "description": "What architectural style best describes the structure design?",
+          "relevantBylaws": {
+            "reference": "Section 6.3.3 - Consistency with main house style required",
+            "requirement": "Structure must be designed in a manner consistent with the style of the main house",
+            "quote": "must be designed in a manner consistent with the style of the main house"
+          }
+        },
+        {
+          "id": "attached_or_freestanding",
+          "label": "Attachment to Existing Structures",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Attached to house",
+            "Attached to existing structure",
+            "Freestanding structure",
+            "Partially attached"
+          ],
+          "description": "How does the structure relate to existing buildings?"
+        },
+        {
+          "id": "lot_type_classification",
+          "label": "Lot Type Classification",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Conventional Lot (93 ft width)",
+            "Conventional Lot (83 ft width)", 
+            "Conventional Lot (73 ft width)",
+            "Conventional Lot (63 ft width)",
+            "Traditional Type 1 Lot (58 ft width)",
+            "Traditional Type 2 Lot (73 ft width)",
+            "Lakefront Lot",
+            "Back to Back Lot",
+            "Conservation Lot",
+            "Perimeter Lot - International Golf Parkway",
+            "Corner Lot",
+            "Unsure of lot classification"
+          ],
+          "description": "Identify your lot type as requirements vary significantly by lot classification",
+          "relevantBylaws": {
+            "reference": "Section 3 - Lot Types and Special Conditions",
+            "requirement": "Different lot types have specific requirements that affect structure placement and design",
+            "note": "Lot classification determines setback requirements, height restrictions, and design standards"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Construction Materials and Specifications",
+      "relevantBylaws": {
+        "reference": "Section 6.4.8 - Exterior Materials and Finishes",
+        "requirement": "All exterior finishes must be reviewed and approved by ARB prior to installation",
+        "note": "Materials must be relevant to architectural style and blend with surrounding structures"
+      },
+      "fields": [
+        {
+          "id": "foundation_system",
+          "label": "Foundation System",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Concrete slab on grade",
+            "Concrete footings with piers",
+            "Concrete block foundation",
+            "Helical pier foundation",
+            "Gravel pad foundation",
+            "Existing concrete surface",
+            "Post-in-ground foundation",
+            "No foundation required"
+          ],
+          "description": "What type of foundation system will support the structure?",
+          "relevantBylaws": {
+            "reference": "Section 4.6 - Earthwork and Drainage",
+            "requirement": "Foundation must provide positive drainage and cannot divert water onto adjacent lots",
+            "note": "Minimum 18-inch exposed foundation may be required depending on structure type"
+          }
+        },
+        {
+          "id": "framing_materials",
+          "label": "Framing Materials",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Pressure-treated lumber: 2x8 joists, 2x10 beams\nPosts: 6x6 pressure-treated\nHardware: Galvanized steel brackets and fasteners",
+          "description": "Describe all structural framing materials including lumber grades, sizes, and hardware"
+        },
+        {
+          "id": "roofing_system",
+          "label": "Roofing System (if applicable)",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Roof structure: 2x6 rafters on 16-inch centers\nRoofing material: Architectural shingles to match house\nGutters: Aluminum seamless gutters",
+          "description": "Describe roofing structure, materials, and drainage system",
+          "relevantBylaws": {
+            "reference": "Section 6.4.4 - Roof requirements",
+            "requirement": "Acceptable roofing materials include architectural shingles (30-year minimum), concrete/clay tile, slate, or standing seam metal",
+            "note": "Minimum roof slope 6:12, all roof penetrations must be painted to match roof color"
+          }
+        },
+        {
+          "id": "decking_flooring_materials",
+          "label": "Decking/Flooring Materials",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Material: Composite decking (Trex Transcend)\nColor: Spiced Rum\nFasteners: Hidden fastening system\nSupport: 16-inch joist spacing",
+          "description": "Specify decking, flooring, or surface materials with brands and installation details"
+        },
+        {
+          "id": "railing_systems",
+          "label": "Railing and Safety Systems",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Railing height: 36 inches\nMaterial: Aluminum with glass panels\nGates: Self-closing hinges for pool safety\nCode compliance: Meets 4-inch sphere rule",
+          "description": "Describe railings, safety features, and code compliance requirements"
+        },
+        {
+          "id": "exterior_finishes",
+          "label": "Exterior Finishes and Colors",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Siding: Cedar shake to match house\nStain: Sherwin Williams Semi-Transparent #456\nTrim: White painted trim to match house trim\nAccents: Natural stone veneer base",
+          "description": "Describe all exterior finishes, colors, and how they coordinate with existing structures",
+          "relevantBylaws": {
+            "reference": "Section 6.4.8 - Exterior Materials and Finishes",
+            "requirement": "All exterior finishes and color alterations must be reviewed and approved by ARB prior to installation",
+            "quote": "The palette selected must blend and harmonize with surrounding structures"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Site Planning and Location",
+      "relevantBylaws": {
+        "reference": "Section 6.2.4 - Setback requirements and Section 2.3 - Site Plan requirements",
+        "requirement": "Must comply with minimum setbacks and provide accurate site plan showing all property lines and dimensions",
+        "note": "Setback requirements vary by lot type and structure location"
+      },
+      "fields": [
+        {
+          "id": "structure_location_details",
+          "label": "Detailed Structure Location",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Located in rear yard, 15 feet from house, 25 feet from rear property line, accessible from kitchen sliding door...",
+          "description": "Provide specific location details including distances from house, property lines, and access points"
+        },
+        {
+          "id": "setback_measurements",
+          "label": "Setback Measurements",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Front setback: N/A (rear yard location)\nSide setbacks: 12 feet left, 8 feet right\nRear setback: 25 feet\nHouse distance: 15 feet",
+          "description": "Provide exact measurements from structure to all property lines and existing buildings",
+          "relevantBylaws": {
+            "reference": "Section 6.2.4 and approved St. Johns County engineering plans",
+            "requirement": "Must comply with all minimum setbacks noted on approved engineering plans and Southaven PUD Zoning Ordinance",
+            "note": "Minimum front setback generally 20 feet for conventional homes, varies by lot type"
+          }
+        },
+        {
+          "id": "lot_coverage_impact",
+          "label": "Lot Coverage Impact",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Structure adds 192 sq ft to lot coverage\nCurrent coverage: 25%\nNew total coverage: 27%\nMaximum allowed: 35%",
+          "description": "Calculate how the structure affects total lot coverage percentage",
+          "relevantBylaws": {
+            "reference": "Southaven PUD Zoning Ordinance requirements",
+            "requirement": "Must comply with maximum lot coverage limits as specified in zoning ordinance",
+            "note": "ARB may require larger setbacks on certain lots"
+          }
+        },
+        {
+          "id": "height_restrictions",
+          "label": "Height Restriction Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Structure complies with all height restrictions",
+            "Structure requires height variance",
+            "Height restrictions under review",
+            "Unsure of height requirements"
+          ],
+          "description": "Does the structure comply with local and HOA height restrictions?",
+          "relevantBylaws": {
+            "reference": "Section 6.2.1 - Maximum Building Height",
+            "requirement": "Maximum building height for all structures is 35 feet measured from lowest point of finish grade",
+            "note": "No structure shall exceed three (3) stories including attic rooms"
+          }
+        },
+        {
+          "id": "access_circulation",
+          "label": "Access and Circulation",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Primary access from house through sliding door, secondary access via garden path, emergency egress via side yard...",
+          "description": "Describe how people will access the structure and emergency egress routes"
+        },
+        {
+          "id": "easement_considerations",
+          "label": "Easement Considerations",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No easements affect structure location",
+            "Structure avoids all easements",
+            "Structure requires easement approval",
+            "Drainage easement considerations",
+            "FPL/utility easement considerations"
+          ],
+          "description": "Does the structure location consider all property easements?",
+          "relevantBylaws": {
+            "reference": "Section 4.7 - Easements",
+            "requirement": "No buildings or walls shall encroach upon an easement. ARB approval required for any improvements within easements",
+            "note": "Replacement of any improvements within easements is responsibility of property owner"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Utilities and Infrastructure",
+      "relevantBylaws": {
+        "reference": "Section 4.2.3 - Construction Activities and Section 4.4 - Site Improvements",
+        "requirement": "Must coordinate with existing utilities and call for utility locates to avoid damage",
+        "note": "Owner/Builder responsible for any damage to existing utilities"
+      },
+      "fields": [
+        {
+          "id": "electrical_requirements",
+          "label": "Electrical Requirements",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No electrical needed",
+            "Lighting only",
+            "Lighting and outlets",
+            "Full electrical service",
+            "Ceiling fans and lighting",
+            "HVAC electrical requirements",
+            "Pool/spa electrical requirements"
+          ],
+          "description": "What electrical work is needed for this structure?"
+        },
+        {
+          "id": "electrical_details",
+          "label": "Electrical Installation Details",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "New 20-amp circuit from main panel, GFCI outlets, LED recessed lighting, ceiling fan outlet...",
+          "description": "Provide details about electrical installation including circuits, outlets, and lighting"
+        },
+        {
+          "id": "plumbing_requirements",
+          "label": "Plumbing Requirements",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No plumbing needed",
+            "Water supply only",
+            "Water and drainage",
+            "Full plumbing with waste lines",
+            "Outdoor kitchen plumbing"
+          ],
+          "description": "Does the structure require any plumbing connections?"
+        },
+        {
+          "id": "plumbing_details",
+          "label": "Plumbing Installation Details",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Hot and cold water lines for outdoor kitchen, floor drain, gas line for grill...",
+          "description": "Describe any plumbing connections, fixtures, or special requirements"
+        },
+        {
+          "id": "utility_line_conflicts",
+          "label": "Underground Utility Conflicts",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No utilities in construction area",
+            "Utilities located and marked (811 called)",
+            "Will call 811 before construction",
+            "Known utility conflicts to work around",
+            "Utility relocation required"
+          ],
+          "description": "Have underground utilities been located for safe excavation?",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3.l - Maintain Existing Utilities",
+            "requirement": "Owner/Builder responsible for ensuring no disruption to existing utility systems and must call for utility locates",
+            "note": "Cost for repairs to damage to existing utilities shall be paid by Owner/Builder that caused damage"
+          }
+        },
+        {
+          "id": "irrigation_considerations",
+          "label": "Irrigation System Considerations",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No impact on existing irrigation",
+            "Minor irrigation adjustments needed",
+            "Irrigation system relocation required",
+            "New irrigation zones needed",
+            "Will coordinate with common area irrigation"
+          ],
+          "description": "How does construction affect existing irrigation systems?",
+          "relevantBylaws": {
+            "reference": "Section 4.4.c - Irrigation sleeves required under driveways",
+            "requirement": "Must install irrigation sleeves under any new driveways and coordinate with common area irrigation",
+            "note": "Responsible for any damage to common area irrigation during construction"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Environmental and Site Conditions",
+      "relevantBylaws": {
+        "reference": "Section 4.6 - Earthwork and Drainage and Section 5.2.3 - Conservation Lots",
+        "requirement": "Must provide positive drainage and protect conservation areas and existing vegetation",
+        "note": "No disturbance allowed in conservation areas; silt fencing required during construction"
+      },
+      "fields": [
+        {
+          "id": "drainage_management",
+          "label": "Drainage and Water Management",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Structure elevated 6 inches above grade, roof drainage directed to rain garden, permeable surfaces used...",
+          "description": "How will the structure manage rainwater and avoid drainage problems?",
+          "relevantBylaws": {
+            "reference": "Section 4.6.b - Positive drainage required",
+            "requirement": "Positive drainage must be provided and drainage cannot be diverted or directed onto adjacent lots",
+            "note": "Downspouts must include subsurface drain pipe or splash blocks to convey water away from foundation"
+          }
+        },
+        {
+          "id": "soil_conditions",
+          "label": "Soil and Site Conditions",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Normal soil conditions",
+            "Sandy soil requiring special footings",
+            "Clay soil with drainage concerns",
+            "Rocky soil requiring special equipment",
+            "Slope/grade challenges",
+            "Wet/marshy conditions",
+            "Fill dirt or unstable soil"
+          ],
+          "description": "What are the soil and site conditions for construction?"
+        },
+        {
+          "id": "tree_vegetation_impact",
+          "label": "Tree and Vegetation Impact",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "One small tree removal required, existing shrubs relocated, 20-foot oak protected with barrier during construction...",
+          "description": "Describe impact on existing trees and vegetation, including protection measures",
+          "relevantBylaws": {
+            "reference": "Section 4.5 - Existing Vegetation and Tree Protection",
+            "requirement": "Protected trees must be identified, located, and properly protected with silt barriers before site work",
+            "note": "No disturbance permitted within drip line of protected tree species"
+          }
+        },
+        {
+          "id": "conservation_area_impact",
+          "label": "Conservation Area Considerations",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No conservation areas on property",
+            "Conservation areas identified and protected",
+            "Structure maintains required buffers",
+            "Silt fencing installed per requirements",
+            "Unsure of conservation area locations"
+          ],
+          "description": "Does your lot adjoin conservation lands or wetlands?",
+          "relevantBylaws": {
+            "reference": "Section 5.2.3 - Conservation Lots",
+            "requirement": "No disturbance of any kind in conservation lands; continuous silt fence required along conservation interface",
+            "note": "Conservation easement granted to ACOE and SJRWMD - any disturbance requires immediate restoration at owner expense"
+          }
+        },
+        {
+          "id": "environmental_considerations",
+          "label": "Environmental Considerations",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Sustainable/recycled materials used",
+            "Energy-efficient lighting/features",
+            "Native landscaping integration",
+            "Wildlife habitat considerations",
+            "Water conservation features",
+            "Minimal environmental impact design"
+          ],
+          "description": "Environmental features incorporated into the structure design"
+        }
+      ]
+    },
+    {
+      "title": "Professional Services and Timeline",
+      "relevantBylaws": {
+        "reference": "Section 4.2.1 - Construction Hours and Section 4.2.3 - Construction Activities",
+        "requirement": "Construction hours must comply with St. Johns County regulations; ARB reserves right to limit weekend/holiday hours",
+        "note": "Clean construction site must be maintained at all times"
+      },
+      "fields": [
+        {
+          "id": "design_professional",
+          "label": "Design Professional",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Architect designed",
+            "Structural engineer designed",
+            "Contractor designed",
+            "Homeowner designed",
+            "Pre-fabricated/kit structure"
+          ],
+          "description": "Who designed the structure?",
+          "relevantBylaws": {
+            "reference": "Section 6.3.3 - Prefabricated outbuildings prohibited",
+            "requirement": "Prefabricated outbuildings are not permitted at Markland",
+            "note": "All structures must be custom designed consistent with main house style"
+          }
+        },
+        {
+          "id": "design_professional_info",
+          "label": "Design Professional Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "John Smith Architecture, License #FL-AA12345",
+          "description": "Name and license of design professional (if applicable)"
+        },
+        {
+          "id": "construction_method",
+          "label": "Construction Method",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Licensed general contractor",
+            "Specialized structure contractor",
+            "Homeowner self-construction",
+            "Contractor with homeowner assistance",
+            "Pre-fabricated installation crew"
+          ],
+          "description": "Who will construct the structure?"
+        },
+        {
+          "id": "contractor_information",
+          "label": "Contractor Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "ABC Construction LLC - License #FL-CCC123456",
+          "description": "Name and license of construction contractor (if using professional)"
+        },
+        {
+          "id": "contractor_insurance",
+          "label": "Contractor Insurance Coverage",
+          "type": "text",
+          "required": false,
+          "placeholder": "General liability: $1M, Workers comp: $500K, Bonded: $100K",
+          "description": "Contractor insurance and bonding information"
+        },
+        {
+          "id": "construction_start_date",
+          "label": "Construction Start Date",
+          "type": "date",
+          "required": true,
+          "description": "When will construction begin?"
+        },
+        {
+          "id": "construction_duration",
+          "label": "Construction Duration",
+          "type": "select",
+          "required": true,
+          "options": [
+            "1-2 days",
+            "3-5 days",
+            "1 week",
+            "2 weeks",
+            "3-4 weeks",
+            "1-2 months",
+            "Over 2 months"
+          ],
+          "description": "How long will construction take?"
+        },
+        {
+          "id": "work_schedule",
+          "label": "Construction Work Schedule",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Monday-Friday 8:00 AM - 5:00 PM, Saturday 9:00 AM - 3:00 PM, No Sunday work, No work during HOA events",
+          "description": "Specify days and hours when construction work will occur",
+          "relevantBylaws": {
+            "reference": "Section 4.2.1 - Construction Hours",
+            "requirement": "Construction hours shall generally comply with St. Johns County regulations",
+            "note": "Developer and Association reserve right to limit construction hours on weekends and holidays as residents occupy community"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Permits and Code Compliance",
+      "relevantBylaws": {
+        "reference": "Section 1 - Document Purpose and Section 4.1 - Responsibility for Compliance",
+        "requirement": "All construction must conform to Markland Declaration and all applicable governmental codes, ordinances, regulations, permits and laws",
+        "note": "Property owner ultimately responsible for ensuring compliance with all requirements"
+      },
+      "fields": [
+        {
+          "id": "building_permit_required",
+          "label": "Building Permit Requirements",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "No permit required per local code",
+            "Permit required - will apply after HOA approval",
+            "Permit application submitted",
+            "Permit approved and issued",
+            "Multiple permits required"
+          ],
+          "description": "What is the building permit status for this structure?"
+        },
+        {
+          "id": "permit_details",
+          "label": "Permit Details and Numbers",
+          "type": "text",
+          "required": false,
+          "placeholder": "Building permit #BP2024-1234, Electrical permit #EP2024-5678",
+          "description": "Provide permit numbers if permits have been obtained"
+        },
+        {
+          "id": "code_compliance_items",
+          "label": "Building Code Compliance",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Structural load calculations completed",
+            "Wind load requirements met",
+            "Seismic requirements addressed",
+            "Fire safety clearances maintained",
+            "Accessibility requirements considered",
+            "Energy code compliance (if applicable)"
+          ],
+          "description": "Check all building code requirements that apply to this structure"
+        },
+        {
+          "id": "special_inspections",
+          "label": "Special Inspections Required",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Foundation inspection",
+            "Framing inspection",
+            "Electrical inspection",
+            "Plumbing inspection",
+            "Final inspection",
+            "Structural engineer inspection"
+          ],
+          "description": "Check any special inspections required during construction"
+        },
+        {
+          "id": "arb_application_status",
+          "label": "ARB Application Status",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Application not yet submitted",
+            "Application in preparation",
+            "Application submitted - awaiting review",
+            "Additional information requested by ARB",
+            "Application approved",
+            "Application requires modifications"
+          ],
+          "description": "What is the current status of your ARB application?",
+          "relevantBylaws": {
+            "reference": "Section 2 - Application Review Process",
+            "requirement": "No construction of any kind shall commence until applicants receive their final approval",
+            "note": "All required submittal documents must be complete before ARB review"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Community Integration and Impact",
+      "relevantBylaws": {
+        "reference": "Section 1 - Document Purpose and Section 6.1 - Architectural Character",
+        "requirement": "ARB evaluates each application for total effect and overall aesthetic impact; must maintain architectural character of community",
+        "note": "Approval of one application does not create obligation to approve similar applications"
+      },
+      "fields": [
+        {
+          "id": "hoa_guideline_compliance",
+          "label": "HOA Architectural Guidelines Compliance",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Structure fully complies with all guidelines",
+            "Structure mostly complies with minor variations",
+            "Requesting approval for specific variations",
+            "Major deviations requiring special consideration",
+            "Unsure of specific guideline requirements"
+          ],
+          "description": "How does the structure align with community architectural guidelines?",
+          "relevantBylaws": {
+            "reference": "Section 1 - Document Purpose",
+            "requirement": "ARB may waive specific provisions if overall aesthetic impact is acceptable, but may also deny applications that meet criteria if aesthetic impact is unacceptable",
+            "note": "Matters of judgment and taste cannot be reduced to simple measurable criteria"
+          }
+        },
+        {
+          "id": "architectural_harmony",
+          "label": "Architectural Harmony with Existing Home",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Structure materials and colors match house exterior, roofline complements main house, design maintains consistent architectural theme...",
+          "description": "Explain how the structure complements your home's existing architecture",
+          "relevantBylaws": {
+            "reference": "Section 6.2.3.c - All exterior elevations consistently designed",
+            "requirement": "All exterior elevations of each residence shall be consistently designed and implemented",
+            "note": "Design elements used on front elevation shall be incorporated on all elevations"
+          }
+        },
+        {
+          "id": "neighborhood_compatibility",
+          "label": "Neighborhood Visual Compatibility",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Structure size and style consistent with neighborhood character, maintains open feel, enhances property appearance...",
+          "description": "How does the structure fit with the overall neighborhood character?",
+          "relevantBylaws": {
+            "reference": "Section 6.4.8.e - Palette must blend and harmonize with surrounding structures",
+            "requirement": "The palette selected must blend and harmonize with surrounding structures",
+            "note": "Colors in the range of pink, purple and black will not be approved on exterior of residence"
+          }
+        },
+        {
+          "id": "neighbor_impact_assessment",
+          "label": "Neighbor Impact Assessment",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Structure does not block neighbor views, construction noise minimized, no privacy impacts, maintains property line setbacks...",
+          "description": "Assess potential impacts on neighboring properties including views, privacy, and noise"
+        },
+        {
+          "id": "neighbor_communication",
+          "label": "Neighbor Communication",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "All adjacent neighbors informed and supportive",
+            "Neighbors informed with generally positive response",
+            "Neighbors informed with some concerns addressed",
+            "Will inform neighbors before construction",
+            "No adjacent neighbors affected"
+          ],
+          "description": "Have you communicated with neighbors about the structure?"
+        }
+      ]
+    },
+    {
+      "title": "Safety and Long-term Considerations",
+      "fields": [
+        {
+          "id": "safety_features",
+          "label": "Safety Features and Considerations",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Proper railing heights and spacing",
+            "Slip-resistant surfaces",
+            "Adequate lighting for night use",
+            "Emergency egress routes",
+            "Fire-resistant materials used",
+            "Child safety features (if applicable)"
+          ],
+          "description": "Safety features incorporated into the structure design"
+        },
+        {
+          "id": "maintenance_plan",
+          "label": "Long-term Maintenance Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Annual: cleaning and inspection, Bi-annual: staining/sealing, Every 5 years: structural inspection, As needed: hardware tightening...",
+          "description": "Comprehensive plan for ongoing structure maintenance"
+        },
+        {
+          "id": "insurance_considerations",
+          "label": "Insurance and Warranty Considerations",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Homeowner's insurance updated to include structure, contractor provides 1-year warranty on workmanship...",
+          "description": "Insurance coverage and warranty information for the structure"
+        },
+        {
+          "id": "future_expansion_plans",
+          "label": "Future Expansion Possibilities",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Structure designed to accommodate future screen enclosure, electrical planned for future outdoor kitchen addition...",
+          "description": "How does the current design accommodate potential future modifications?"
+        }
+      ]
+    }
+  ],
+  "required_documents": [
+    "Completed Design Review Application Form (provided by ARB)",
+    "Refundable Performance Deposit (amount specified on application form)",
+    "Site plan with accurate lot dimensions, north arrow, and scale (1\"=10' or 1\"=20')",
+    "Accurate street frontage information including street address and lot number",
+    "Property lines, easement lines, setback lines, and structure location",
+    "Architectural plans showing all exterior elevations and materials",
+    "Colors and materials samples (digital samples acceptable)",
+    "Landscape plan if structure impacts landscaping",
+    "Foundation plan and structural specifications",
+    "Building permits and governmental approvals",
+    "Contractor license and insurance certificates (if using contractor)",
+    "Product warranties and installation instructions"
+  ],
+  "complianceNotes": {
+    "criticalReminders": [
+      "NO CONSTRUCTION may commence until final ARB approval is received",
+      "Refundable Performance Deposit required - amount posted on application form",
+      "All structures must be consistent with main house architectural style",
+      "Prefabricated outbuildings are PROHIBITED at Markland",
+      "Maximum building height is 35 feet measured from lowest point of finish grade",
+      "All exterior finishes and colors must be ARB approved prior to installation",
+      "Must comply with all setback requirements which vary by lot type",
+      "Silt fencing required during construction adjacent to conservation areas",
+      "Call 811 for utility locates before any excavation",
+      "Construction hours subject to St. Johns County regulations and ARB limitations"
+    ],
+    "commonViolations": [
+      "Starting construction before receiving final ARB approval",
+      "Using prefabricated structures or buildings",
+      "Failing to match architectural style of main house",
+      "Incorrect setback measurements or easement encroachments", 
+      "Not obtaining required building permits before construction",
+      "Damaging existing utilities or common area improvements",
+      "Inadequate drainage planning resulting in water runoff to adjacent lots",
+      "Failing to protect existing trees and vegetation during construction",
+      "Not maintaining required silt fencing and erosion controls",
+      "Exceeding allowable lot coverage percentages"
+    ],
+    "specialConsiderations": {
+      "lotTypeRequirements": "Different lot types (Conventional, Traditional Type 1 & 2, Lakefront, etc.) have specific requirements for setbacks, design standards, and approval processes",
+      "conservationAreas": "Lots adjacent to conservation areas require special protection measures including continuous silt fencing and no disturbance in conservation lands",
+      "performanceDeposit": "Deposit is refundable only after successful completion of all work and compliance inspection by ARB",
+      "arbDiscretion": "ARB has sole discretion to approve or deny applications based on overall aesthetic impact, even if individual criteria are met"
+    }
+  },
+  "scoring_weights": {
+    "structure_type": 8,
+    "structure_dimensions": 8,
+    "structure_style": 10,
+    "lot_type_classification": 12,
+    "foundation_system": 10,
+    "framing_materials": 8,
+    "exterior_finishes": 12,
+    "structure_location_details": 12,
+    "setback_measurements": 15,
+    "lot_coverage_impact": 10,
+    "height_restrictions": 10,
+    "easement_considerations": 12,
+    "electrical_requirements": 6,
+    "utility_line_conflicts": 12,
+    "irrigation_considerations": 8,
+    "drainage_management": 12,
+    "soil_conditions": 8,
+    "tree_vegetation_impact": 10,
+    "conservation_area_impact": 10,
+    "design_professional": 8,
+    "construction_method": 6,
+    "construction_start_date": 5,
+    "work_schedule": 8,
+    "building_permit_required": 15,
+    "code_compliance_items": 12,
+    "arb_application_status": 20,
+    "hoa_guideline_compliance": 15,
+    "architectural_harmony": 12,
+    "neighborhood_compatibility": 10,
+    "neighbor_impact_assessment": 12,
+    "neighbor_communication": 10,
+    "safety_features": 10,
+    "maintenance_plan": 8
+  }
+}

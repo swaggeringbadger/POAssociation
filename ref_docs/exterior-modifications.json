@@ -1,0 +1,512 @@
+{
+  "title": "Exterior Modifications Additional Information",
+  "description": "Please provide detailed information about your exterior modification project to ensure Markland POA compliance and community standards",
+  "relevantBylaws": {
+    "primary": {
+      "section": "Section 6 Architectural Standards",
+      "document": "Design Standards and Guidelines (2021)",
+      "summary": "Comprehensive architectural requirements covering exterior materials, colors, design elements, and approval processes. All exterior modifications must maintain architectural character relevant to climate, history and culture of the area.",
+      "keyRequirements": [
+        "All exterior finishes and color alterations must be reviewed and approved by ARB prior to installation",
+        "Colors must be relevant to style and region - vibrant, highly contrasting colors shall be avoided",
+        "Minimum two-color scheme required for body and trim",
+        "All horizontal bands and accents must wrap around corners",
+        "Design consistency required for all exterior elevations to avoid 'stage set' architecture"
+      ],
+      "quote": "All exterior finishes and all exterior color alterations must be reviewed and approved by ARB prior to installation... The palette selected must blend and harmonize with surrounding structures."
+    },
+    "additionalReferences": [
+      {
+        "section": "Section 2.1-2.6 Application Review Process",
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "Required documentation and approval process for all exterior modifications, with refundable performance deposit requirements",
+        "keyProvisions": [
+          "Completed Design Review Application Form required",
+          "Refundable Performance Deposit required (payable to Markland POA)",
+          "Architectural plans must depict all exterior elevations with materials and treatments",
+          "Colors and materials samples required with digital samples and color names"
+        ]
+      },
+      {
+        "section": "Section 6.4.8 Exterior Materials and Finishes",
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "Specific requirements for exterior wall finishes, color schemes, and material consistency around the home",
+        "keyProvisions": [
+          "Acceptable materials: stucco, stone, tabby natural shell, brick, wood siding, or manufactured siding (Hardi-Plank type)",
+          "Aluminum or vinyl siding prohibited (except fascias and soffits)",
+          "Colors in range of pink, purple and black will not be approved",
+          "Dominant front elevation materials must wrap around all four sides"
+        ]
+      },
+      {
+        "section": "Section 6.4 Exterior Architectural Design Elements", 
+        "document": "Design Standards and Guidelines (2021)",
+        "summary": "Detailed requirements for doors, windows, shutters, roofing, garage doors, gutters, and other exterior elements",
+        "keyProvisions": [
+          "Entry doors must be stained/painted wood, insulated steel, or fiberglass with glass fenestration",
+          "All front-facing windows must incorporate mullion patterns consistent with architectural style",
+          "Shutters must be appropriately sized and include proper hardware",
+          "All roof penetrations must be painted to match roof or adjacent wall color"
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "title": "Project Scope and Materials",
+      "fields": [
+        {
+          "id": "modification_type",
+          "label": "Primary Type of Modification",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Exterior Paint/Stain Color Change",
+            "Siding/Cladding Material Change",
+            "Window Replacement/Addition",
+            "Door Replacement/Addition", 
+            "Roofing Material/Color Change",
+            "Trim/Fascia/Soffit Changes",
+            "Shutters/Awnings Installation",
+            "Exterior Lighting Changes",
+            "Garage Door Replacement",
+            "Chimney/Fireplace Exterior Work",
+            "Other Exterior Modification"
+          ],
+          "description": "Select the primary type of exterior modification - ALL require ARB approval",
+          "relevantBylaws": {
+            "reference": "Section 6.4 Exterior Architectural Design Elements & Section 6.4.8 Exterior Materials and Finishes",
+            "requirement": "All exterior modifications require ARB review and approval prior to installation",
+            "keyRestrictions": [
+              "Paint colors must blend and harmonize with surrounding structures",
+              "Materials must be consistent with architectural style",
+              "Aluminum/vinyl siding prohibited (except fascias/soffits)",
+              "Pink, purple, and black colors will not be approved"
+            ]
+          }
+        },
+        {
+          "id": "secondary_modifications",
+          "label": "Additional Modifications (if any)",
+          "type": "checkbox",
+          "required": false,
+          "options": [
+            "Trim color changes",
+            "Hardware updates",
+            "Outdoor lighting",
+            "Landscaping modifications",
+            "Driveway/walkway changes"
+          ],
+          "description": "Check any additional work - each may require separate ARB approval"
+        },
+        {
+          "id": "paint_colors",
+          "label": "Paint Colors and Brand",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Main Color: [Brand] [Color Name] ([Color Code])\nTrim Color: [Brand] [Color Name] ([Color Code])\nAccent Color (if applicable): [Brand] [Color Name] ([Color Code])",
+          "description": "List specific paint colors with manufacturer names and color codes - digital samples required for ARB review",
+          "relevantBylaws": {
+            "reference": "Section 6.4.8D & 2.5C - Color requirements and submission process",
+            "requirements": [
+              "Colors must blend and harmonize with surrounding structures",
+              "Pink, purple, and black will not be approved",
+              "Minimum two-color scheme required (body and trim)",
+              "Maximum two colors on main body (excluding trim, shutters, doors)",
+              "Digital samples required with color names for ARB review"
+            ],
+            "quote": "Colors in the range of pink, purple and black will not be approved on the exterior of a residence. At a minimum a two color scheme must be used for the body and trim."
+          }
+        },
+        {
+          "id": "material_specifications",
+          "label": "Material Specifications", 
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Describe all materials with specific details: siding type/brand, roofing material, window specifications, door materials, etc. Include manufacturer names and model numbers.",
+          "description": "Include brand names, model numbers, colors, and finish specifications - must comply with approved materials list",
+          "relevantBylaws": {
+            "reference": "Section 6.4.8B - Acceptable exterior materials",
+            "approvedMaterials": [
+              "Stucco",
+              "Stone", 
+              "Tabby natural shell",
+              "Brick",
+              "Wood siding",
+              "Manufactured siding (Hardi-Plank type only)"
+            ],
+            "prohibited": "Aluminum or vinyl siding prohibited (fascias and soffits may be painted metal or vinyl)"
+          }
+        },
+        {
+          "id": "area_coverage",
+          "label": "Areas Being Modified",
+          "type": "checkbox",
+          "required": true,
+          "options": [
+            "Front facade",
+            "Side facades", 
+            "Rear facade",
+            "Garage/carport",
+            "Entry/porch area",
+            "Entire house exterior"
+          ],
+          "description": "Select all areas - dominant materials must wrap around all four sides",
+          "relevantBylaws": {
+            "reference": "Section 6.4.8B & 6.4.8F - Material consistency requirements",
+            "requirement": "Dominant front elevation materials on the front of the home shall generally wrap around all four sides of the home consistent with the architectural character",
+            "note": "All horizontal bands and stone or brick accents on front must wrap around corners and extend minimum 2 feet on sides"
+          }
+        },
+        {
+          "id": "square_footage_affected",
+          "label": "Approximate Square Footage of Work Area",
+          "type": "number",
+          "required": false,
+          "placeholder": "Enter square feet",
+          "description": "Estimate the total exterior surface area being modified"
+        }
+      ]
+    },
+    {
+      "title": "Design and Aesthetic Considerations",
+      "fields": [
+        {
+          "id": "architectural_style",
+          "label": "Your Home's Architectural Style",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Greek Revival",
+            "Coastal Cottage", 
+            "Spanish Colonial",
+            "Mediterranean",
+            "Craftsman",
+            "Modern Formal Farmhouse",
+            "Other Traditional Style",
+            "Contemporary/Modern",
+            "Unsure"
+          ],
+          "description": "Select your home's style - modifications must be consistent with this style",
+          "relevantBylaws": {
+            "reference": "Section 6.1 Architectural Character",
+            "preferredStyles": [
+              "Greek Revival",
+              "Coastal Cottage", 
+              "Spanish Colonial",
+              "Mediterranean",
+              "Craftsman",
+              "Modern Formal Farmhouse"
+            ],
+            "requirement": "Architecture must be relevant to climate, history and culture of area. No mixing of various architectural styles within one home.",
+            "quote": "The Developer envisions a complementary yet diverse architectural palette for Markland. The Seller's preferred architectural styles are Greek Revival, Coastal Cottage, Spanish Colonial, Mediterranean, Craftsman and Modern Formal Farmhouse."
+          }
+        },
+        {
+          "id": "neighborhood_harmony",
+          "label": "Neighborhood Compatibility Statement",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Explain how your modifications will complement the existing neighborhood aesthetic and surrounding homes...",
+          "description": "Critical requirement - ARB evaluates total aesthetic effect on community",
+          "relevantBylaws": {
+            "reference": "Section 1 Document Purpose",
+            "requirement": "ARB evaluates each application for total effect - may deny approval if overall aesthetic impact is unacceptable even if individual criteria are met",
+            "quote": "It is possible therefore, that a proposed improvement might meet the individual criteria delineated in this document and still not receive approval if, in the sole judgment of the Developer or ARB, its overall aesthetic impact is unacceptable."
+          }
+        },
+        {
+          "id": "corner_lot_considerations",
+          "label": "Corner Lot Special Requirements",
+          "type": "radio",
+          "required": true,
+          "options": ["Yes - this is a corner lot", "No - not a corner lot"],
+          "description": "Corner lots have additional design requirements for street-facing sides",
+          "relevantBylaws": {
+            "reference": "Section 6.3.5 Houses on Corner Lots & Section 6.4.12A",
+            "requirement": "Side facades facing streets must be designed to adequately address the street with proper proportions and detail. All windows on street-facing sides must incorporate mullion patterns.",
+            "quote": "Side facades, when facing a street, shall be designed to adequately address the street with proper proportions and adequate level of detail."
+          }
+        },
+        {
+          "id": "historical_significance",
+          "label": "Is your home in a historic district or have historical significance?",
+          "type": "radio",
+          "required": true,
+          "options": ["Yes", "No", "Unsure"],
+          "description": "Historic properties may have additional requirements beyond Markland guidelines"
+        },
+        {
+          "id": "previous_modifications",
+          "label": "Previous Exterior Modifications",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Describe any previous exterior changes made to the property and their ARB approval status...",
+          "description": "Include dates, types of modifications, and whether they received proper ARB approval"
+        }
+      ]
+    },
+    {
+      "title": "Professional Services and Timeline",
+      "fields": [
+        {
+          "id": "work_performed_by",
+          "label": "Work Will Be Performed By",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Licensed Professional Contractor",
+            "Homeowner (DIY)",
+            "Combination of Professional and DIY"
+          ],
+          "description": "All work must meet professional standards regardless of who performs it"
+        },
+        {
+          "id": "contractor_company",
+          "label": "Contractor Company Name",
+          "type": "text",
+          "required": false,
+          "placeholder": "ABC Home Improvements LLC",
+          "description": "Required if using professional contractor"
+        },
+        {
+          "id": "contractor_license",
+          "label": "Contractor License Number",
+          "type": "text",
+          "required": false,
+          "placeholder": "FL-CCC1234567",
+          "description": "State contractor license number (required if using contractor)"
+        },
+        {
+          "id": "contractor_insurance",
+          "label": "Contractor Insurance Information",
+          "type": "text",
+          "required": false,
+          "placeholder": "Policy number and carrier name",
+          "description": "Liability insurance details (required if using contractor)"
+        },
+        {
+          "id": "project_start_date",
+          "label": "Planned Start Date",
+          "type": "date",
+          "required": true,
+          "description": "Work cannot begin until ARB approval is received",
+          "relevantBylaws": {
+            "reference": "Section 2.1 Application Review Process", 
+            "requirement": "No construction of any kind shall commence until applicants receive their final approval",
+            "quote": "No construction of any kind shall commence until applicants receive their final approval."
+          }
+        },
+        {
+          "id": "project_completion_date",
+          "label": "Expected Completion Date",
+          "type": "date", 
+          "required": true,
+          "description": "Must complete work within reasonable timeframe to maintain community standards"
+        },
+        {
+          "id": "work_schedule",
+          "label": "Work Schedule and Hours",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Monday-Friday 8:00 AM - 5:00 PM, Saturday 9:00 AM - 3:00 PM, No Sunday work",
+          "description": "Must comply with St. Johns County regulations and community standards",
+          "relevantBylaws": {
+            "reference": "Section 4.2.1 Construction Hours",
+            "requirement": "Construction hours shall generally comply with St. Johns County regulations and codes. Developer and Association reserve right to limit weekend and holiday hours as residents occupy community."
+          }
+        }
+      ]
+    },
+    {
+      "title": "Permits and Compliance",
+      "fields": [
+        {
+          "id": "building_permits_required",
+          "label": "Are building permits required for this work?",
+          "type": "radio",
+          "required": true,
+          "options": ["Yes - permits obtained", "Yes - will obtain before starting", "No permits required", "Unsure"],
+          "description": "Check with St. Johns County building department if uncertain"
+        },
+        {
+          "id": "permit_numbers",
+          "label": "Building Permit Number(s)",
+          "type": "text",
+          "required": false,
+          "placeholder": "Enter permit numbers if obtained",
+          "description": "Provide permit numbers if already obtained"
+        },
+        {
+          "id": "arb_application_status",
+          "label": "ARB Application Status",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Not yet submitted",
+            "Application in progress", 
+            "Submitted awaiting review",
+            "Approved",
+            "Approved with conditions",
+            "Denied - revising"
+          ],
+          "description": "ARB approval is MANDATORY before any exterior modification work begins",
+          "relevantBylaws": {
+            "reference": "Section 2.1 & Section 6.4.8C - Application and approval requirements",
+            "requirement": "All exterior finishes and all exterior color alterations must be reviewed and approved by ARB prior to installation",
+            "process": "Submit completed Design Review Application Form with refundable performance deposit"
+          }
+        },
+        {
+          "id": "performance_deposit_status",
+          "label": "Performance Deposit Status",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Not yet paid",
+            "Payment ready to submit with application",
+            "Deposit paid",
+            "Deposit amount confirmed"
+          ],
+          "description": "Refundable performance deposit required with application",
+          "relevantBylaws": {
+            "reference": "Section 2.2C & 2.2D - Performance deposit requirements",
+            "details": "Refundable Performance Deposit payable to Markland POA. Deposit refundable at successful completion and compliance with Design Standards. 90-day correction period for non-compliance."
+          }
+        },
+        {
+          "id": "utility_coordination",
+          "label": "Utility Line Considerations",
+          "type": "radio",
+          "required": true,
+          "options": ["No utility lines affected", "Utility lines marked and cleared", "Need utility clearance", "Utility modifications required"],
+          "description": "Consider electrical, cable, phone lines attached to exterior"
+        }
+      ]
+    },
+    {
+      "title": "Impact Assessment",
+      "fields": [
+        {
+          "id": "neighbor_notification",
+          "label": "Neighbor Notification Status",
+          "type": "radio",
+          "required": true,
+          "options": [
+            "Adjacent neighbors informed and supportive",
+            "Adjacent neighbors informed, awaiting feedback",
+            "Will inform neighbors before starting work",
+            "No adjacent neighbors affected"
+          ],
+          "description": "Good neighbor communication recommended for exterior modifications"
+        },
+        {
+          "id": "noise_disruption",
+          "label": "Expected Noise and Disruption Level",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Minimal - hand tools only",
+            "Moderate - power tools during normal hours",
+            "High - heavy equipment/machinery", 
+            "Extensive - structural work with significant noise"
+          ],
+          "description": "Must comply with noise regulations and community standards",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3F - Construction noise requirements",
+            "requirement": "Owner/Builder will make every effort to keep noise to minimum including compliance with St. Johns County ordinances. Noise and music must be controlled at all times."
+          }
+        },
+        {
+          "id": "property_access",
+          "label": "Property Access Requirements",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Describe any special access needs, equipment staging areas, etc.",
+          "description": "All work must remain within property boundaries",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3D - Construction boundaries",
+            "requirement": "All construction activities must be controlled within Owner/Builder's property boundaries. Access on adjacent lots and common areas strictly prohibited."
+          }
+        },
+        {
+          "id": "waste_disposal",
+          "label": "Construction Waste Disposal Plan",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Describe how construction debris and waste materials will be handled and disposed of...",
+          "description": "Must maintain clean construction site at all times",
+          "relevantBylaws": {
+            "reference": "Section 4.2.3A & 4.2.3B - Site cleanliness and waste management",
+            "requirements": [
+              "Maintain clean and orderly construction site at all times",
+              "Empty refuse bins in timely manner",
+              "Clean any debris from neighborhood and community streets",
+              "All trash disposed of off-site in compliance with codes"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "required_documents": [
+    "Completed Design Review Application Form (mandatory)",
+    "Refundable Performance Deposit (amount per application form)",
+    "Color samples and material specifications with manufacturer details",
+    "Digital samples of exterior colors with color names", 
+    "Architectural plans showing all exterior elevations with materials",
+    "Contractor license and insurance certificates (if using contractor)",
+    "Site plan showing modification areas and setbacks",
+    "Building permits (if required by St. Johns County)",
+    "Product cut sheets or technical specifications",
+    "Photos of current exterior condition"
+  ],
+  "scoring_weights": {
+    "modification_type": 10,
+    "material_specifications": 15,
+    "paint_colors": 15,
+    "area_coverage": 8,
+    "architectural_style": 12,
+    "neighborhood_harmony": 20,
+    "corner_lot_considerations": 8,
+    "work_performed_by": 5,
+    "project_start_date": 5,
+    "project_completion_date": 5,
+    "work_schedule": 5,
+    "building_permits_required": 8,
+    "arb_application_status": 25,
+    "performance_deposit_status": 15,
+    "neighbor_notification": 8,
+    "noise_disruption": 5,
+    "waste_disposal": 8
+  },
+  "complianceNotes": {
+    "criticalReminders": [
+      "NO exterior modification work allowed without ARB approval",
+      "ALL exterior color changes require ARB review and approval",
+      "Performance deposit required with application (refundable upon compliance)",
+      "Digital color samples with manufacturer names required for review",
+      "Materials must comply with approved list - vinyl/aluminum siding prohibited",
+      "Colors in pink, purple, and black range will not be approved",
+      "90-day correction period for bringing non-compliant work into conformance"
+    ],
+    "commonViolations": [
+      "Starting work before receiving ARB approval",
+      "Using prohibited materials (vinyl/aluminum siding)",
+      "Using non-approved colors (pink, purple, black, vibrant colors)",
+      "Failing to wrap front facade materials around sides",
+      "Not maintaining architectural style consistency",
+      "Inadequate color harmony with neighborhood",
+      "Missing required performance deposit",
+      "Incomplete application documentation"
+    ],
+    "approvalProcess": [
+      "Submit completed Design Review Application Form",
+      "Pay refundable performance deposit to Markland POA", 
+      "Provide all required documentation and samples",
+      "Wait for ARB review and approval before starting",
+      "Complete work according to approved plans",
+      "Request final inspection for deposit refund"
+    ]
+  }
+}
