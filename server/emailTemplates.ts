@@ -258,6 +258,7 @@ export function applicationSubmittedTemplate(
     title: "Application Received",
     preheader: "Your application has been received and is under review.",
     recipientName,
+    communityName,
     mainContent: `
       <p>We have received your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
@@ -288,6 +289,7 @@ export function applicationApprovedTemplate(
     title: "Application Approved",
     preheader: "Great news! Your application has been approved.",
     recipientName,
+    communityName,
     mainContent: `
       <p>Congratulations! Your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span> has been <span class="accent-text">approved</span>.</p>
       <div class="highlight-box">
@@ -316,6 +318,7 @@ export function applicationRejectedTemplate(
     title: "Application Status Update",
     preheader: "Your application status has been updated.",
     recipientName,
+    communityName,
     mainContent: `
       <p>We have reviewed your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
@@ -345,6 +348,7 @@ export function stepAssignmentTemplate(
     title: "Action Required",
     preheader: "You have been assigned a new application review step.",
     recipientName,
+    communityName,
     mainContent: `
       <p>You have been assigned to review the <span class="accent-text">"${stepTitle}"</span> step for the application <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
@@ -367,12 +371,14 @@ export function commentNotificationTemplate(
   commenterName: string,
   applicationTitle: string,
   comment: string,
-  applicationLink: string
+  applicationLink: string,
+  communityName?: string
 ): string {
   return buildEmailTemplate({
     title: "New Comment Added",
     preheader: `${commenterName} commented on "${applicationTitle}"`,
     recipientName,
+    communityName,
     mainContent: `
       <p><span class="accent-text">${commenterName}</span> has left a comment on <span class="accent-text">"${applicationTitle}"</span>:</p>
       <div class="highlight-box">

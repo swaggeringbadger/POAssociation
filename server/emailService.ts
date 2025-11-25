@@ -112,7 +112,7 @@ export class EmailService {
 
     return this.send({
       to: homeownerEmail,
-      subject: `Application Received: ${applicationTitle}`,
+      subject: `Application Received: ${communityName}`,
       html,
     });
   }

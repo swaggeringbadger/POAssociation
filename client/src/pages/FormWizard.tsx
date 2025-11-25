@@ -206,6 +206,11 @@ export default function FormWizard() {
 
       // Refresh form templates
       await refetchTemplates();
+
+      // If the modal is open for this type, refresh the versions list
+      if (viewFormOpen && viewingType === applicationType) {
+        await refetchVersions();
+      }
     } catch (error: any) {
       toast.dismiss(loadingToast);
       toast.error(error.message || "Failed to generate form", {

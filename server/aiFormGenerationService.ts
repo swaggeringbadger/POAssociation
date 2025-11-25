@@ -104,6 +104,7 @@ CRITICAL REQUIREMENTS:
 2. Include a "relevantBylaws" section with:
    - primary: { section, document, summary, keyRequirements, quote }
    - additionalReferences: array of related bylaw sections
+   - PAY SPECIAL ATTENTION to lot type classifications and requirements
 3. Create "sections" array with appropriate field groups
 4. Each field must have: id, label, type, required, and relevant properties
 5. Extract ACTUAL QUOTES from the design guidelines for the "quote" fields
@@ -113,6 +114,12 @@ CRITICAL REQUIREMENTS:
 6. Include "required_documents" array listing needed documentation
 7. Create "scoring_weights" object mapping field IDs to numerical weights
 8. Add "complianceNotes" with criticalReminders and commonViolations arrays
+9. **LOT TYPE CONSIDERATIONS** - This is CRITICAL:
+   - Communities often have different lot types (corner lots, interior lots, waterfront, golf course, etc.)
+   - Many requirements vary by lot type (setbacks, heights, materials, approval processes)
+   - If lot types are mentioned in guidelines, create form fields to capture lot type
+   - When providing bylaw references, include lot-type-specific requirements when applicable
+   - Example: "Corner lots require 25ft setbacks (Section 2.1), Interior lots require 15ft setbacks (Section 2.2)"
 
 FIELD TYPES AVAILABLE:
 - text: Single-line text input
@@ -141,21 +148,56 @@ DESIGN GUIDELINES:
 ${designGuidelinesContent}
 
 Instructions:
-1. Read through the design guidelines carefully
+1. Read through the design guidelines carefully and identify LOT TYPE classifications
+   - Look for terms like: corner lot, interior lot, waterfront, golf course facing, preserve, cul-de-sac, etc.
+   - Note: Lot types are CRITICAL as requirements often vary significantly by lot type
+
 2. Identify all requirements, restrictions, and approval processes relevant to ${applicationType}
+   - Pay special attention to requirements that differ by lot type
+   - Note setback requirements, height restrictions, material allowances that vary by lot type
+
 3. Extract actual bylaw quotes and section references
    - IMPORTANT: When including quotes, ALWAYS cite the specific location (page, section, article, or paragraph number)
    - Example: "All exterior modifications require ARB approval" (Section 4.2, Page 12)
    - Example: reference: "Design Guidelines Section 3.4 - Color Standards"
    - This helps homeowners find the original source material for verification
+   - When requirements differ by lot type, include ALL lot type variations in the bylaw references
+
 4. Create form fields that collect all required information
+   - If lot types exist in the guidelines, include a field to capture the applicant's lot type
+   - Use appropriate field types (select/radio) to let users choose their lot type
+   - Consider making lot type an early field if requirements depend on it
+
 5. Include relevant bylaw references for each field where applicable
    - Always include the specific section/article/page reference in the "reference" field
+   - CRITICAL: When bylaws vary by lot type, provide detailed breakdown in the relevantBylaws
+   - Example structure for lot-type-specific requirements:
+     {
+       "reference": "Section 4.2 - Setback Requirements",
+       "requirement": "Setback requirements vary by lot type",
+       "requirements": [
+         "Corner lots: 25ft front, 20ft side (Section 4.2.1)",
+         "Interior lots: 20ft front, 10ft side (Section 4.2.2)",
+         "Waterfront lots: 30ft from water, 20ft other sides (Section 4.2.3)"
+       ],
+       "note": "Verify your lot type with the property survey before proceeding"
+     }
+
 6. Organize fields into logical sections
+   - Consider a dedicated "Lot Information" or "Property Information" section if lot types are relevant
+
 7. Create appropriate field types and options based on the guidelines
+   - If lot types are found, populate the options with the specific lot type names from the guidelines
+
 8. Set scoring weights based on field importance
+   - Lot type field should have high weight if requirements vary significantly by type
+
 9. List all required documents mentioned in the guidelines
+   - Include property survey if lot type verification is needed
+
 10. Include compliance notes with critical reminders and common violations
+    - Add reminders about lot-type-specific requirements in criticalReminders
+    - Note common violations related to applying wrong lot type requirements
 
 Generate the complete JSON form configuration now:`;
   }
