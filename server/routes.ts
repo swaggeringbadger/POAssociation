@@ -361,11 +361,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get user's role for this application's tenant
       const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
-      const hasAdminRole = userRoles.some(r => r.role === 'account_admin');
+      const hasPermission = userRoles.some(r => 
+        r.role === 'account_admin' || 
+        r.role === 'management_rep' || 
+        r.role === 'management_manager'
+      );
       
-      // Only account_admin can delete applications
-      if (!hasAdminRole) {
-        return res.status(403).json({ error: "Only account admins can delete applications" });
+      // Only account_admin and management roles can delete applications
+      if (!hasPermission) {
+        return res.status(403).json({ error: "You don't have permission to delete applications" });
       }
       
       await storage.deleteApplication(applicationId);
