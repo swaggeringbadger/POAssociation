@@ -486,11 +486,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user profile
-  app.post("/api/users/:userId/profile", isAuthenticated, async (req, res) => {
+  app.post("/api/users/:userId/profile", isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
       const { firstName, lastName, phoneNumber, email, notificationPreferences } = req.body;
-      const currentUserId = req.session?.userId || req.user?.claims?.sub;
+      const currentUserId = (req as any).session?.userId || (req as any).user?.claims?.sub;
 
       // Only allow users to update their own profile
       if (userId !== currentUserId) {
@@ -1222,13 +1222,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create form template from generated schema
+      const generatedSchemaObj = generation.generatedSchema as any;
       const formTemplate = await storage.createFormTemplate({
         tenantId: generation.tenantId,
         projectType: generation.applicationType,
         version: 1,
-        name: (generation.generatedSchema as any).title || `${generation.applicationType} Form`,
-        description: (generation.generatedSchema as any).description || '',
-        schema: generation.generatedSchema,
+        name: generatedSchemaObj.title || `${generation.applicationType} Form`,
+        description: generatedSchemaObj.description || '',
+        schema: generatedSchemaObj,
         isActive: true,
         createdByUserId: userId,
         activatedByUserId: userId,
