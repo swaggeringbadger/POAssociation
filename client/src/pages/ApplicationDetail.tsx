@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
+import { useEffect } from "react";
 import type { Application } from "@shared/schema";
 
 interface WorkflowData {
@@ -25,6 +27,7 @@ export default function ApplicationDetail() {
   const params = useParams();
   const applicationId = params.id as string;
   const { user } = useAuth();
+  const { setCurrentPageTitle } = useAppStore();
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -35,6 +38,15 @@ export default function ApplicationDetail() {
     },
     enabled: !!applicationId,
   });
+
+  useEffect(() => {
+    if (application?.title) {
+      setCurrentPageTitle(application.title);
+    }
+    return () => {
+      setCurrentPageTitle(null);
+    };
+  }, [application?.title, setCurrentPageTitle]);
 
   const { data: workflow } = useQuery({
     queryKey: [`/api/applications/${applicationId}/workflow`],

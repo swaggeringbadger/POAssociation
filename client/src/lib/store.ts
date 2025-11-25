@@ -8,11 +8,13 @@ interface AppState {
   currentUserRole: string;
   availableRolesForCurrentTenant: string[]; // All roles user has on current tenant
   selectedPropertyFilter: string | null; // null = "All Properties", or tenantId for specific property
+  currentPageTitle: string | null; // Page title for header
   setAvailableTenants: (tenants: Tenant[]) => void;
   setCurrentTenant: (tenant: Tenant) => void;
   setCurrentUserRole: (role: string) => void;
   setAvailableRolesForCurrentTenant: (roles: string[]) => void;
   setSelectedPropertyFilter: (tenantId: string | null) => void;
+  setCurrentPageTitle: (title: string | null) => void;
   // Helper to simulate subdomain navigation
   simulateSubdomainVisit: (subdomain: string) => void;
   // Clear all state (for logout)
@@ -27,12 +29,14 @@ export const useAppStore = create<AppState>()(
       currentUserRole: 'homeowner',
       availableRolesForCurrentTenant: [],
       selectedPropertyFilter: null,
+      currentPageTitle: null,
 
       setAvailableTenants: (tenants) => set({ availableTenants: tenants }),
       setCurrentTenant: (tenant) => set({ currentTenant: tenant }),
       setCurrentUserRole: (role) => set({ currentUserRole: role }),
       setAvailableRolesForCurrentTenant: (roles) => set({ availableRolesForCurrentTenant: roles }),
       setSelectedPropertyFilter: (tenantId) => set({ selectedPropertyFilter: tenantId }),
+      setCurrentPageTitle: (title) => set({ currentPageTitle: title }),
 
       simulateSubdomainVisit: (subdomain) => {
         const tenant = get().availableTenants.find(t => t.subdomain === subdomain);
@@ -50,6 +54,7 @@ export const useAppStore = create<AppState>()(
           currentUserRole: 'homeowner',
           availableRolesForCurrentTenant: [],
           selectedPropertyFilter: null,
+          currentPageTitle: null,
         });
         // Also clear from localStorage
         localStorage.removeItem('poassociation-state');

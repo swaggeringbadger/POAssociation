@@ -36,7 +36,7 @@ import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { currentTenant, currentUserRole, availableTenants, availableRolesForCurrentTenant, selectedPropertyFilter, setCurrentTenant, setCurrentUserRole, setSelectedPropertyFilter, clearState } = useAppStore();
+  const { currentTenant, currentUserRole, availableTenants, availableRolesForCurrentTenant, selectedPropertyFilter, currentPageTitle, setCurrentTenant, setCurrentUserRole, setSelectedPropertyFilter, clearState } = useAppStore();
   const { user: authUser } = useAuth();
   const user = authUser as User | undefined;
   const { isLoading: tenantsLoading } = useUserTenants();
@@ -382,7 +382,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-4">
               <SidebarTrigger />
               <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                {location === '/dashboard' ? 'Dashboard' : 
+                {currentPageTitle ? currentPageTitle :
+                 location === '/dashboard' ? 'Dashboard' : 
                  location.substring(1).charAt(0).toUpperCase() + location.substring(2)}
               </h1>
             </div>
