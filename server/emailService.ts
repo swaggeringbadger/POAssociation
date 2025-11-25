@@ -44,8 +44,8 @@ export class EmailService {
 
     try {
       const recipients = Array.isArray(payload.to) 
-        ? payload.to.map(email => ({ email }))
-        : [{ email: payload.to }];
+        ? payload.to
+        : [payload.to];
 
       const requestBody = {
         api_key: this.apiKey,

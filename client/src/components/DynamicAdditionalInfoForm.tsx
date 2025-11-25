@@ -25,7 +25,13 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface DynamicAdditionalInfoFormProps {
@@ -203,55 +209,82 @@ export function DynamicAdditionalInfoForm({
   };
 
   /**
-   * Render bylaw reference hover card
+   * Render bylaw reference dialog (click to open, works on mobile)
    */
   const renderBylawReference = (bylaws: BylawReference) => {
     return (
-      <HoverCard>
-        <HoverCardTrigger asChild>
+      <Dialog>
+        <DialogTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
+            className="h-8 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
           >
             <Info className="h-3 w-3 mr-1" />
-            Bylaws
+            Relevant Bylaws
           </Button>
-        </HoverCardTrigger>
-        <HoverCardContent className="w-96" align="end">
-          <div className="space-y-3">
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-primary" />
+              Relevant Bylaws & Covenants
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
             {bylaws.reference && (
-              <h4 className="text-sm font-semibold flex items-center text-primary">
-                <BookOpen className="h-3 w-3 mr-2" />
-                {bylaws.reference}
-              </h4>
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Reference</h4>
+                <p className="text-sm">{bylaws.reference}</p>
+              </div>
             )}
             {bylaws.requirement && (
-              <p className="text-xs font-medium">{bylaws.requirement}</p>
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Requirement</h4>
+                <p className="text-sm leading-relaxed">{bylaws.requirement}</p>
+              </div>
             )}
             {bylaws.keyRestrictions && bylaws.keyRestrictions.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-semibold">Key Restrictions:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-xs text-muted-foreground">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Key Restrictions</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
                   {bylaws.keyRestrictions.map((restriction, idx) => (
                     <li key={idx}>{restriction}</li>
                   ))}
                 </ul>
               </div>
             )}
+            {bylaws.approvedMaterials && bylaws.approvedMaterials.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Approved Materials</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.approvedMaterials.map((material, idx) => (
+                    <li key={idx}>{material}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.prohibited && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-destructive">Prohibited</h4>
+                <p className="text-sm">{bylaws.prohibited}</p>
+              </div>
+            )}
             {bylaws.note && (
-              <div className="bg-muted p-2 rounded text-xs text-muted-foreground italic">
-                Note: {bylaws.note}
+              <div className="bg-muted p-3 rounded-lg">
+                <p className="text-sm italic text-muted-foreground">
+                  <span className="font-semibold not-italic">Note:</span> {bylaws.note}
+                </p>
               </div>
             )}
             {bylaws.quote && (
-              <div className="border-l-2 border-primary pl-2 text-xs italic text-muted-foreground">
-                "{bylaws.quote}"
+              <div className="border-l-4 border-primary pl-4 py-2 bg-muted/30">
+                <p className="text-sm italic text-muted-foreground">"{bylaws.quote}"</p>
               </div>
             )}
           </div>
-        </HoverCardContent>
-      </HoverCard>
+        </DialogContent>
+      </Dialog>
     );
   };
 
