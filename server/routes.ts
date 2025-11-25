@@ -349,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/applications/:id", isAuthenticated, async (req: any, res) => {
     try {
       const applicationId = req.params.id;
-      const userId = req.session?.userId || req.user?.claims?.sub;
+      const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
       
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated" });
@@ -429,7 +429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send application submitted email notification
       try {
-        const userId = req.session?.userId || req.user?.claims?.sub;
+        const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
         const user = userId ? await storage.getUser(userId) : null;
         const tenant = await storage.getTenant(req.body.tenantId);
         
