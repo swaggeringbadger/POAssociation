@@ -147,9 +147,46 @@ The JSON must be parseable and match the AdditionalInfoConfig interface exactly.
 DESIGN GUIDELINES:
 ${designGuidelinesContent}
 
-Instructions:
-1. Read through the design guidelines carefully and identify LOT TYPE classifications
-   - Look for terms like: corner lot, interior lot, waterfront, golf course facing, preserve, cul-de-sac, etc.
+CRITICAL LOT TYPE EXTRACTION INSTRUCTIONS:
+When processing these guidelines, identify and extract the following comprehensive lot classification information:
+
+**Lot Type Categories to Extract:**
+1. **Size/Width Classifications**: Extract any lot categorization based on dimensions (e.g., width in feet, square footage tiers, "estate lots," "villa lots")
+
+2. **Physical Location Types**: Identify lots by their position relative to features:
+   - Water features (lakefront, pond-view, waterfront, canal-front)
+   - Streets (corner lots, cul-de-sac, interior, through lots)
+   - Natural areas (conservation-adjacent, preserve-view, greenbelt)
+   - Community amenities (golf course, clubhouse-adjacent, park-adjacent)
+
+3. **Configuration Types**: Extract classifications based on lot shape/access:
+   - Flag/pipe-stem lots
+   - Pie-shaped/wedge lots
+   - Double-frontage lots
+   - Zero lot line
+   - Terminal vista lots
+
+4. **Development Categories**: Identify phase or builder-specific classifications:
+   - Type A/B/C designations
+   - Phase-specific categories
+   - Builder model designations
+
+5. **Special Conditions/Overlays**: Note any additional classifications that modify standard rules:
+   - Architectural control zones
+   - Setback variations
+   - Height restriction areas
+   - View corridors
+
+**Key Phrases to Search For:**
+- "lot type," "lot classification," "lot category"
+- "feet wide," "ft width," "square footage"
+- "corner," "interior," "flag," "cul-de-sac"
+- "lakefront," "waterfront," "conservation," "preserve"
+- "Type [A-Z]," "Phase," "Section"
+
+General Instructions:
+1. Read through the design guidelines carefully and identify ALL LOT TYPE classifications using the categories above
+   - Extract the complete list of all lot types mentioned
    - Note: Lot types are CRITICAL as requirements often vary significantly by lot type
 
 2. Identify all requirements, restrictions, and approval processes relevant to ${applicationType}
@@ -164,9 +201,10 @@ Instructions:
    - When requirements differ by lot type, include ALL lot type variations in the bylaw references
 
 4. Create form fields that collect all required information
-   - If lot types exist in the guidelines, include a field to capture the applicant's lot type
+   - MANDATORY: Include a field to capture the applicant's lot type as a dropdown (select field)
+   - Create the dropdown with ALL lot types found in the guidelines
    - Use appropriate field types (select/radio) to let users choose their lot type
-   - Consider making lot type an early field if requirements depend on it
+   - Make lot type an early field if requirements depend on it
 
 5. Include relevant bylaw references for each field where applicable
    - Always include the specific section/article/page reference in the "reference" field
@@ -184,20 +222,23 @@ Instructions:
      }
 
 6. Organize fields into logical sections
-   - Consider a dedicated "Lot Information" or "Property Information" section if lot types are relevant
+   - Create a dedicated "Lot Information" or "Property Information" section as the first section
+   - Include all extracted lot types in a dropdown field in this section
 
 7. Create appropriate field types and options based on the guidelines
-   - If lot types are found, populate the options with the specific lot type names from the guidelines
+   - Lot type field MUST be a select dropdown with all identified lot types as options
+   - Populate options with the complete list of specific lot type names from the guidelines
 
 8. Set scoring weights based on field importance
-   - Lot type field should have high weight if requirements vary significantly by type
+   - Lot type field should have the highest weight as it determines which rules apply
 
 9. List all required documents mentioned in the guidelines
-   - Include property survey if lot type verification is needed
+   - ALWAYS include property survey as a required document (needed for lot type verification)
 
 10. Include compliance notes with critical reminders and common violations
     - Add reminders about lot-type-specific requirements in criticalReminders
     - Note common violations related to applying wrong lot type requirements
+    - Include reminder: "Identify your lot type from: [complete list of lot types found]"
 
 Generate the complete JSON form configuration now:`;
   }
