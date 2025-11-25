@@ -53,6 +53,7 @@ export interface IStorage {
     reviewedByUserId?: string,
     reviewNotes?: string
   ): Promise<schema.Application>;
+  deleteApplication(id: string): Promise<void>;
 
   // Demo Codes
   getDemoCode(id: string): Promise<schema.DemoCode | undefined>;
@@ -469,6 +470,10 @@ export class DbStorage implements IStorage {
       .where(eq(schema.applications.id, id))
       .returning();
     return application;
+  }
+
+  async deleteApplication(id: string): Promise<void> {
+    await db.delete(schema.applications).where(eq(schema.applications.id, id));
   }
 
   // Demo Codes
