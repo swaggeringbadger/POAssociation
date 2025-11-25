@@ -9,8 +9,8 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { Info, BookOpen } from 'lucide-react';
-import type { AdditionalInfoConfig, AdditionalInfoField, FormData } from '@shared/additionalInfoTypes';
-import type { BylawReference } from '@shared/formTypes';
+import type { AdditionalInfoField, FormData } from '@shared/additionalInfoTypes';
+import type { AdditionalInfoConfig, BylawReference } from '@shared/formTypes';
 import { apiRequest } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -244,6 +244,16 @@ export function DynamicAdditionalInfoForm({
                 <p className="text-sm leading-relaxed">{bylaws.requirement}</p>
               </div>
             )}
+            {bylaws.requirements && bylaws.requirements.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Requirements</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.requirements.map((req, idx) => (
+                    <li key={idx}>{req}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {bylaws.keyRestrictions && bylaws.keyRestrictions.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-primary">Key Restrictions</h4>
@@ -260,6 +270,16 @@ export function DynamicAdditionalInfoForm({
                 <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
                   {bylaws.approvedMaterials.map((material, idx) => (
                     <li key={idx}>{material}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.preferredStyles && bylaws.preferredStyles.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Preferred Styles</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.preferredStyles.map((style, idx) => (
+                    <li key={idx}>{style}</li>
                   ))}
                 </ul>
               </div>
@@ -295,6 +315,77 @@ export function DynamicAdditionalInfoForm({
         <h2 className="text-2xl font-bold">{config.title}</h2>
         <p className="text-muted-foreground">{config.description}</p>
       </div>
+
+      {/* Top-level Relevant Bylaws */}
+      {config.relevantBylaws && (
+        <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+          <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-blue-800 dark:text-blue-300 font-semibold text-base mb-1">
+                Governing Documents: {config.relevantBylaws.primary?.document}
+              </h3>
+              <p className="text-sm text-blue-700 dark:text-blue-400 mb-2">
+                {config.relevantBylaws.primary?.summary}
+              </p>
+              {config.relevantBylaws.primary?.quote && (
+                <div className="border-l-4 border-blue-400 pl-3 py-2 bg-blue-100/50 dark:bg-blue-950/50 mb-3">
+                  <p className="text-sm italic text-blue-700 dark:text-blue-300">
+                    "{config.relevantBylaws.primary.quote}"
+                  </p>
+                </div>
+              )}
+              {config.relevantBylaws.primary?.keyRequirements && (
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Key Requirements:</p>
+                  <ul className="list-disc list-inside text-sm space-y-1 text-blue-700 dark:text-blue-400">
+                    {config.relevantBylaws.primary.keyRequirements.map((req, idx) => (
+                      <li key={idx}>{req}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {config.relevantBylaws.additionalReferences && config.relevantBylaws.additionalReferences.length > 0 && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="mt-2">
+                    <Info className="h-4 w-4 mr-2" />
+                    View Additional References ({config.relevantBylaws.additionalReferences.length})
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Additional Bylaw References</DialogTitle>
+                  </DialogHeader>
+                  <div className="mt-4 space-y-6">
+                    {config.relevantBylaws.additionalReferences.map((ref, idx) => (
+                      <div key={idx} className="border-l-4 border-primary pl-4 space-y-2">
+                        <div>
+                          <h4 className="font-semibold text-primary">{ref.document}</h4>
+                          <p className="text-sm text-muted-foreground">{ref.section}</p>
+                        </div>
+                        <p className="text-sm">{ref.summary}</p>
+                        {ref.keyProvisions && ref.keyProvisions.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold">Key Provisions:</p>
+                            <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
+                              {ref.keyProvisions.map((provision, pIdx) => (
+                                <li key={pIdx}>{provision}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </Alert>
+      )}
 
       {/* Sections */}
       {config.sections.map((section, sectionIdx) => (
