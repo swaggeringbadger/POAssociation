@@ -14,6 +14,7 @@ export interface IStorage {
   getUser(id: string): Promise<schema.User | undefined>;
   getUserByEmail(email: string): Promise<schema.User | undefined>;
   upsertUser(user: schema.UpsertUser): Promise<schema.User>;
+  updateUserProfile(userId: string, updates: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string }): Promise<schema.User>;
   
   // Tenants
   getTenant(id: string): Promise<schema.Tenant | undefined>;
@@ -120,6 +121,18 @@ export class DbStorage implements IStorage {
           updatedAt: new Date(),
         },
       })
+      .returning();
+    return user;
+  }
+
+  async updateUserProfile(userId: string, updates: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string }): Promise<schema.User> {
+    const [user] = await db
+      .update(schema.users)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
       .returning();
     return user;
   }

@@ -459,6 +459,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update user profile
+  app.post("/api/users/:userId/profile", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { firstName, lastName, phoneNumber, email } = req.body;
+      const currentUserId = req.session?.userId || req.user?.claims?.sub;
+
+      // Only allow users to update their own profile
+      if (userId !== currentUserId) {
+        return res.status(403).json({ error: "Unauthorized: Can only update your own profile" });
+      }
+
+      // Get current user to check if they're a demo user
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Build updates object - only allow email update for demo users
+      const updates: any = {};
+      if (firstName) updates.firstName = firstName;
+      if (lastName) updates.lastName = lastName;
+      if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+      if (email && user.demoCodeId) {
+        updates.email = email;
+      } else if (email && !user.demoCodeId) {
+        return res.status(400).json({ error: "Email updates are only available for demo accounts" });
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const updatedUser = await storage.updateUserProfile(userId, updates);
+      res.json(updatedUser);
+    } catch (error: any) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // User Management - Directory/RBAC endpoints
 
   // Get all users for a tenant

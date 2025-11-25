@@ -16,6 +16,7 @@ import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
 import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
+import Settings from "@/pages/Settings";
 import DemoCodes from "@/pages/admin/DemoCodes";
 import DemoCodeForm from "@/pages/admin/DemoCodeForm";
 import DemoCodeStats from "@/pages/admin/DemoCodeStats";
@@ -104,6 +105,12 @@ function Router() {
           <Route path="/properties">
             <DashboardLayout>
               <Properties />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/settings">
+            <DashboardLayout>
+              <Settings />
             </DashboardLayout>
           </Route>
 
