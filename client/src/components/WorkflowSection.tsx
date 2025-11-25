@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ChevronRight, MessageSquare, Lock } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { formatEnumValue } from "@/lib/formatters";
 
 interface WorkflowSectionProps {
   applicationId: string;
@@ -126,7 +127,7 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
               )}
             </div>
             <Badge variant="outline" data-testid={`badge-workflow-${workflow.status}`}>
-              {workflow.status}
+              {formatEnumValue(workflow.status)}
             </Badge>
           </div>
           {currentStep?.description && (

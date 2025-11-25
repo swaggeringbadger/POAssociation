@@ -449,7 +449,7 @@ function HomeownerDashboard() {
                         Submitted {app.days} days ago
                       </p>
                     </div>
-                    <Badge variant={app.status === "Pending" ? "default" : "secondary"}>
+                    <Badge variant={app.status === "pending" ? "default" : "secondary"}>
                       {app.status}
                     </Badge>
                   </div>
