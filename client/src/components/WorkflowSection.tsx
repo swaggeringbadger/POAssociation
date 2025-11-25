@@ -95,6 +95,16 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
   const allowedRoles = stepRequiresRole ? currentStep.role.split("|").map((r: string) => r.trim()) : [];
   const userHasRole = !stepRequiresRole || (userRoles && allowedRoles.some(role => userRoles.includes(role)));
   const userRoleList = userRoles?.join(", ") || "none";
+  
+  // Check if user is a homeowner (has no admin/management roles)
+  const isHomeowner = !userRoles || !userRoles.some((role: string) => 
+    role === 'account_admin' || 
+    role === 'management_rep' || 
+    role === 'management_manager'
+  );
+  
+  // Check if on first step (Application Submitted)
+  const isFirstStep = workflow.currentStepIndex === 0;
 
   return (
     <Card data-testid="card-workflow-section">
@@ -125,7 +135,19 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
         </div>
 
         {/* Action Buttons or Role Warning */}
-        {stepRequiresRole && !userHasRole ? (
+        {isHomeowner && isFirstStep ? (
+          <div className="border border-blue-200 bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+              ✓ Application Submitted Successfully
+            </p>
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              Your application has been received and is awaiting review. Our team will carefully review your submission and get back to you shortly.
+            </p>
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              You can check back here anytime for updates, or we'll send you an email notification once we have news about your application.
+            </p>
+          </div>
+        ) : stepRequiresRole && !userHasRole ? (
           <div className="border border-amber-200 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 space-y-2">
             <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
               <Lock className="h-4 w-4" />
