@@ -15,6 +15,7 @@ export interface Tenant {
   type: "management_company" | "community";
   subdomain: string;
   managementCompanyId: string | null;
+  designGuidelinesUrl?: string | null;
   createdAt: string;
   isActive: boolean;
 }

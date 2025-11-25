@@ -16,12 +16,14 @@ import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
 import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
+import FormWizard from "@/pages/FormWizard";
 import Settings from "@/pages/Settings";
 import DemoCodes from "@/pages/admin/DemoCodes";
 import DemoCodeForm from "@/pages/admin/DemoCodeForm";
 import DemoCodeStats from "@/pages/admin/DemoCodeStats";
 import ManagementCompanies from "@/pages/admin/ManagementCompanies";
 import Communities from "@/pages/admin/Communities";
+import AIActivity from "@/pages/admin/AIActivity";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -108,6 +110,12 @@ function Router() {
             </DashboardLayout>
           </Route>
 
+          <Route path="/form-wizard">
+            <DashboardLayout>
+              <FormWizard />
+            </DashboardLayout>
+          </Route>
+
           <Route path="/settings">
             <DashboardLayout>
               <Settings />
@@ -124,6 +132,12 @@ function Router() {
           <Route path="/admin/communities">
             <DashboardLayout>
               <Communities />
+            </DashboardLayout>
+          </Route>
+
+          <Route path="/admin/ai-activity">
+            <DashboardLayout>
+              <AIActivity />
             </DashboardLayout>
           </Route>
 

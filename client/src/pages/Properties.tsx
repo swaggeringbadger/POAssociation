@@ -70,6 +70,7 @@ export default function Properties() {
     name: "",
     subdomain: "",
     managementCompanyId: "",
+    designGuidelinesUrl: "",
   });
 
   // Fetch properties managed by current user
@@ -152,6 +153,7 @@ export default function Properties() {
       name: property.name,
       subdomain: property.subdomain,
       managementCompanyId: property.managementCompanyId || "none",
+      designGuidelinesUrl: property.designGuidelinesUrl || "",
     });
     setDialogOpen(true);
   };
@@ -173,11 +175,12 @@ export default function Properties() {
     saveMutation.mutate({
       ...formData,
       managementCompanyId: formData.managementCompanyId === 'none' ? null : formData.managementCompanyId,
+      designGuidelinesUrl: formData.designGuidelinesUrl || null,
     });
   };
 
   const resetForm = () => {
-    setFormData({ name: "", subdomain: "", managementCompanyId: "none" });
+    setFormData({ name: "", subdomain: "", managementCompanyId: "none", designGuidelinesUrl: "" });
     setSelectedProperty(null);
     setIsEditing(false);
   };
@@ -368,6 +371,19 @@ export default function Properties() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="designGuidelines">Design Guidelines URL (Optional)</Label>
+              <Input
+                id="designGuidelines"
+                placeholder="https://your-property.com/design-guidelines"
+                type="url"
+                value={formData.designGuidelinesUrl}
+                onChange={(e) => setFormData({ ...formData, designGuidelinesUrl: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                URL to your publicly posted design guidelines/covenants. Used for AI form generation.
+              </p>
             </div>
           </div>
           <DialogFooter>

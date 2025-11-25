@@ -1,5 +1,5 @@
 
-import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine } from "lucide-react";
+import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles } from "lucide-react";
 
 // Types for our mockup
 export type Role = 
@@ -79,9 +79,9 @@ export const NAV_ITEMS = [
     roles: ['poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
   },
   {
-    label: 'Form Wizard',
-    icon: Settings,
-    href: '/admin/form-builder',
+    label: 'AI Form Wizard',
+    icon: Sparkles,
+    href: '/form-wizard',
     roles: ['poa_board_member', 'management_manager', 'account_admin', 'super_admin']
   },
   {
@@ -94,6 +94,12 @@ export const NAV_ITEMS = [
 
 // Super Admin only navigation items
 export const SUPER_ADMIN_NAV_ITEMS = [
+  {
+    label: 'AI Activity',
+    icon: Sparkles,
+    href: '/admin/ai-activity',
+    roles: ['super_admin']
+  },
   {
     label: 'Management Companies',
     icon: Building,
