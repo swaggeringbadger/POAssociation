@@ -307,7 +307,11 @@ export default function FormWizard() {
           const isGenerating = generatingType === type;
 
           return (
-            <Card key={type} className="relative overflow-hidden">
+            <Card
+              key={type}
+              className="relative overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => handleViewForm(type)}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -335,41 +339,15 @@ export default function FormWizard() {
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   {status?.hasCustomForm
-                    ? "Using a custom form tailored to your property's guidelines."
-                    : "Using a generic default form. Generate a custom form for better compliance."}
+                    ? "Using a custom form tailored to your property's guidelines. Click to view versions."
+                    : "Using a generic default form. Click to generate a custom form."}
                 </p>
-
-                <div className="flex gap-2">
-                  {status?.hasCustomForm && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-2"
-                      onClick={() => handleViewForm(type)}
-                    >
-                      <Eye className="h-4 w-4" />
-                      View Form
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => handleGenerateForm(type)}
-                    disabled={!hasDesignGuidelines || isGenerating}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4" />
-                        {status?.hasCustomForm ? "Regenerate" : "Generate"} with AI
-                      </>
-                    )}
-                  </Button>
-                </div>
+                {isGenerating && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating new version...
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -432,89 +410,130 @@ export default function FormWizard() {
 
           <div className="overflow-y-auto flex-1">
             {formVersions.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Version</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Fields</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {formVersions.map((version: any) => (
-                    <TableRow key={version.id} className={version.isActive ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
-                      <TableCell className="font-medium">
-                        v{version.version}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{version.name}</div>
-                          {version.description && (
-                            <div className="text-xs text-muted-foreground line-clamp-1">
-                              {version.description}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={version.isActive ? "default" : "secondary"}>
-                          {version.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {version.schema?.sections?.reduce(
-                          (acc: number, section: any) => acc + (section.fields?.length || 0),
-                          0
-                        ) || 0} fields
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(version.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handlePreviewVersion(version)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Preview Form
-                            </DropdownMenuItem>
-                            {!version.isActive && (
-                              <>
-                                <DropdownMenuItem onClick={() => handleActivateVersion(version.id)}>
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Set as Active
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteVersion(version.id, version.version)}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Version
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+              <div className="space-y-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Version</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Fields</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {formVersions.map((version: any) => (
+                      <TableRow key={version.id} className={version.isActive ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
+                        <TableCell className="font-medium">
+                          v{version.version}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{version.name}</div>
+                            {version.description && (
+                              <div className="text-xs text-muted-foreground line-clamp-1">
+                                {version.description}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={version.isActive ? "default" : "secondary"}>
+                            {version.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {version.schema?.sections?.reduce(
+                            (acc: number, section: any) => acc + (section.fields?.length || 0),
+                            0
+                          ) || 0} fields
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(version.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handlePreviewVersion(version)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                Preview Form
+                              </DropdownMenuItem>
+                              {!version.isActive && (
+                                <>
+                                  <DropdownMenuItem onClick={() => handleActivateVersion(version.id)}>
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Set as Active
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteVersion(version.id, version.version)}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Version
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <Button
+                    onClick={() => viewingType && handleGenerateForm(viewingType)}
+                    disabled={!hasDesignGuidelines || generatingType === viewingType}
+                    className="gap-2"
+                  >
+                    {generatingType === viewingType ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        Generate New Version with AI
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
                 <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Versions Found</h3>
-                <p className="text-sm text-muted-foreground">
-                  Generate a custom form using AI to create your first version.
-                </p>
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">No Versions Found</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Generate a custom form using AI to create your first version.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => viewingType && handleGenerateForm(viewingType)}
+                  disabled={!hasDesignGuidelines || generatingType === viewingType}
+                  className="gap-2"
+                >
+                  {generatingType === viewingType ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Generate with AI
+                    </>
+                  )}
+                </Button>
               </div>
             )}
           </div>

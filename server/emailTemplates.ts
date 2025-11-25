@@ -13,6 +13,7 @@ export interface EmailTemplateProps {
   };
   secondaryContent?: string;
   recipientName?: string;
+  communityName?: string;
 }
 
 const BASE_COLOR = "#1e3a8a"; // Deep navy
@@ -32,6 +33,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
     actionButton,
     secondaryContent,
     recipientName,
+    communityName,
   } = props;
 
   return `<!DOCTYPE html>
@@ -196,7 +198,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
           <!-- Header -->
           <tr>
             <td class="header">
-              <h1 class="header-title">CivicFlow</h1>
+              <h1 class="header-title">${communityName || 'CivicFlow'}</h1>
               <p class="header-subtitle">${title}</p>
             </td>
           </tr>
@@ -228,10 +230,10 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
           <tr>
             <td class="footer">
               <p class="footer-text">
-                You're receiving this email because you have an account with CivicFlow.
+                You're receiving this email because you have an account with your community association.
               </p>
               <p class="footer-text">
-                © ${new Date().getFullYear()} CivicFlow. All rights reserved.
+                © ${new Date().getFullYear()} poassociation.com. All rights reserved.
               </p>
             </td>
           </tr>
