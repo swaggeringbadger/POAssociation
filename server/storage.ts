@@ -14,7 +14,7 @@ export interface IStorage {
   getUser(id: string): Promise<schema.User | undefined>;
   getUserByEmail(email: string): Promise<schema.User | undefined>;
   upsertUser(user: schema.UpsertUser): Promise<schema.User>;
-  updateUserProfile(userId: string, updates: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string }): Promise<schema.User>;
+  updateUserProfile(userId: string, updates: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string; notificationPreferences?: any }): Promise<schema.User>;
   
   // Tenants
   getTenant(id: string): Promise<schema.Tenant | undefined>;

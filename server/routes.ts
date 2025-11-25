@@ -463,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users/:userId/profile", isAuthenticated, async (req, res) => {
     try {
       const { userId } = req.params;
-      const { firstName, lastName, phoneNumber, email } = req.body;
+      const { firstName, lastName, phoneNumber, email, notificationPreferences } = req.body;
       const currentUserId = req.session?.userId || req.user?.claims?.sub;
 
       // Only allow users to update their own profile
@@ -482,6 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (firstName) updates.firstName = firstName;
       if (lastName) updates.lastName = lastName;
       if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+      if (notificationPreferences) updates.notificationPreferences = notificationPreferences;
       if (email && user.demoCodeId) {
         updates.email = email;
       } else if (email && !user.demoCodeId) {
@@ -1118,9 +1119,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdByUserId: req.session?.userId || req.user?.id,
       });
 
+      // Get the next version number for this tenant + project type
+      const existingTemplates = await db.select()
+        .from(schema.formTemplates)
+        .where(and(
+          eq(schema.formTemplates.tenantId, tenantId),
+          eq(schema.formTemplates.projectType, applicationType)
+        ))
+        .orderBy(desc(schema.formTemplates.version));
+
+      const nextVersion = existingTemplates.length > 0 ? existingTemplates[0].version + 1 : 1;
+
+      // Create form template (inactive by default)
+      const formTemplate = await storage.createFormTemplate({
+        tenantId,
+        projectType: applicationType,
+        version: nextVersion,
+        name: result.generatedForm.title || `${applicationType} - v${nextVersion}`,
+        description: result.generatedForm.description,
+        schema: result.generatedForm as any,
+        isActive: false, // New generations are NOT active by default
+        createdByUserId: req.session?.userId || req.user?.id,
+      });
+
+      // Link the template to the generation
+      await storage.linkFormTemplateToGeneration(generation.id, formTemplate.id);
+
       res.json({
         ...result,
         generationId: generation.id,
+        formTemplateId: formTemplate.id,
+        version: nextVersion,
       });
     } catch (error: any) {
       console.error("Error generating form:", error);
@@ -1190,6 +1219,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error approving AI generation:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all versions of a form template for a specific tenant + project type
+  app.get("/api/tenants/:tenantId/forms/:projectType/versions", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, projectType } = req.params;
+
+      const versions = await db.select()
+        .from(schema.formTemplates)
+        .where(and(
+          eq(schema.formTemplates.tenantId, tenantId),
+          eq(schema.formTemplates.projectType, projectType)
+        ))
+        .orderBy(desc(schema.formTemplates.version));
+
+      res.json(versions);
+    } catch (error: any) {
+      console.error("Error fetching form versions:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Activate a specific form template version
+  app.post("/api/forms/:id/activate", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.id;
+
+      // Get the template to activate
+      const [template] = await db.select()
+        .from(schema.formTemplates)
+        .where(eq(schema.formTemplates.id, id));
+
+      if (!template) {
+        return res.status(404).json({ error: "Form template not found" });
+      }
+
+      // Deactivate all other versions for this tenant + project type
+      await db.update(schema.formTemplates)
+        .set({ isActive: false })
+        .where(and(
+          eq(schema.formTemplates.tenantId, template.tenantId),
+          eq(schema.formTemplates.projectType, template.projectType),
+          eq(schema.formTemplates.isActive, true)
+        ));
+
+      // Activate this version
+      const [activated] = await db.update(schema.formTemplates)
+        .set({
+          isActive: true,
+          activatedAt: new Date(),
+          activatedByUserId: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.formTemplates.id, id))
+        .returning();
+
+      res.json({
+        message: "Form template activated successfully",
+        template: activated,
+      });
+    } catch (error: any) {
+      console.error("Error activating form template:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a form template version
+  app.delete("/api/forms/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get the template first to check if it's active
+      const [template] = await db.select()
+        .from(schema.formTemplates)
+        .where(eq(schema.formTemplates.id, id));
+
+      if (!template) {
+        return res.status(404).json({ error: "Form template not found" });
+      }
+
+      // Prevent deleting the active version
+      if (template.isActive) {
+        return res.status(400).json({
+          error: "Cannot delete the active version. Please activate a different version first."
+        });
+      }
+
+      // Delete the template
+      await db.delete(schema.formTemplates)
+        .where(eq(schema.formTemplates.id, id));
+
+      res.json({ message: "Form template deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting form template:", error);
       res.status(500).json({ error: error.message });
     }
   });

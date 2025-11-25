@@ -118,6 +118,28 @@ class ApiClient {
     return response.json();
   }
 
+  async getFormTemplateVersions(tenantId: string, projectType: string): Promise<FormTemplate[]> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/forms/${projectType}/versions`);
+    if (!response.ok) throw new Error("Failed to fetch form template versions");
+    return response.json();
+  }
+
+  async activateFormTemplate(id: string): Promise<{ message: string; template: FormTemplate }> {
+    const response = await fetch(`${this.baseUrl}/forms/${id}/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) throw new Error("Failed to activate form template");
+    return response.json();
+  }
+
+  async deleteFormTemplate(id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/forms/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete form template");
+  }
+
   async submitApplication(application: {
     tenantId: string;
     formTemplateId: string;

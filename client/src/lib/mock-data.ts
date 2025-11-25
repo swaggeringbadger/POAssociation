@@ -79,7 +79,7 @@ export const NAV_ITEMS = [
     roles: ['poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
   },
   {
-    label: 'AI Form Wizard',
+    label: 'Form Wizard',
     icon: Sparkles,
     href: '/form-wizard',
     roles: ['poa_board_member', 'management_manager', 'account_admin', 'super_admin']

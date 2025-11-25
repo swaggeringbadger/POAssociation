@@ -55,6 +55,7 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   phoneNumber: varchar("phone_number"),
   profileImageUrl: varchar("profile_image_url"),
+  notificationPreferences: jsonb("notification_preferences").default(sql`'{"applicationSubmitted":true,"applicationApproved":true,"applicationRejected":true,"commentsAdded":true,"stepAssigned":true}'`),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

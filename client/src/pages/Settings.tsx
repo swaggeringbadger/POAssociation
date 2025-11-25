@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -21,10 +23,33 @@ const profileSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
+interface NotificationPreferences {
+  applicationSubmitted: boolean;
+  applicationApproved: boolean;
+  applicationRejected: boolean;
+  commentsAdded: boolean;
+  stepAssigned: boolean;
+}
+
+const notificationTypes: { key: keyof NotificationPreferences; label: string; description: string }[] = [
+  { key: "applicationSubmitted", label: "Application Submitted", description: "When your application is received" },
+  { key: "applicationApproved", label: "Application Approved", description: "When your application is approved" },
+  { key: "applicationRejected", label: "Application Rejected", description: "When your application is rejected" },
+  { key: "commentsAdded", label: "Comments Added", description: "When new comments are added to your application" },
+  { key: "stepAssigned", label: "Step Assigned", description: "When you're assigned a new workflow step" },
+];
+
 export default function Settings() {
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
   const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationPreferences>({
+    applicationSubmitted: true,
+    applicationApproved: true,
+    applicationRejected: true,
+    commentsAdded: true,
+    stepAssigned: true,
+  });
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -36,6 +61,20 @@ export default function Settings() {
     },
   });
 
+  // Load notification preferences from user
+  useEffect(() => {
+    if (user?.notificationPreferences) {
+      try {
+        const prefs = typeof user.notificationPreferences === 'string' 
+          ? JSON.parse(user.notificationPreferences)
+          : user.notificationPreferences;
+        setNotifications(prefs);
+      } catch (e) {
+        console.error('Failed to parse notification preferences', e);
+      }
+    }
+  }, [user?.notificationPreferences]);
+
   // Set page title
   useEffect(() => {
     setCurrentPageTitle("Profile Settings");
@@ -43,7 +82,7 @@ export default function Settings() {
   }, [setCurrentPageTitle]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: ProfileFormData) => {
+    mutationFn: async (data: ProfileFormData & { notificationPreferences: NotificationPreferences }) => {
       const res = await fetch(`/api/users/${user?.id}/profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,7 +101,7 @@ export default function Settings() {
   });
 
   const onSubmit = (data: ProfileFormData) => {
-    updateProfileMutation.mutate(data);
+    updateProfileMutation.mutate({ ...data, notificationPreferences: notifications });
   };
 
   // Check if user is a demo user (has demoCodeId)
@@ -77,110 +116,195 @@ export default function Settings() {
     firstName !== user?.firstName ||
     lastName !== user?.lastName ||
     phoneNumber !== user?.phoneNumber ||
-    (isEditingEmail && email !== user?.email);
+    (isEditingEmail && email !== user?.email) ||
+    JSON.stringify(notifications) !== JSON.stringify(user?.notificationPreferences ? 
+      (typeof user.notificationPreferences === 'string' ? JSON.parse(user.notificationPreferences) : user.notificationPreferences) 
+      : {});
+
+  const toggleNotification = (key: keyof NotificationPreferences) => {
+    setNotifications(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Settings</CardTitle>
-          <CardDescription>Manage your account information</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* First Name */}
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name *</Label>
-              <Input
-                id="firstName"
-                placeholder="Enter your first name"
-                {...register("firstName")}
-                data-testid="input-firstname"
-                disabled={updateProfileMutation.isPending}
-              />
-              {errors.firstName && (
-                <p className="text-sm text-destructive">{errors.firstName.message}</p>
-              )}
-            </div>
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-2" data-testid="settings-tabs">
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        </TabsList>
 
-            {/* Last Name */}
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name *</Label>
-              <Input
-                id="lastName"
-                placeholder="Enter your last name"
-                {...register("lastName")}
-                data-testid="input-lastname"
-                disabled={updateProfileMutation.isPending}
-              />
-              {errors.lastName && (
-                <p className="text-sm text-destructive">{errors.lastName.message}</p>
-              )}
-            </div>
-
-            {/* Phone Number */}
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number</Label>
-              <Input
-                id="phoneNumber"
-                placeholder="Enter your phone number"
-                type="tel"
-                {...register("phoneNumber")}
-                data-testid="input-phone"
-                disabled={updateProfileMutation.isPending}
-              />
-              {errors.phoneNumber && (
-                <p className="text-sm text-destructive">{errors.phoneNumber.message}</p>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="email">Email Address</Label>
-                {isDemoUser && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingEmail(!isEditingEmail)}
-                    className="text-xs text-primary hover:underline"
-                    data-testid="button-edit-email"
-                  >
-                    {isEditingEmail ? "Cancel" : "Edit"}
-                  </button>
-                )}
-              </div>
-              {isDemoUser && !isEditingEmail ? (
-                <div className="px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
-                  {user?.email}
-                </div>
-              ) : (
-                <>
+        <TabsContent value="profile">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Settings</CardTitle>
+              <CardDescription>Manage your account information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                {/* First Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    {...register("email")}
-                    data-testid="input-email"
-                    disabled={!isDemoUser || updateProfileMutation.isPending}
+                    id="firstName"
+                    placeholder="Enter your first name"
+                    {...register("firstName")}
+                    data-testid="input-firstname"
+                    disabled={updateProfileMutation.isPending}
                   />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email.message}</p>
+                  {errors.firstName && (
+                    <p className="text-sm text-destructive">{errors.firstName.message}</p>
                   )}
-                  {!isDemoUser && (
-                    <p className="text-xs text-muted-foreground">
-                      Email editing is only available for demo accounts
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
+                </div>
 
-            {/* Submit Button */}
-            <div className="flex gap-2 pt-4">
+                {/* Last Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    placeholder="Enter your last name"
+                    {...register("lastName")}
+                    data-testid="input-lastname"
+                    disabled={updateProfileMutation.isPending}
+                  />
+                  {errors.lastName && (
+                    <p className="text-sm text-destructive">{errors.lastName.message}</p>
+                  )}
+                </div>
+
+                {/* Phone Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber">Phone Number</Label>
+                  <Input
+                    id="phoneNumber"
+                    placeholder="Enter your phone number"
+                    type="tel"
+                    {...register("phoneNumber")}
+                    data-testid="input-phone"
+                    disabled={updateProfileMutation.isPending}
+                  />
+                  {errors.phoneNumber && (
+                    <p className="text-sm text-destructive">{errors.phoneNumber.message}</p>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="email">Email Address</Label>
+                    {isDemoUser && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingEmail(!isEditingEmail)}
+                        className="text-xs text-primary hover:underline"
+                        data-testid="button-edit-email"
+                      >
+                        {isEditingEmail ? "Cancel" : "Edit"}
+                      </button>
+                    )}
+                  </div>
+                  {isDemoUser && !isEditingEmail ? (
+                    <div className="px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
+                      {user?.email}
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="Enter your email"
+                        {...register("email")}
+                        data-testid="input-email"
+                        disabled={!isDemoUser || updateProfileMutation.isPending}
+                      />
+                      {errors.email && (
+                        <p className="text-sm text-destructive">{errors.email.message}</p>
+                      )}
+                      {!isDemoUser && (
+                        <p className="text-xs text-muted-foreground">
+                          Email editing is only available for demo accounts
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    type="submit"
+                    disabled={updateProfileMutation.isPending || !hasChanges}
+                    data-testid="button-save-profile"
+                  >
+                    {updateProfileMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => reset()}
+                    disabled={updateProfileMutation.isPending || !hasChanges}
+                    data-testid="button-cancel-profile"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Preferences</CardTitle>
+              <CardDescription>Choose which notifications you'd like to receive</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Notification Types */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Email Notifications</h3>
+                {notificationTypes.map(({ key, label, description }) => (
+                  <div key={key} className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <Checkbox
+                      id={`notif-${key}`}
+                      checked={notifications[key]}
+                      onCheckedChange={() => toggleNotification(key)}
+                      data-testid={`checkbox-notification-${key}`}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <Label htmlFor={`notif-${key}`} className="font-medium text-sm cursor-pointer">
+                        {label}
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Save Button */}
               <Button
-                type="submit"
-                disabled={updateProfileMutation.isPending || !hasChanges}
-                data-testid="button-save-profile"
+                onClick={() => {
+                  const formData = new FormData();
+                  const profileForm = document.querySelector('form') as HTMLFormElement;
+                  if (profileForm) {
+                    const formDataObj = new FormData(profileForm);
+                    handleSubmit((data) => {
+                      updateProfileMutation.mutate({ ...data, notificationPreferences: notifications });
+                    })(new Event('submit') as any);
+                  }
+                }}
+                disabled={updateProfileMutation.isPending}
+                data-testid="button-save-notifications"
               >
                 {updateProfileMutation.isPending ? (
                   <>
@@ -188,22 +312,13 @@ export default function Settings() {
                     Saving...
                   </>
                 ) : (
-                  "Save Changes"
+                  "Save Preferences"
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => reset()}
-                disabled={updateProfileMutation.isPending || !hasChanges}
-                data-testid="button-cancel-profile"
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Account Info */}
       <Card>

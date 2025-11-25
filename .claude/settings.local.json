@@ -24,7 +24,9 @@
       "Bash(npm run db:push:*)",
       "Bash(npx tsc:*)",
       "Bash(timeout 30 tail:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []

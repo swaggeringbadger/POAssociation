@@ -6,6 +6,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Sparkles,
   PaintBucket,
   Home,
@@ -15,21 +37,39 @@ import {
   MessageSquare,
   CheckCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  Eye,
+  Info,
+  MoreVertical,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
+import DynamicForm from "@/components/DynamicForm";
 
 interface FormStatus {
   type: ApplicationType;
   hasCustomForm: boolean;
   isGenerating: boolean;
+  templateId?: number;
 }
 
 export default function FormWizard() {
-  const { currentTenant, setCurrentPageTitle } = useAppStore();
+  const { currentTenant, selectedPropertyFilter, availableTenants, setCurrentPageTitle } = useAppStore();
   const [formStatuses, setFormStatuses] = useState<Record<ApplicationType, FormStatus>>({} as any);
   const [generatingType, setGeneratingType] = useState<ApplicationType | null>(null);
+  const [viewingType, setViewingType] = useState<ApplicationType | null>(null);
+  const [viewFormOpen, setViewFormOpen] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<any>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+
+  // Use selected property filter if available, otherwise fall back to current tenant
+  const effectiveTenantId = selectedPropertyFilter || currentTenant?.id;
+
+  // Get the effective tenant object for display purposes
+  const effectiveTenant = selectedPropertyFilter
+    ? availableTenants.find(t => t.id === selectedPropertyFilter) || currentTenant
+    : currentTenant;
 
   useEffect(() => {
     setCurrentPageTitle("Form Wizard");
@@ -37,17 +77,25 @@ export default function FormWizard() {
   }, [setCurrentPageTitle]);
 
   // Fetch current tenant's design guidelines URL
-  const { data: guidelinesData } = useQuery({
-    queryKey: ["designGuidelines", currentTenant?.id],
-    queryFn: () => api.getDesignGuidelinesUrl(currentTenant!.id),
-    enabled: !!currentTenant?.id,
+  const { data: guidelinesData, refetch: refetchGuidelines } = useQuery({
+    queryKey: ["designGuidelines", effectiveTenantId],
+    queryFn: () => api.getDesignGuidelinesUrl(effectiveTenantId!),
+    enabled: !!effectiveTenantId,
+    staleTime: 0, // Always refetch to get latest data
   });
+
+  // Refetch guidelines when component mounts or tenant changes
+  useEffect(() => {
+    if (effectiveTenantId) {
+      refetchGuidelines();
+    }
+  }, [effectiveTenantId, refetchGuidelines]);
 
   // Fetch existing form templates for this tenant
   const { data: formTemplates = [], refetch: refetchTemplates } = useQuery({
-    queryKey: ["formTemplates", currentTenant?.id],
-    queryFn: () => api.getFormTemplatesForTenant(currentTenant!.id),
-    enabled: !!currentTenant?.id,
+    queryKey: ["formTemplates", effectiveTenantId],
+    queryFn: () => api.getFormTemplatesForTenant(effectiveTenantId!),
+    enabled: !!effectiveTenantId,
   });
 
   // Initialize form statuses
@@ -55,20 +103,75 @@ export default function FormWizard() {
     const statuses: Record<ApplicationType, FormStatus> = {} as any;
 
     APPLICATION_TYPES.forEach(type => {
-      const hasCustom = formTemplates.some((t: any) => t.projectType === type && t.isActive);
+      const template = formTemplates.find((t: any) => t.projectType === type && t.isActive);
       statuses[type] = {
         type,
-        hasCustomForm: hasCustom,
+        hasCustomForm: !!template,
         isGenerating: false,
+        templateId: template?.id,
       };
     });
 
     setFormStatuses(statuses);
   }, [formTemplates]);
 
+  // Fetch template details when viewing
+  const { data: viewingTemplate } = useQuery({
+    queryKey: ["formTemplate", viewingType, formStatuses[viewingType as ApplicationType]?.templateId],
+    queryFn: () => api.getFormTemplate(formStatuses[viewingType as ApplicationType]!.templateId!.toString()),
+    enabled: viewFormOpen && !!viewingType && !!formStatuses[viewingType as ApplicationType]?.templateId,
+  });
+
+  // Fetch all versions when viewing
+  const { data: formVersions = [], refetch: refetchVersions } = useQuery({
+    queryKey: ["formVersions", effectiveTenantId, viewingType],
+    queryFn: () => api.getFormTemplateVersions(effectiveTenantId!, viewingType!),
+    enabled: viewFormOpen && !!viewingType && !!effectiveTenantId,
+  });
+
+  const handleViewForm = (applicationType: ApplicationType) => {
+    setViewingType(applicationType);
+    setViewFormOpen(true);
+  };
+
+  const handleActivateVersion = async (templateId: string) => {
+    try {
+      await api.activateFormTemplate(templateId);
+      toast.success("Version activated successfully!");
+
+      // Refetch versions and templates
+      await refetchVersions();
+      await refetchTemplates();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to activate version");
+    }
+  };
+
+  const handleDeleteVersion = async (templateId: string, version: number) => {
+    if (!confirm(`Are you sure you want to delete Version ${version}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await api.deleteFormTemplate(templateId);
+      toast.success("Version deleted successfully!");
+
+      // Refetch versions and templates
+      await refetchVersions();
+      await refetchTemplates();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete version");
+    }
+  };
+
+  const handlePreviewVersion = (version: any) => {
+    setPreviewVersion(version);
+    setPreviewModalOpen(true);
+  };
+
   const handleGenerateForm = async (applicationType: ApplicationType) => {
-    if (!currentTenant) {
-      toast.error("No tenant selected");
+    if (!effectiveTenantId) {
+      toast.error("No property selected");
       return;
     }
 
@@ -88,7 +191,7 @@ export default function FormWizard() {
     try {
       toast.info("Fetching your design guidelines...", { duration: 2000 });
 
-      const result = await api.generateForm(currentTenant.id, applicationType);
+      const result = await api.generateForm(effectiveTenantId, applicationType);
 
       toast.success(`Form generated successfully! Used ${result.tokensUsed} tokens (~$${result.estimatedCost})`, {
         duration: 5000,
@@ -134,7 +237,7 @@ export default function FormWizard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">AI Form Wizard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Form Wizard</h1>
         <p className="text-muted-foreground">
           Generate custom application forms based on your property's design guidelines
         </p>
@@ -151,6 +254,40 @@ export default function FormWizard() {
             </div>
             <CardDescription className="text-amber-800 dark:text-amber-200">
               To generate custom forms, please add your property's Design Guidelines URL in the Properties page.
+              {effectiveTenant && (
+                <div className="mt-2 text-xs">
+                  <strong>Current Property:</strong> {effectiveTenant.name}
+                  <br />
+                  <strong>Guidelines URL:</strong> {guidelinesData?.designGuidelinesUrl || "Not set"}
+                </div>
+              )}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {hasDesignGuidelines && guidelinesData?.designGuidelinesUrl && (
+        <Card className="border-green-500 bg-green-50 dark:bg-green-950/20">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CardTitle className="text-green-900 dark:text-green-100">
+                Design Guidelines Configured
+              </CardTitle>
+            </div>
+            <CardDescription className="text-green-800 dark:text-green-200">
+              <strong>{effectiveTenant?.name}</strong> - Ready to generate custom forms!
+              <div className="mt-2 text-xs">
+                <strong>Guidelines URL:</strong>{" "}
+                <a
+                  href={guidelinesData.designGuidelinesUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-green-900"
+                >
+                  {guidelinesData.designGuidelinesUrl}
+                </a>
+              </div>
             </CardDescription>
           </CardHeader>
         </Card>
@@ -196,7 +333,13 @@ export default function FormWizard() {
 
                 <div className="flex gap-2">
                   {status?.hasCustomForm && (
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      onClick={() => handleViewForm(type)}
+                    >
+                      <Eye className="h-4 w-4" />
                       View Form
                     </Button>
                   )}
@@ -266,6 +409,136 @@ export default function FormWizard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Form Versions Dialog */}
+      <Dialog open={viewFormOpen} onOpenChange={setViewFormOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              {viewingType && APPLICATION_TYPE_LABELS[viewingType]} - Form Versions
+            </DialogTitle>
+            <DialogDescription>
+              Manage versions for {effectiveTenant?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="overflow-y-auto flex-1">
+            {formVersions.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Version</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Fields</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {formVersions.map((version: any) => (
+                    <TableRow key={version.id} className={version.isActive ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
+                      <TableCell className="font-medium">
+                        v{version.version}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{version.name}</div>
+                          {version.description && (
+                            <div className="text-xs text-muted-foreground line-clamp-1">
+                              {version.description}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={version.isActive ? "default" : "secondary"}>
+                          {version.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {version.schema?.sections?.reduce(
+                          (acc: number, section: any) => acc + (section.fields?.length || 0),
+                          0
+                        ) || 0} fields
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(version.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handlePreviewVersion(version)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Preview Form
+                            </DropdownMenuItem>
+                            {!version.isActive && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleActivateVersion(version.id)}>
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Set as Active
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteVersion(version.id, version.version)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Version
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Versions Found</h3>
+                <p className="text-sm text-muted-foreground">
+                  Generate a custom form using AI to create your first version.
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Form Preview Dialog */}
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {previewVersion && `Version ${previewVersion.version} Preview`}
+            </DialogTitle>
+            <DialogDescription>
+              {previewVersion?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewVersion?.schema ? (
+            <div className="border rounded-lg p-6 bg-white dark:bg-slate-950">
+              <DynamicForm
+                schema={previewVersion.schema as any}
+                readOnly={true}
+              />
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No form schema available
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
