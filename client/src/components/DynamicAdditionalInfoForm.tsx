@@ -5,10 +5,10 @@
  * Supports all field types: text, textarea, select, radio, checkbox, number, date
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
-import { Info, BookOpen } from 'lucide-react';
+import { Info, BookOpen, Check, ChevronsUpDown } from 'lucide-react';
 import type { AdditionalInfoField, FormData } from '@shared/additionalInfoTypes';
 import type { AdditionalInfoConfig, BylawReference } from '@shared/formTypes';
 import { apiRequest } from '@/lib/api';
@@ -33,6 +33,19 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 interface DynamicAdditionalInfoFormProps {
   tenantId: string;
@@ -47,6 +60,8 @@ export function DynamicAdditionalInfoForm({
   initialData = {},
   onDataChange,
 }: DynamicAdditionalInfoFormProps) {
+  const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({});
+
   // Fetch form configuration
   const { data: config, isLoading, error } = useQuery<AdditionalInfoConfig>({
     queryKey: ['additional-info', tenantId, projectType],
