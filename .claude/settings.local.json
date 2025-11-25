@@ -23,7 +23,8 @@
       "Bash(git -C /home/runner/workspace log --oneline -10)",
       "Bash(npm run db:push:*)",
       "Bash(npx tsc:*)",
-      "Bash(timeout 30 tail:*)"
+      "Bash(timeout 30 tail:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

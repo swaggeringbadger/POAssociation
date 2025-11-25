@@ -311,6 +311,62 @@ class ApiClient {
     if (!response.ok) throw new Error("Failed to logout");
     return response.json();
   }
+
+  // ============================================================
+  // AI FORM GENERATION API METHODS
+  // ============================================================
+
+  async getDesignGuidelinesUrl(tenantId: string): Promise<{ designGuidelinesUrl: string | null }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/design-guidelines`);
+    if (!response.ok) throw new Error("Failed to fetch design guidelines URL");
+    return response.json();
+  }
+
+  async updateDesignGuidelinesUrl(tenantId: string, designGuidelinesUrl: string): Promise<Tenant> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/design-guidelines`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designGuidelinesUrl }),
+    });
+    if (!response.ok) throw new Error("Failed to update design guidelines URL");
+    return response.json();
+  }
+
+  async generateForm(tenantId: string, applicationType: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/ai/generate-form`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId, applicationType }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Form generation failed" }));
+      throw new Error(error.error || "Form generation failed");
+    }
+    return response.json();
+  }
+
+  async listAiGenerations(tenantId?: string): Promise<any[]> {
+    const url = tenantId
+      ? `${this.baseUrl}/admin/ai-generations?tenantId=${tenantId}`
+      : `${this.baseUrl}/admin/ai-generations`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch AI generations");
+    return response.json();
+  }
+
+  async getAiGeneration(id: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/admin/ai-generations/${id}`);
+    if (!response.ok) throw new Error("Failed to fetch AI generation");
+    return response.json();
+  }
+
+  async approveAiGeneration(id: string): Promise<{ message: string; formTemplateId: string }> {
+    const response = await fetch(`${this.baseUrl}/admin/ai-generations/${id}/approve`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Failed to approve AI generation");
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

@@ -88,6 +88,13 @@ export interface IStorage {
   getApplicationWorkflow(applicationId: string): Promise<schema.ApplicationWorkflow | undefined>;
   advanceApplicationWorkflow(applicationId: string, action: string, userId: string, stepIndex: number, notes?: string): Promise<schema.ApplicationWorkflow>;
   getWorkflowActionHistory(applicationWorkflowId: string): Promise<schema.WorkflowStepAction[]>;
+
+  // AI Form Generations
+  createAiFormGeneration(generation: schema.InsertAiFormGeneration): Promise<schema.AiFormGeneration>;
+  getAiFormGeneration(id: string): Promise<schema.AiFormGeneration | undefined>;
+  listAiFormGenerations(tenantId?: string): Promise<schema.AiFormGeneration[]>;
+  updateAiFormGenerationStatus(id: string, status: string, approvedByUserId?: string): Promise<schema.AiFormGeneration>;
+  linkFormTemplateToGeneration(generationId: string, formTemplateId: string): Promise<schema.AiFormGeneration>;
 }
 
 export class DbStorage implements IStorage {
@@ -644,6 +651,48 @@ export class DbStorage implements IStorage {
 
   async getWorkflowActionHistory(applicationWorkflowId: string): Promise<schema.WorkflowStepAction[]> {
     return db.select().from(schema.workflowStepActions).where(eq(schema.workflowStepActions.applicationWorkflowId, applicationWorkflowId)).orderBy(desc(schema.workflowStepActions.createdAt));
+  }
+
+  // AI Form Generations
+  async createAiFormGeneration(generation: schema.InsertAiFormGeneration): Promise<schema.AiFormGeneration> {
+    const [created] = await db.insert(schema.aiFormGenerations).values(generation).returning();
+    return created;
+  }
+
+  async getAiFormGeneration(id: string): Promise<schema.AiFormGeneration | undefined> {
+    const [generation] = await db.select().from(schema.aiFormGenerations).where(eq(schema.aiFormGenerations.id, id));
+    return generation;
+  }
+
+  async listAiFormGenerations(tenantId?: string): Promise<schema.AiFormGeneration[]> {
+    if (tenantId) {
+      return db.select().from(schema.aiFormGenerations)
+        .where(eq(schema.aiFormGenerations.tenantId, tenantId))
+        .orderBy(desc(schema.aiFormGenerations.createdAt));
+    }
+    return db.select().from(schema.aiFormGenerations).orderBy(desc(schema.aiFormGenerations.createdAt));
+  }
+
+  async updateAiFormGenerationStatus(id: string, status: string, approvedByUserId?: string): Promise<schema.AiFormGeneration> {
+    const updates: any = { status };
+    if (approvedByUserId) {
+      updates.approvedByUserId = approvedByUserId;
+      updates.approvedAt = new Date();
+    }
+
+    const [updated] = await db.update(schema.aiFormGenerations)
+      .set(updates)
+      .where(eq(schema.aiFormGenerations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async linkFormTemplateToGeneration(generationId: string, formTemplateId: string): Promise<schema.AiFormGeneration> {
+    const [updated] = await db.update(schema.aiFormGenerations)
+      .set({ formTemplateId })
+      .where(eq(schema.aiFormGenerations.id, generationId))
+      .returning();
+    return updated;
   }
 }
 

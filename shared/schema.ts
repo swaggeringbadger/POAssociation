@@ -275,6 +275,33 @@ export const insertWorkflowStepActionSchema = createInsertSchema(workflowStepAct
 export type InsertWorkflowStepAction = z.infer<typeof insertWorkflowStepActionSchema>;
 export type WorkflowStepAction = typeof workflowStepActions.$inferSelect;
 
+// AI Form Generations table - tracks all AI-generated forms for monitoring and auditing
+export const aiFormGenerations = pgTable("ai_form_generations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  applicationType: text("application_type").notNull(), // 'exterior-modifications', 'structural-changes', etc.
+  designGuidelinesUrl: text("design_guidelines_url").notNull(), // Snapshot of URL used for generation
+  generatedSchema: jsonb("generated_schema").notNull(), // The generated form JSON
+  status: text("status").notNull().default("draft"), // 'draft', 'approved', 'rejected', 'active'
+  tokensUsed: integer("tokens_used"), // Total tokens consumed
+  estimatedCost: text("estimated_cost"), // Cost in USD (stored as string for precision)
+  generationTimeMs: integer("generation_time_ms"), // Time taken to generate in milliseconds
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  approvedByUserId: varchar("approved_by_user_id").references(() => users.id),
+  formTemplateId: varchar("form_template_id").references(() => formTemplates.id), // Links to active form if approved
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+  errorMessage: text("error_message"), // Stores error if generation failed
+});
+
+export const insertAiFormGenerationSchema = createInsertSchema(aiFormGenerations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAiFormGeneration = z.infer<typeof insertAiFormGenerationSchema>;
+export type AiFormGeneration = typeof aiFormGenerations.$inferSelect;
+
 // Add workflowTemplateId to tenants - track which workflow is active for a community
 export const updateTenantWorkflowTemplateId = () => {
   // This is a marker - actual migration handled by npm run db:push

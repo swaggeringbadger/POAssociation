@@ -1004,6 +1004,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================
+  // AI FORM GENERATION ENDPOINTS
+  // ============================================================
+
+  // Get tenant's design guidelines URL
+  app.get("/api/tenants/:id/design-guidelines", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      res.json({ designGuidelinesUrl: tenant.designGuidelinesUrl });
+    } catch (error: any) {
+      console.error("Error fetching design guidelines URL:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update tenant's design guidelines URL
+  app.put("/api/tenants/:id/design-guidelines", isAuthenticated, async (req: any, res) => {
+    try {
+      const { designGuidelinesUrl } = req.body;
+      const updated = await storage.updateTenant(req.params.id, { designGuidelinesUrl });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating design guidelines URL:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate AI form
+  app.post("/api/ai/generate-form", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, applicationType } = req.body;
+
+      if (!tenantId || !applicationType) {
+        return res.status(400).json({ error: "tenantId and applicationType are required" });
+      }
+
+      // Get tenant to fetch design guidelines URL
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+
+      if (!tenant.designGuidelinesUrl) {
+        return res.status(400).json({
+          error: "No design guidelines URL configured for this property. Please add one in settings first."
+        });
+      }
+
+      // Import AI generation service
+      const { aiFormGenerationService } = await import('./aiFormGenerationService');
+
+      // Generate form
+      const result = await aiFormGenerationService.generateForm(
+        tenant.designGuidelinesUrl,
+        applicationType
+      );
+
+      // Save generation to database
+      const generation = await storage.createAiFormGeneration({
+        tenantId,
+        applicationType,
+        designGuidelinesUrl: tenant.designGuidelinesUrl,
+        generatedSchema: result.generatedForm as any,
+        status: 'draft',
+        tokensUsed: result.tokensUsed,
+        estimatedCost: result.estimatedCost,
+        generationTimeMs: result.generationTimeMs,
+        createdByUserId: req.session?.userId || req.user?.id,
+      });
+
+      res.json({
+        ...result,
+        generationId: generation.id,
+      });
+    } catch (error: any) {
+      console.error("Error generating form:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List AI form generations (for admin dashboard)
+  app.get("/api/admin/ai-generations", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.query;
+      const generations = await storage.listAiFormGenerations(tenantId);
+      res.json(generations);
+    } catch (error: any) {
+      console.error("Error listing AI generations:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get specific AI generation details
+  app.get("/api/admin/ai-generations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const generation = await storage.getAiFormGeneration(req.params.id);
+      if (!generation) {
+        return res.status(404).json({ error: "Generation not found" });
+      }
+      res.json(generation);
+    } catch (error: any) {
+      console.error("Error fetching AI generation:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Approve and activate AI-generated form
+  app.post("/api/admin/ai-generations/:id/approve", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.id;
+
+      // Get generation
+      const generation = await storage.getAiFormGeneration(id);
+      if (!generation) {
+        return res.status(404).json({ error: "Generation not found" });
+      }
+
+      // Create form template from generated schema
+      const formTemplate = await storage.createFormTemplate({
+        tenantId: generation.tenantId,
+        projectType: generation.applicationType,
+        version: 1,
+        name: (generation.generatedSchema as any).title || `${generation.applicationType} Form`,
+        description: (generation.generatedSchema as any).description || '',
+        schema: generation.generatedSchema,
+        isActive: true,
+        createdByUserId: userId,
+        activatedByUserId: userId,
+        activatedAt: new Date(),
+      });
+
+      // Update generation status and link to form template
+      await storage.updateAiFormGenerationStatus(id, 'approved', userId);
+      await storage.linkFormTemplateToGeneration(id, formTemplate.id);
+
+      res.json({
+        message: "Form approved and activated",
+        formTemplateId: formTemplate.id
+      });
+    } catch (error: any) {
+      console.error("Error approving AI generation:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
