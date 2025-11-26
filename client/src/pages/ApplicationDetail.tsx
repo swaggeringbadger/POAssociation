@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X } from "lucide-react";
 import { Link } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
@@ -36,6 +36,7 @@ export default function ApplicationDetail() {
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
+  const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -249,17 +250,28 @@ export default function ApplicationDetail() {
                             </p>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                          className="ml-2"
-                          data-testid={`button-download-${doc.id}`}
-                        >
-                          <a href={`/api/documents/${doc.id}/download`} download>
-                            <Download className="h-4 w-4" />
-                          </a>
-                        </Button>
+                        <div className="flex gap-2 ml-2">
+                          {isPreviewable(doc.fileName) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setPreviewDoc(doc)}
+                              data-testid={`button-preview-${doc.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            data-testid={`button-download-${doc.id}`}
+                          >
+                            <a href={`/api/documents/${doc.id}/download`} download>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -304,6 +316,72 @@ export default function ApplicationDetail() {
         <h2 className="text-xl font-semibold mb-3">Discussion & Notes</h2>
         <CommentThread applicationId={applicationId} />
       </div>
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPreviewDoc(null)}>
+          <Card className="w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+              <div>
+                <CardTitle className="text-lg">{previewDoc.fileName}</CardTitle>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setPreviewDoc(null)} data-testid="button-close-preview">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto p-4">
+              {getPreviewContent(previewDoc.id, previewDoc.fileName)}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isPreviewable(fileName: string): boolean {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  return ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'csv'].includes(extension || '');
+}
+
+function getPreviewContent(docId: string, fileName: string) {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  const previewUrl = `/api/documents/${docId}/preview`;
+
+  if (extension === 'pdf') {
+    return (
+      <iframe
+        src={previewUrl}
+        className="w-full h-[600px] border rounded"
+        title="PDF Preview"
+      />
+    );
+  }
+
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '')) {
+    return (
+      <img
+        src={previewUrl}
+        alt="Document preview"
+        className="max-w-full h-auto mx-auto max-h-[600px]"
+      />
+    );
+  }
+
+  if (extension === 'txt' || extension === 'csv') {
+    return (
+      <iframe
+        src={previewUrl}
+        className="w-full h-[600px] border rounded"
+        title="Text Preview"
+      />
+    );
+  }
+
+  return (
+    <div className="text-center py-12 text-muted-foreground">
+      <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+      <p>Preview not available for this file type</p>
     </div>
   );
 }

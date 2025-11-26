@@ -677,6 +677,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Preview a document (inline display in browser)
+  app.get("/api/documents/:id/preview", isAuthenticated, async (req, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Document storage is not configured"
+        });
+      }
+
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Stream file through server for preview (inline display)
+      const fileBuffer = await azureBlobStorage.downloadFile(
+        document.containerName,
+        document.blobPath
+      );
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
+      res.send(fileBuffer);
+    } catch (error: any) {
+      console.error("Error previewing document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Delete a document
   app.delete("/api/documents/:id", isAuthenticated, async (req: any, res) => {
     try {
