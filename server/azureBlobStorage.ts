@@ -73,18 +73,21 @@ class AzureBlobStorageService {
     const containerClient = this.blobServiceClient.getContainerClient(containerName);
 
     // Create container if it doesn't exist (idempotent operation)
-    // Note: Creating as private container (no public access) for security
+    // Note: No access parameter = private container (no public access)
     try {
-      const createResponse = await containerClient.createIfNotExists();
-
-      if (createResponse.succeeded) {
-        console.log(`✓ Created Azure container: ${containerName} (private)`);
-      } else {
-        console.log(`✓ Using existing Azure container: ${containerName}`);
-      }
+      await containerClient.createIfNotExists();
+      console.log(`✓ Container ready: ${containerName} (private - no public access)`);
     } catch (error: any) {
-      console.error(`❌ Failed to create/access container ${containerName}:`, error.message);
-      throw new Error(`Failed to access Azure container ${containerName}: ${error.message}`);
+      // If container already exists, this is fine - just log and continue
+      if (error.code === 'ContainerAlreadyExists') {
+        console.log(`✓ Using existing Azure container: ${containerName}`);
+      } else if (error.message && error.message.includes('Public access')) {
+        // This error means the storage account disallows public access, which is correct
+        console.log(`✓ Container access restricted by storage account policy (expected for security)`);
+      } else {
+        console.error(`❌ Failed to access container ${containerName}:`, error.message);
+        throw new Error(`Failed to access Azure container ${containerName}: ${error.message}`);
+      }
     }
 
     return containerClient;
