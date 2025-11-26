@@ -24,9 +24,10 @@ interface WorkflowData {
 }
 
 interface DocumentItem {
-  name: string;
-  size: number;
-  lastModified: string;
+  id: string;
+  fileName: string;
+  fileSize: number;
+  uploadedAt: string;
 }
 
 export default function ApplicationDetail() {
@@ -237,14 +238,14 @@ export default function ApplicationDetail() {
               {activeTab === 'documents' && (
                 <div className="space-y-2">
                   {documents.length > 0 ? (
-                    documents.map((doc, idx) => (
-                      <div key={idx} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
+                    documents.map((doc: any) => (
+                      <div key={doc.id} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1">
                           <FileText className="h-5 w-5 text-muted-foreground" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" data-testid={`text-document-${idx}`}>{doc.name}</p>
+                            <p className="text-sm font-medium truncate" data-testid={`text-document-${doc.id}`}>{doc.fileName}</p>
                             <p className="text-xs text-muted-foreground">
-                              {(doc.size / 1024).toFixed(1)} KB • {new Date(doc.lastModified).toLocaleDateString()}
+                              {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
                             </p>
                           </div>
                         </div>
@@ -253,9 +254,9 @@ export default function ApplicationDetail() {
                           size="sm"
                           asChild
                           className="ml-2"
-                          data-testid={`button-download-${idx}`}
+                          data-testid={`button-download-${doc.id}`}
                         >
-                          <a href={`/api/documents/${btoa(doc.name)}/download?appId=${applicationId}`} download>
+                          <a href={`/api/documents/${doc.id}/download`} download>
                             <Download className="h-4 w-4" />
                           </a>
                         </Button>
