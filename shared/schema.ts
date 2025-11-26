@@ -180,7 +180,7 @@ export const documents = pgTable("documents", {
   applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   documentRequirementName: text("document_requirement_name").notNull(), // Matches DocumentRequirement.name
   fileName: text("file_name").notNull(), // Original filename
-  blobName: text("blob_name").notNull(), // Unique blob name in Azure Storage
+  blobPath: text("blob_path").notNull(), // Full path: {tenantId}/{applicationId}/{documentId}.{ext}
   containerName: text("container_name").notNull().default("application-documents"), // Azure container
   fileSize: integer("file_size").notNull(), // Bytes
   mimeType: text("mime_type").notNull(), // e.g., 'application/pdf', 'image/jpeg'

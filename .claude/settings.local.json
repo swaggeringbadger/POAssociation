@@ -26,7 +26,8 @@
       "Bash(timeout 30 tail:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(env)"
     ],
     "deny": [],
     "ask": []

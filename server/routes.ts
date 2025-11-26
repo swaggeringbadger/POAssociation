@@ -12,6 +12,7 @@ import { z } from "zod";
 import * as schema from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import multer from "multer";
+import crypto from "crypto";
 
 // Configure multer for in-memory file uploads
 const upload = multer({
@@ -393,10 +394,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/applications", isAuthenticated, async (req, res) => {
+    console.log('[POST /api/applications] Request body:', JSON.stringify(req.body, null, 2));
     try {
       // Get form template to extract version and config
       const formTemplate = await storage.getFormTemplate(req.body.formTemplateId);
       if (!formTemplate) {
+        console.error('[POST /api/applications] Invalid form template:', req.body.formTemplateId);
         return res.status(400).json({ error: "Invalid form template" });
       }
 
@@ -474,9 +477,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json(application);
     } catch (error: any) {
+      console.error('[POST /api/applications] Error:', error);
       if (error.name === "ZodError") {
+        console.error('[POST /api/applications] Zod validation error:', fromZodError(error).message);
         return res.status(400).json({ error: fromZodError(error).message });
       }
+      console.error('[POST /api/applications] Server error:', error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -530,20 +536,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "User not authenticated" });
       }
 
-      // Upload to Azure Blob Storage
+      // Generate document ID first (so we can use it in the blob path)
+      const documentId = crypto.randomUUID();
+
+      // Get file extension
+      const fileExtension = file.originalname.split('.').pop() || '';
+
+      // Construct GUID-based path: {tenantId}/{applicationId}/{documentId}.{ext}
+      // Example: a1b2c3d4-e5f6-7890-abcd-ef1234567890/b2c3d4e5-f6a7-8901-bcde-f12345678901/c3d4e5f6-a7b8-9012-cdef-123456789012.pdf
+      const blobPath = `${application.tenantId}/${applicationId}/${documentId}.${fileExtension}`;
+
+      // Upload to Azure Blob Storage (blobPath is the full path including filename)
       const uploadResult = await azureBlobStorage.uploadFile(
         'application-documents',
         file.buffer,
         file.originalname,
-        file.mimetype
+        file.mimetype,
+        blobPath // Pass the full calculated path
       );
 
-      // Save document metadata to database
+      // Save document metadata to database with precalculated path
       const document = await storage.createDocument({
+        id: documentId, // Use the same ID we generated
         applicationId,
         documentRequirementName,
         fileName: file.originalname,
-        blobName: uploadResult.blobName,
+        blobPath: blobPath, // Store the full precalculated path
         containerName: uploadResult.containerName,
         fileSize: uploadResult.size,
         mimeType: uploadResult.contentType,
@@ -582,10 +600,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Document not found" });
       }
 
-      // Get download URL
+      // Get download URL using the precalculated blob path
       const downloadUrl = await azureBlobStorage.getDownloadUrl(
         document.containerName,
-        document.blobName
+        document.blobPath
       );
 
       // For direct download, we could either:
@@ -598,7 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Option 2: Stream through server (uncomment if needed)
       // const fileBuffer = await azureBlobStorage.downloadFile(
       //   document.containerName,
-      //   document.blobName
+      //   document.blobPath
       // );
       // res.setHeader('Content-Type', document.mimeType);
       // res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
@@ -630,10 +648,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized to delete this document" });
       }
 
-      // Delete from Azure Blob Storage
+      // Delete from Azure Blob Storage using the precalculated path
       await azureBlobStorage.deleteFile(
         document.containerName,
-        document.blobName
+        document.blobPath
       );
 
       // Delete from database

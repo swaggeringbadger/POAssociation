@@ -1,13 +1,185 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-11-24 (End of Day)
-**Current Session:** Application Submission Flow - Type Selector Complete
+**Last Updated:** 2025-11-26
+**Current Session:** Azure Blob Storage Document Management - GUID-Based Paths Complete
 
 ---
 
 ## Current Status
 
-### 🎯 Latest Session Summary (2025-11-24 - Part 2)
+### 🎯 Latest Session Summary (2025-11-26 - Azure Blob Storage Implementation)
+
+**Major Accomplishments:**
+1. ✅ Implemented complete Azure Blob Storage document management system
+2. ✅ Added Required vs Optional document distinction with visual indicators
+3. ✅ Implemented GUID-based hierarchical path structure with precalculation
+4. ✅ Created DocumentUpload component with drag-and-drop support
+5. ✅ Updated application workflow to create draft applications in Step 2
+6. ✅ Updated all documentation to reflect GUID-based architecture
+
+**Azure Blob Storage Architecture:**
+
+**Path Structure (GUID-Based):**
+```
+application-documents/
+├── {tenant-guid}/
+│   ├── {application-guid}/
+│   │   ├── {document-guid}.pdf
+│   │   ├── {document-guid}.jpg
+│   │   └── {document-guid}.png
+```
+
+**Key Design Decision: Path Precalculation**
+- Document ID generated once at upload time: `crypto.randomUUID()`
+- Full path constructed immediately: `${tenantId}/${applicationId}/${documentId}.${ext}`
+- Path stored in database `blob_path` column
+- No runtime reassembly required - path retrieved directly from database
+- Performance benefit: avoids multiple table joins for every download/delete operation
+
+**Implementation Details:**
+
+**1. Document Types (Required vs Optional)**
+- **File:** `shared/additionalInfoTypes.ts`
+- Added `DocumentRequirement` interface with `name`, `required`, `description`
+- Updated `AdditionalInfoConfig` to include optional `documents` array
+- Backward compatibility maintained with `required_documents` field
+
+**2. Database Schema**
+- **File:** `shared/schema.ts` (lines 177-190)
+- New `documents` table with fields:
+  - `blobPath` (text) - Full precalculated path
+  - `fileName` (text) - Original filename for display
+  - `fileSize`, `mimeType`, `uploadedByUserId`, `uploadedAt`
+  - `applicationId` (FK with cascade delete)
+  - `demoCodeId` (FK for demo isolation)
+- Renamed column: `blob_name` → `blob_path` to reflect full path storage
+
+**3. Azure Storage Service**
+- **File:** `server/azureBlobStorage.ts`
+- Installed `@azure/storage-blob` SDK
+- Created `AzureBlobStorageService` class with methods:
+  - `uploadFile()` - Accepts precalculated `blobPath`
+  - `downloadFile()` - Downloads file as Buffer
+  - `deleteFile()` - Removes blob from storage
+  - `getDownloadUrl()` - Gets URL for download
+  - `blobExists()` - Checks blob existence
+  - `listBlobsByPrefix()` - Lists blobs under path prefix
+- Supports both connection string and SAS token authentication
+- Creates containers automatically (idempotent)
+
+**4. Backend API Endpoints**
+- **File:** `server/routes.ts`
+- Installed `multer` for file upload handling (in-memory, 50MB limit)
+- **POST** `/api/applications/:applicationId/documents`
+  - Generates `documentId` with `crypto.randomUUID()`
+  - Extracts file extension from original filename
+  - Constructs full path: `${tenantId}/${applicationId}/${documentId}.${ext}`
+  - Uploads to Azure with precalculated path
+  - Stores metadata in database with same `documentId` and `blobPath`
+- **GET** `/api/applications/:applicationId/documents` - List documents
+- **GET** `/api/documents/:id/download` - Download document
+- **DELETE** `/api/documents/:id` - Delete document (with permission check)
+- All operations use stored `blobPath` directly
+
+**5. Storage Layer Methods**
+- **File:** `server/storage.ts` (lines 720-758)
+- `createDocument()` - Insert document record
+- `getDocument()` - Retrieve by ID
+- `listDocumentsByApplication()` - Get all docs for application
+- `deleteDocument()` - Remove document record
+- `getDocumentsByRequirement()` - Filter by requirement name
+
+**6. Frontend API Client**
+- **File:** `client/src/lib/api.ts` (lines 427-468)
+- `uploadDocument()` - FormData upload with progress support
+- `listDocuments()` - Fetch application documents
+- `getDocumentDownloadUrl()` - Construct download URL
+- `deleteDocument()` - Remove document
+
+**7. DocumentUpload Component**
+- **File:** `client/src/components/DocumentUpload.tsx` (NEW - 390 lines)
+- Features:
+  - Progress indicator: "X of Y required documents uploaded"
+  - Visual distinction: Required (red) vs Optional (muted)
+  - Drag-and-drop zones for each document requirement
+  - File size formatting and upload timestamps
+  - Download and delete actions with permission checks
+  - Real-time upload progress tracking
+  - Error handling with user-friendly messages
+- Uses React Query for data fetching and mutations
+- Integrates with shadcn/ui components (Card, Button, Alert, Badge)
+
+**8. Application Wizard Updates**
+- **File:** `client/src/components/ApplicationWizard.tsx` (lines 147-240)
+- Updated workflow to create application as "draft" in Step 2
+- Provides `applicationId` for document uploads in Step 3
+- Final submission in Step 4 updates status from "draft" to "pending"
+- Calculates completeness score based on filled fields
+- Auto-generates application number: `APP-{year}-{sequence}`
+
+**9. DynamicAdditionalInfoForm Updates**
+- **File:** `client/src/components/DynamicAdditionalInfoForm.tsx`
+- Updated to display document requirements from `formConfig.documents`
+- Shows required documents with red indicator
+- Shows optional documents with muted styling
+- Displays document descriptions as guidance text
+
+**10. Documentation**
+- **File:** `server/AZURE_STORAGE_STRUCTURE.md`
+- Comprehensive documentation of:
+  - GUID-based container structure
+  - Path construction and precalculation strategy
+  - Implementation examples with actual code
+  - Querying patterns for documents
+  - Lifecycle management strategies
+  - Future enhancements (versioning, soft delete, CDN)
+  - Monitoring and cost tracking examples
+- Updated all examples to use GUID paths instead of human-readable names
+
+**Benefits of GUID-Based Precalculated Paths:**
+1. **Performance** - No runtime path assembly, direct retrieval from database
+2. **Simplicity** - Single database lookup for document operations
+3. **Consistency** - Path never changes, immune to tenant/application renames
+4. **Scalability** - No complex joins needed for document access
+5. **Security** - GUIDs are non-enumerable, harder to guess document URLs
+6. **Flexibility** - Easy to implement access tiers and lifecycle policies
+
+**Files Created:**
+- `server/azureBlobStorage.ts` - Azure Blob Storage service (NEW)
+- `server/AZURE_STORAGE_STRUCTURE.md` - Comprehensive documentation (NEW)
+- `client/src/components/DocumentUpload.tsx` - Upload UI component (NEW)
+
+**Files Modified:**
+- `shared/schema.ts` - Added documents table, renamed blob_name to blob_path
+- `shared/additionalInfoTypes.ts` - Added DocumentRequirement interface
+- `server/routes.ts` - Added document upload/download/delete endpoints with GUID path logic
+- `server/storage.ts` - Added 5 document CRUD methods
+- `client/src/lib/api.ts` - Added document API client methods
+- `client/src/components/ApplicationWizard.tsx` - Updated workflow for draft creation
+- `client/src/components/DynamicAdditionalInfoForm.tsx` - Display document requirements
+- `package.json` - Added @azure/storage-blob and multer dependencies
+
+**Environment Variables Required:**
+```bash
+# Option 1: Connection String (Recommended)
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...
+
+# Option 2: SAS Token
+AZURE_STORAGE_ACCOUNT_NAME=your-account-name
+AZURE_STORAGE_SAS_TOKEN=?sv=2021-06-08&ss=b&srt=sco&sp=rwdlac&se=...
+```
+
+**Next Steps:**
+1. Configure Azure Blob Storage credentials in environment
+2. Test document upload end-to-end workflow
+3. Verify GUID-based paths are correctly generated and stored
+4. Test download and delete operations
+5. Monitor storage usage and costs
+6. Consider implementing lifecycle policies for cost optimization
+
+---
+
+### 🎯 Previous Session Summary (2025-11-24 - Part 2)
 
 **Major Accomplishments:**
 1. ✅ Added elegant 6-option application type selector

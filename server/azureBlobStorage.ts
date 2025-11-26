@@ -89,24 +89,21 @@ class AzureBlobStorageService {
 
   /**
    * Upload a file to Azure Blob Storage
+   * @param blobPath Full blob path including filename (e.g., "tenantId/appId/docId.pdf")
    */
   public async uploadFile(
     containerName: string,
     buffer: Buffer,
     originalFileName: string,
-    contentType: string
+    contentType: string,
+    blobPath: string // Full path: "tenantId/applicationId/documentId.ext"
   ): Promise<UploadResult> {
     if (!this.isAvailable()) {
       throw new Error('Azure Blob Storage is not configured. Please set environment variables.');
     }
 
-    // Generate unique blob name
-    const fileExtension = originalFileName.split('.').pop() || '';
-    const uniqueName = `${randomUUID()}-${Date.now()}`;
-    const blobName = fileExtension ? `${uniqueName}.${fileExtension}` : uniqueName;
-
     const containerClient = await this.getContainerClient(containerName);
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
 
     // Upload with content type
     await blockBlobClient.upload(buffer, buffer.length, {
@@ -116,7 +113,7 @@ class AzureBlobStorageService {
     });
 
     return {
-      blobName,
+      blobName: blobPath, // Return the full path
       containerName,
       url: blockBlobClient.url,
       contentType,
@@ -207,6 +204,33 @@ class AzureBlobStorageService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * List blobs under a specific path prefix (virtual folder)
+   * Useful for listing all documents for a tenant or application
+   */
+  public async listBlobsByPrefix(
+    containerName: string,
+    prefix: string
+  ): Promise<Array<{ name: string; size: number; lastModified: Date }>> {
+    if (!this.isAvailable()) {
+      throw new Error('Azure Blob Storage is not configured');
+    }
+
+    const containerClient = await this.getContainerClient(containerName);
+    const blobs: Array<{ name: string; size: number; lastModified: Date }> = [];
+
+    // List blobs with prefix
+    for await (const blob of containerClient.listBlobsFlat({ prefix })) {
+      blobs.push({
+        name: blob.name,
+        size: blob.properties.contentLength || 0,
+        lastModified: blob.properties.lastModified || new Date(),
+      });
+    }
+
+    return blobs;
   }
 }
 
