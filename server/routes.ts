@@ -218,6 +218,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Form Templates - Protected routes
   app.get("/api/tenants/:tenantId/forms", isAuthenticated, async (req, res) => {
     try {
+      const { projectType } = req.query;
+      
+      if (projectType) {
+        // If projectType is specified, return only the active form for that type
+        const form = await storage.getActiveFormTemplateForProjectType(req.params.tenantId, projectType as string);
+        return res.json(form ? [form] : []);
+      }
+      
+      // Otherwise return all active forms for the tenant
       const forms = await storage.listFormTemplatesForTenant(req.params.tenantId);
       res.json(forms);
     } catch (error: any) {
