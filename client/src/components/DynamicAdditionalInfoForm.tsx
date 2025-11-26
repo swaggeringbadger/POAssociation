@@ -8,8 +8,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
-import { Info, BookOpen, Check, ChevronsUpDown } from 'lucide-react';
-import type { AdditionalInfoField, FormData } from '@shared/additionalInfoTypes';
+import { Info, BookOpen, Check, ChevronsUpDown, FileText, CircleDot } from 'lucide-react';
+import type { AdditionalInfoField, FormData, DocumentRequirement } from '@shared/additionalInfoTypes';
 import type { AdditionalInfoConfig, BylawReference } from '@shared/formTypes';
 import { apiRequest } from '@/lib/api';
 import { Input } from '@/components/ui/input';
@@ -441,20 +441,75 @@ export function DynamicAdditionalInfoForm({
         </div>
       ))}
 
-      {/* Required Documents */}
-      {config.required_documents && config.required_documents.length > 0 && (
-        <div className="bg-muted/50 rounded-lg p-6 space-y-4">
-          <h3 className="text-lg font-semibold">Required Documents</h3>
-          <p className="text-sm text-muted-foreground">
-            Please prepare the following documents for upload in the next step:
-          </p>
-          <ul className="list-disc list-inside space-y-2">
-            {config.required_documents.map((doc, idx) => (
-              <li key={idx} className="text-sm">{doc}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Document Requirements */}
+      {(() => {
+        // Support both old and new document format
+        const documents: DocumentRequirement[] = config.documents ||
+          (config.required_documents || []).map(doc => ({ name: doc, required: true }));
+
+        const requiredDocs = documents.filter(d => d.required);
+        const optionalDocs = documents.filter(d => !d.required);
+
+        if (documents.length === 0) return null;
+
+        return (
+          <div className="bg-muted/50 rounded-lg p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">Document Requirements</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Please prepare the following documents for upload in the next step:
+            </p>
+
+            {/* Required Documents */}
+            {requiredDocs.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-destructive flex items-center gap-2">
+                  <CircleDot className="h-4 w-4" />
+                  Required Documents
+                </h4>
+                <ul className="space-y-2 ml-6">
+                  {requiredDocs.map((doc, idx) => (
+                    <li key={idx} className="text-sm flex items-start gap-2">
+                      <span className="text-destructive mt-0.5">•</span>
+                      <div>
+                        <span className="font-medium">{doc.name}</span>
+                        {doc.description && (
+                          <p className="text-muted-foreground text-xs mt-0.5">{doc.description}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Optional Documents */}
+            {optionalDocs.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <CircleDot className="h-4 w-4" />
+                  Optional Documents (Recommended)
+                </h4>
+                <ul className="space-y-2 ml-6">
+                  {optionalDocs.map((doc, idx) => (
+                    <li key={idx} className="text-sm flex items-start gap-2">
+                      <span className="text-muted-foreground mt-0.5">•</span>
+                      <div>
+                        <span>{doc.name}</span>
+                        {doc.description && (
+                          <p className="text-muted-foreground text-xs mt-0.5">{doc.description}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

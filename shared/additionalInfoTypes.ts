@@ -53,6 +53,15 @@ export interface AdditionalInfoSection {
 }
 
 /**
+ * Document requirement for application submission
+ */
+export interface DocumentRequirement {
+  name: string;                         // Document name/description
+  required: boolean;                    // Whether document is required or optional
+  description?: string;                 // Additional guidance about the document
+}
+
+/**
  * Complete form configuration for a project type
  * This is what gets stored in formTemplates.schema (JSONB)
  */
@@ -60,7 +69,8 @@ export interface AdditionalInfoConfig {
   title: string;                        // Form heading displayed to user
   description: string;                  // Subtitle/helper text for the form
   sections: AdditionalInfoSection[];    // Groups of related fields
-  required_documents: string[];         // List of documents needed for this project type
+  required_documents: string[];         // DEPRECATED: Use documents instead
+  documents?: DocumentRequirement[];    // List of required and optional documents
   scoring_weights: Record<string, number>;  // Maps field IDs → numerical weights for completeness
 }
 
