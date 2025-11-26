@@ -62,6 +62,7 @@ export default function FormWizard() {
   const [viewFormOpen, setViewFormOpen] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<any>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [newlyGeneratedVersionId, setNewlyGeneratedVersionId] = useState<string | null>(null);
 
   // Use selected property filter if available, otherwise fall back to current tenant
   const effectiveTenantId = selectedPropertyFilter || currentTenant?.id;
@@ -210,6 +211,14 @@ export default function FormWizard() {
       // If the modal is open for this type, refresh the versions list
       if (viewFormOpen && viewingType === applicationType) {
         await refetchVersions();
+        
+        // Set the newly generated version ID for animation
+        setNewlyGeneratedVersionId(result.formTemplateId);
+        
+        // Clear the highlight after 5 seconds
+        setTimeout(() => {
+          setNewlyGeneratedVersionId(null);
+        }, 5000);
       }
     } catch (error: any) {
       toast.dismiss(loadingToast);
@@ -429,7 +438,13 @@ export default function FormWizard() {
                   </TableHeader>
                   <TableBody>
                     {formVersions.map((version: any) => (
-                      <TableRow key={version.id} className={version.isActive ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
+                      <TableRow 
+                        key={version.id} 
+                        className={`
+                          ${version.isActive ? "bg-blue-50 dark:bg-blue-950/20" : ""}
+                          ${newlyGeneratedVersionId === version.id ? "animate-pulse-glow" : ""}
+                        `}
+                      >
                         <TableCell className="font-medium">
                           v{version.version}
                         </TableCell>
