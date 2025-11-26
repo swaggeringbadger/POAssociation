@@ -72,16 +72,19 @@ class AzureBlobStorageService {
 
     const containerClient = this.blobServiceClient.getContainerClient(containerName);
 
-    // Create container if it doesn't exist (idempotent)
+    // Create container if it doesn't exist (idempotent operation)
+    // Note: Creating as private container (no public access) for security
     try {
-      await containerClient.createIfNotExists({
-        access: 'blob', // Public read access for blobs (not container listing)
-      });
-    } catch (error: any) {
-      // Ignore if container already exists
-      if (error.statusCode !== 409) {
-        throw error;
+      const createResponse = await containerClient.createIfNotExists();
+
+      if (createResponse.succeeded) {
+        console.log(`✓ Created Azure container: ${containerName} (private)`);
+      } else {
+        console.log(`✓ Using existing Azure container: ${containerName}`);
       }
+    } catch (error: any) {
+      console.error(`❌ Failed to create/access container ${containerName}:`, error.message);
+      throw new Error(`Failed to access Azure container ${containerName}: ${error.message}`);
     }
 
     return containerClient;
@@ -102,23 +105,31 @@ class AzureBlobStorageService {
       throw new Error('Azure Blob Storage is not configured. Please set environment variables.');
     }
 
-    const containerClient = await this.getContainerClient(containerName);
-    const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
+    try {
+      // Ensure container exists
+      const containerClient = await this.getContainerClient(containerName);
+      const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
 
-    // Upload with content type
-    await blockBlobClient.upload(buffer, buffer.length, {
-      blobHTTPHeaders: {
-        blobContentType: contentType,
-      },
-    });
+      // Upload with content type
+      await blockBlobClient.upload(buffer, buffer.length, {
+        blobHTTPHeaders: {
+          blobContentType: contentType,
+        },
+      });
 
-    return {
-      blobName: blobPath, // Return the full path
-      containerName,
-      url: blockBlobClient.url,
-      contentType,
-      size: buffer.length,
-    };
+      console.log(`✓ Uploaded blob: ${blobPath} (${buffer.length} bytes)`);
+
+      return {
+        blobName: blobPath, // Return the full path
+        containerName,
+        url: blockBlobClient.url,
+        contentType,
+        size: buffer.length,
+      };
+    } catch (error: any) {
+      console.error(`❌ Failed to upload blob ${blobPath}:`, error.message);
+      throw new Error(`Failed to upload file: ${error.message}`);
+    }
   }
 
   /**

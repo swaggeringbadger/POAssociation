@@ -28,7 +28,9 @@
       "Bash(npm run build:*)",
       "Bash(psql:*)",
       "Bash(env)",
-      "Bash(git -C /home/runner/workspace log --oneline -15)"
+      "Bash(git -C /home/runner/workspace log --oneline -15)",
+      "Bash(git -C /home/runner/workspace show 1af9792 --stat)",
+      "Bash(git -C /home/runner/workspace show 1af9792:client/src/components/ApplicationWizard.tsx)"
     ],
     "deny": [],
     "ask": []

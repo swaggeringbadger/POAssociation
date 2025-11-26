@@ -581,6 +581,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(document);
     } catch (error: any) {
       console.error("Error uploading document:", error);
+      console.error("Error stack:", error.stack);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Test Azure Blob Storage connectivity and container creation
+  app.get("/api/test/azure-storage", async (req, res) => {
+    try {
+      const testResult = {
+        configured: azureBlobStorage.isAvailable(),
+        timestamp: new Date().toISOString(),
+      };
+
+      if (!testResult.configured) {
+        return res.json({
+          ...testResult,
+          status: 'not_configured',
+          message: 'Azure Blob Storage is not configured. Check environment variables.'
+        });
+      }
+
+      // Try to test container creation
+      try {
+        // Upload a small test file
+        const testBuffer = Buffer.from('test');
+        const testPath = `test/${Date.now()}.txt`;
+        await azureBlobStorage.uploadFile(
+          'application-documents',
+          testBuffer,
+          'test.txt',
+          'text/plain',
+          testPath
+        );
+
+        // Clean up test file
+        await azureBlobStorage.deleteFile('application-documents', testPath);
+
+        return res.json({
+          ...testResult,
+          status: 'success',
+          message: 'Container exists or was created successfully',
+          containerName: 'application-documents'
+        });
+      } catch (error: any) {
+        console.error('Azure test error:', error);
+        return res.json({
+          ...testResult,
+          status: 'error',
+          message: `Failed to create/access container: ${error.message}`,
+          error: error.message,
+          errorCode: error.code
+        });
+      }
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
