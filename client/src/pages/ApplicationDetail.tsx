@@ -5,11 +5,11 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText } from "lucide-react";
 import { Link } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Application } from "@shared/schema";
 
 interface WorkflowData {
@@ -23,11 +23,18 @@ interface WorkflowData {
   };
 }
 
+interface DocumentItem {
+  name: string;
+  size: number;
+  lastModified: string;
+}
+
 export default function ApplicationDetail() {
   const params = useParams();
   const applicationId = params.id as string;
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
+  const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -54,6 +61,16 @@ export default function ApplicationDetail() {
       const res = await fetch(`/api/applications/${applicationId}/workflow`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch workflow");
       return res.json() as Promise<WorkflowData>;
+    },
+    enabled: !!applicationId,
+  });
+
+  const { data: documents = [] } = useQuery({
+    queryKey: [`/api/applications/${applicationId}/documents`],
+    queryFn: async () => {
+      const res = await fetch(`/api/applications/${applicationId}/documents`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json() as Promise<DocumentItem[]>;
     },
     enabled: !!applicationId,
   });
@@ -178,19 +195,82 @@ export default function ApplicationDetail() {
             </div>
           )}
 
-          {application.formData && Object.keys(application.formData).length > 0 && (
+          {(application.formData && Object.keys(application.formData).length > 0) || documents.length > 0 ? (
             <div className="border-t pt-6">
-              <p className="text-sm font-medium text-muted-foreground mb-4">Form Data</p>
-              <div className="space-y-3">
-                {Object.entries(application.formData as Record<string, any>).map(([key, value]) => (
-                  <div key={key} className="border rounded-lg p-3 bg-muted/50">
-                    <p className="text-xs font-medium text-muted-foreground uppercase">{key}</p>
-                    <p className="text-sm mt-1">{String(value)}</p>
-                  </div>
-                ))}
+              {/* Tabs */}
+              <div className="flex gap-4 mb-4 border-b">
+                <button
+                  onClick={() => setActiveTab('form')}
+                  className={`text-sm font-medium pb-2 px-1 transition-colors ${
+                    activeTab === 'form'
+                      ? 'text-foreground border-b-2 border-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Form Data
+                </button>
+                <button
+                  onClick={() => setActiveTab('documents')}
+                  className={`text-sm font-medium pb-2 px-1 transition-colors ${
+                    activeTab === 'documents'
+                      ? 'text-foreground border-b-2 border-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Documents ({documents.length})
+                </button>
               </div>
+
+              {/* Form Data Tab */}
+              {activeTab === 'form' && application.formData && Object.keys(application.formData).length > 0 && (
+                <div className="space-y-3">
+                  {Object.entries(application.formData as Record<string, any>).map(([key, value]) => (
+                    <div key={key} className="border rounded-lg p-3 bg-muted/50">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">{key}</p>
+                      <p className="text-sm mt-1">{String(value)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Documents Tab */}
+              {activeTab === 'documents' && (
+                <div className="space-y-2">
+                  {documents.length > 0 ? (
+                    documents.map((doc, idx) => (
+                      <div key={idx} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" data-testid={`text-document-${idx}`}>{doc.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(doc.size / 1024).toFixed(1)} KB • {new Date(doc.lastModified).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          className="ml-2"
+                          data-testid={`button-download-${idx}`}
+                        >
+                          <a href={`/api/documents/${btoa(doc.name)}/download?appId=${applicationId}`} download>
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No documents uploaded yet</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
 
           {application.reviewNotes && (
             <div className="border-t pt-6">
