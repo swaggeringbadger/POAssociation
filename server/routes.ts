@@ -7,9 +7,19 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { provisionDemoEcosystem } from "./provision";
 import { seedWorkflowTemplates } from "./seed-workflows";
 import { AdditionalInfoService } from "./additionalInfoService";
+import { azureBlobStorage } from "./azureBlobStorage";
 import { z } from "zod";
 import * as schema from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
+import multer from "multer";
+
+// Configure multer for in-memory file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  },
+});
 
 // Initialize services
 const additionalInfoService = new AdditionalInfoService(storage);
@@ -482,6 +492,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.json(application);
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Document Management - Protected routes
+  // Upload a document for an application
+  app.post("/api/applications/:applicationId/documents", isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Document storage is not configured. Please configure Azure Blob Storage."
+        });
+      }
+
+      const { applicationId } = req.params;
+      const { documentRequirementName } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      if (!documentRequirementName) {
+        return res.status(400).json({ error: "documentRequirementName is required" });
+      }
+
+      // Verify application exists
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      // Get current user ID
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      // Upload to Azure Blob Storage
+      const uploadResult = await azureBlobStorage.uploadFile(
+        'application-documents',
+        file.buffer,
+        file.originalname,
+        file.mimetype
+      );
+
+      // Save document metadata to database
+      const document = await storage.createDocument({
+        applicationId,
+        documentRequirementName,
+        fileName: file.originalname,
+        blobName: uploadResult.blobName,
+        containerName: uploadResult.containerName,
+        fileSize: uploadResult.size,
+        mimeType: uploadResult.contentType,
+        uploadedByUserId: userId,
+        demoCodeId: application.demoCodeId,
+      });
+
+      res.json(document);
+    } catch (error: any) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all documents for an application
+  app.get("/api/applications/:applicationId/documents", isAuthenticated, async (req, res) => {
+    try {
+      const documents = await storage.listDocumentsByApplication(req.params.applicationId);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download a document
+  app.get("/api/documents/:id/download", isAuthenticated, async (req, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Document storage is not configured"
+        });
+      }
+
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Get download URL
+      const downloadUrl = await azureBlobStorage.getDownloadUrl(
+        document.containerName,
+        document.blobName
+      );
+
+      // For direct download, we could either:
+      // 1. Redirect to the Azure Blob URL (simple, but exposes Azure URLs)
+      // 2. Stream the file through our server (more control, but uses bandwidth)
+
+      // Option 1: Redirect (recommended for public blobs)
+      res.redirect(downloadUrl);
+
+      // Option 2: Stream through server (uncomment if needed)
+      // const fileBuffer = await azureBlobStorage.downloadFile(
+      //   document.containerName,
+      //   document.blobName
+      // );
+      // res.setHeader('Content-Type', document.mimeType);
+      // res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+      // res.send(fileBuffer);
+    } catch (error: any) {
+      console.error("Error downloading document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a document
+  app.delete("/api/documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Document storage is not configured"
+        });
+      }
+
+      const document = await storage.getDocument(req.params.id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Verify user has permission to delete (must be uploader or admin)
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (document.uploadedByUserId !== userId) {
+        // TODO: Add role-based permission check for admins
+        return res.status(403).json({ error: "Unauthorized to delete this document" });
+      }
+
+      // Delete from Azure Blob Storage
+      await azureBlobStorage.deleteFile(
+        document.containerName,
+        document.blobName
+      );
+
+      // Delete from database
+      await storage.deleteDocument(req.params.id);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting document:", error);
       res.status(500).json({ error: error.message });
     }
   });

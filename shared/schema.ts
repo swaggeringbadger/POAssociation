@@ -174,6 +174,29 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
 export type Application = typeof applications.$inferSelect;
 
+// Documents table - tracks uploaded files in Azure Blob Storage
+export const documents = pgTable("documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  documentRequirementName: text("document_requirement_name").notNull(), // Matches DocumentRequirement.name
+  fileName: text("file_name").notNull(), // Original filename
+  blobName: text("blob_name").notNull(), // Unique blob name in Azure Storage
+  containerName: text("container_name").notNull().default("application-documents"), // Azure container
+  fileSize: integer("file_size").notNull(), // Bytes
+  mimeType: text("mime_type").notNull(), // e.g., 'application/pdf', 'image/jpeg'
+  uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+});
+
+export const insertDocumentSchema = createInsertSchema(documents).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type Document = typeof documents.$inferSelect;
+
 // Demo Sessions table (for analytics and tracking)
 export const demoSessions = pgTable("demo_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

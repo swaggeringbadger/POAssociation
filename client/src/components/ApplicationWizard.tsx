@@ -10,13 +10,15 @@
 
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import type { FormData } from '@shared/additionalInfoTypes';
+import { ChevronLeft, ChevronRight, Check, FileText, CircleDot } from 'lucide-react';
+import type { FormData, DocumentRequirement } from '@shared/additionalInfoTypes';
+import type { AdditionalInfoConfig } from '@shared/additionalInfoTypes';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/hooks/useAuth';
 import { DynamicAdditionalInfoForm } from './DynamicAdditionalInfoForm';
+import { DocumentUpload } from './DocumentUpload';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +52,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     propertyAddress: '',
   });
   const [additionalInfoData, setAdditionalInfoData] = useState<FormData>({});
+  const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
 
   // Form for step 1 (project details)
   const form = useForm<ProjectDetails>({
@@ -58,6 +61,13 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   });
 
   const { register, handleSubmit, formState: { errors, isValid } } = form;
+
+  // Fetch form configuration to get document requirements
+  const { data: formConfig } = useQuery<AdditionalInfoConfig>({
+    queryKey: ['additional-info', currentTenant?.id, projectType],
+    queryFn: () => apiRequest('GET', `/api/additional-info/${currentTenant?.id}/${projectType}`),
+    enabled: !!currentTenant?.id && !!projectType,
+  });
 
   // Get project type display name
   const getProjectTypeName = (typeId: string) => {
@@ -134,11 +144,76 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     setCurrentStep(2);
   };
 
+  const handleStep2Complete = async () => {
+    // Create application when moving from step 2 to 3
+    // This gives us an applicationId for document uploads
+    try {
+      const formTemplate = await apiRequest(
+        'GET',
+        `/api/additional-info/${currentTenant?.id}/${projectType}`
+      );
+
+      const templates = await apiRequest(
+        'GET',
+        `/api/tenants/${currentTenant?.id}/forms`
+      );
+
+      const activeTemplate = templates.find(
+        (t: any) => t.projectType === projectType && t.isActive
+      );
+
+      if (!activeTemplate) {
+        throw new Error('No active form template found');
+      }
+
+      // Calculate completeness score
+      const requiredFields = Object.keys(formTemplate.scoring_weights || {});
+      const filledFields = requiredFields.filter(
+        (fieldId) => additionalInfoData[fieldId] !== undefined && additionalInfoData[fieldId] !== ''
+      );
+      const completenessScore = Math.round((filledFields.length / requiredFields.length) * 100);
+
+      // Generate application number
+      const year = new Date().getFullYear();
+      const count = await apiRequest('GET', `/api/applications/count/${currentTenant?.id}/${year}`);
+      const applicationNumber = `APP-${year}-${String(count + 1).padStart(4, '0')}`;
+
+      // Create the application
+      const application = await apiRequest('POST', '/api/applications', {
+        tenantId: currentTenant?.id,
+        projectType,
+        formTemplateId: activeTemplate.id,
+        formTemplateVersion: activeTemplate.version,
+        submittedByUserId: (user as any)?.id,
+        title: projectDetails.title,
+        description: projectDetails.description,
+        propertyAddress: projectDetails.propertyAddress,
+        formData: additionalInfoData,
+        completenessScore,
+        applicationNumber,
+        status: 'draft', // Start as draft until final submission
+      });
+
+      setCreatedApplicationId(application.id);
+      setCurrentStep(3);
+      toast({
+        title: "Progress saved",
+        description: "Your application has been saved. You can now upload documents.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleNext = () => {
     if (currentStep === 1) {
       handleSubmit(handleStep1Submit)();
     } else if (currentStep === 2) {
-      setCurrentStep(3);
+      handleStep2Complete();
     } else if (currentStep === 3) {
       setCurrentStep(4);
     }
@@ -150,11 +225,18 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     }
   };
 
-  const handleFinalSubmit = () => {
-    submitMutation.mutate({
-      ...projectDetails,
-      additionalInfo: additionalInfoData,
-    });
+  const handleFinalSubmit = async () => {
+    // Update application status to pending (from draft)
+    if (createdApplicationId) {
+      await apiRequest('PATCH', `/api/applications/${createdApplicationId}/status`, {
+        status: 'pending',
+      });
+      toast({
+        title: "Application Submitted",
+        description: "Your application has been submitted for review.",
+      });
+      navigate('/applications');
+    }
   };
 
   const canProceed = () => {
@@ -233,33 +315,15 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         );
 
       case 3:
-        return (
-          <div className="space-y-6">
-            <Alert>
-              <AlertDescription>
-                Document upload functionality will be implemented with Azure Blob Storage.
-                For now, you can proceed to review your application.
-              </AlertDescription>
-            </Alert>
+        // Support both old and new document format
+        const documents: DocumentRequirement[] = formConfig?.documents ||
+          (formConfig?.required_documents || []).map(doc => ({ name: doc, required: true }));
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recommended Documents</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Based on your project type, consider preparing:
-                </p>
-                <ul className="list-disc list-inside space-y-2 text-sm">
-                  <li>Photos of the current condition</li>
-                  <li>Architectural plans or detailed drawings</li>
-                  <li>Material specifications and samples</li>
-                  <li>Contractor licenses and insurance</li>
-                  <li>Any other relevant documentation</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
+        return (
+          <DocumentUpload
+            applicationId={createdApplicationId}
+            documents={documents}
+          />
         );
 
       case 4:

@@ -423,3 +423,46 @@ export async function apiRequest<T = any>(
 
   return response.json();
 }
+
+/**
+ * Document Management API
+ */
+
+// Upload a document for an application
+export async function uploadDocument(
+  applicationId: string,
+  file: File,
+  documentRequirementName: string
+): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentRequirementName', documentRequirementName);
+
+  const response = await fetch(`/api/applications/${applicationId}/documents`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `Upload failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// List all documents for an application
+export async function listDocuments(applicationId: string): Promise<any[]> {
+  return apiRequest('GET', `/api/applications/${applicationId}/documents`);
+}
+
+// Download a document
+export function getDocumentDownloadUrl(documentId: string): string {
+  return `/api/documents/${documentId}/download`;
+}
+
+// Delete a document
+export async function deleteDocument(documentId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/documents/${documentId}`);
+}

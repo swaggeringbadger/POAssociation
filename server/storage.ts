@@ -98,6 +98,13 @@ export interface IStorage {
   listAiFormGenerations(tenantId?: string): Promise<schema.AiFormGeneration[]>;
   updateAiFormGenerationStatus(id: string, status: string, approvedByUserId?: string): Promise<schema.AiFormGeneration>;
   linkFormTemplateToGeneration(generationId: string, formTemplateId: string): Promise<schema.AiFormGeneration>;
+
+  // Documents
+  createDocument(document: schema.InsertDocument): Promise<schema.Document>;
+  getDocument(id: string): Promise<schema.Document | undefined>;
+  listDocumentsByApplication(applicationId: string): Promise<schema.Document[]>;
+  deleteDocument(id: string): Promise<void>;
+  getDocumentsByRequirement(applicationId: string, requirementName: string): Promise<schema.Document[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -708,6 +715,46 @@ export class DbStorage implements IStorage {
       .where(eq(schema.aiFormGenerations.id, generationId))
       .returning();
     return updated;
+  }
+
+  // Documents
+  async createDocument(document: schema.InsertDocument): Promise<schema.Document> {
+    const [created] = await db.insert(schema.documents)
+      .values(document)
+      .returning();
+    return created;
+  }
+
+  async getDocument(id: string): Promise<schema.Document | undefined> {
+    const [document] = await db.select()
+      .from(schema.documents)
+      .where(eq(schema.documents.id, id))
+      .limit(1);
+    return document;
+  }
+
+  async listDocumentsByApplication(applicationId: string): Promise<schema.Document[]> {
+    return await db.select()
+      .from(schema.documents)
+      .where(eq(schema.documents.applicationId, applicationId))
+      .orderBy(schema.documents.uploadedAt);
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await db.delete(schema.documents)
+      .where(eq(schema.documents.id, id));
+  }
+
+  async getDocumentsByRequirement(applicationId: string, requirementName: string): Promise<schema.Document[]> {
+    return await db.select()
+      .from(schema.documents)
+      .where(
+        and(
+          eq(schema.documents.applicationId, applicationId),
+          eq(schema.documents.documentRequirementName, requirementName)
+        )
+      )
+      .orderBy(schema.documents.uploadedAt);
   }
 }
 

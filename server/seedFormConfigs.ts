@@ -92,6 +92,38 @@ const formConfigs: Record<string, AdditionalInfoConfig> = {
       "Photos of current condition",
       "Contractor information (if applicable)"
     ],
+    documents: [
+      {
+        name: "Color samples or swatches",
+        required: true,
+        description: "Physical or digital color samples showing exact paint/stain colors"
+      },
+      {
+        name: "Material specifications sheets",
+        required: true,
+        description: "Manufacturer specifications and product data sheets"
+      },
+      {
+        name: "Photos of current condition",
+        required: true,
+        description: "Clear photos of all areas to be modified from multiple angles"
+      },
+      {
+        name: "Contractor information",
+        required: false,
+        description: "If using a contractor, provide license number, insurance, and contact info"
+      },
+      {
+        name: "Color inspiration photos",
+        required: false,
+        description: "Photos of similar projects or color combinations you're considering"
+      },
+      {
+        name: "Neighborhood context photos",
+        required: false,
+        description: "Photos showing how your home relates to neighboring properties"
+      }
+    ],
     scoring_weights: {
       modification_type: 15,
       colors: 25,
@@ -191,6 +223,43 @@ const formConfigs: Record<string, AdditionalInfoConfig> = {
       "Site plan showing location and setbacks",
       "Contractor license and insurance",
       "Timeline and construction schedule"
+    ],
+    documents: [
+      {
+        name: "Architectural plans or detailed drawings",
+        required: true,
+        description: "Professionally drawn plans with dimensions, elevations, and cross-sections"
+      },
+      {
+        name: "Site plan showing location and setbacks",
+        required: true,
+        description: "Survey or plot plan showing structure location and distances from property lines"
+      },
+      {
+        name: "Contractor license and insurance",
+        required: true,
+        description: "General contractor license, liability insurance, and workers compensation certificates"
+      },
+      {
+        name: "Structural engineering report",
+        required: true,
+        description: "Stamped structural calculations and load-bearing analysis"
+      },
+      {
+        name: "Material specifications and color samples",
+        required: false,
+        description: "Samples and specifications for siding, roofing, and other exterior materials"
+      },
+      {
+        name: "Timeline and construction schedule",
+        required: false,
+        description: "Detailed project timeline including milestones and expected completion dates"
+      },
+      {
+        name: "Neighbor notification letters",
+        required: false,
+        description: "Proof of notification to adjacent property owners about construction"
+      }
     ],
     scoring_weights: {
       project_type_sub: 10,
