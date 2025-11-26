@@ -38,6 +38,10 @@ export default function ApplicationDetail() {
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -320,7 +324,7 @@ export default function ApplicationDetail() {
 
       {/* Document Preview Modal */}
       {previewDoc && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setPreviewDoc(null); setImageZoom(1); }}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setPreviewDoc(null); setImageZoom(1); setPanX(0); setPanY(0); }}>
           <Card className="w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
               <div>
@@ -353,13 +357,13 @@ export default function ApplicationDetail() {
                     <div className="w-px h-6 bg-border mx-2"></div>
                   </>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => { setPreviewDoc(null); setImageZoom(1); }} data-testid="button-close-preview">
+                <Button variant="ghost" size="sm" onClick={() => { setPreviewDoc(null); setImageZoom(1); setPanX(0); setPanY(0); }} data-testid="button-close-preview">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-4">
-              {getPreviewContent(previewDoc.id, previewDoc.fileName, imageZoom)}
+            <CardContent className="flex-1 overflow-auto p-4" onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
+              {getPreviewContent(previewDoc.id, previewDoc.fileName, imageZoom, panX, panY, isDragging, dragStart, setIsDragging, setDragStart, setPanX, setPanY)}
             </CardContent>
           </Card>
         </div>
@@ -378,7 +382,19 @@ function isImage(fileName: string): boolean {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '');
 }
 
-function getPreviewContent(docId: string, fileName: string, imageZoom: number = 1) {
+function getPreviewContent(
+  docId: string,
+  fileName: string,
+  imageZoom: number = 1,
+  panX: number = 0,
+  panY: number = 0,
+  isDragging: boolean = false,
+  dragStart: { x: number; y: number } = { x: 0, y: 0 },
+  setIsDragging: (val: boolean) => void = () => {},
+  setDragStart: (val: { x: number; y: number }) => void = () => {},
+  setPanX: (val: number) => void = () => {},
+  setPanY: (val: number) => void = () => {}
+) {
   const extension = fileName.split('.').pop()?.toLowerCase();
   const previewUrl = `/api/documents/${docId}/preview`;
 
@@ -393,17 +409,58 @@ function getPreviewContent(docId: string, fileName: string, imageZoom: number = 
   }
 
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '')) {
+    const handleMouseDown = (e: React.MouseEvent) => {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+      if (!isDragging) return;
+      const newPanX = e.clientX - dragStart.x;
+      const newPanY = e.clientY - dragStart.y;
+      setPanX(newPanX);
+      setPanY(newPanY);
+    };
+
+    const handleDoubleClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      // Toggle between 100% and 200% on double-click
+      if (imageZoom >= 1.5) {
+        // Reset zoom to 100%
+        setIsDragging(false);
+        setDragStart({ x: 0, y: 0 });
+        setPanX(0);
+        setPanY(0);
+        // This will be handled by the parent component state update
+      } else {
+        // Zoom to 200%
+        setIsDragging(false);
+        setDragStart({ x: 0, y: 0 });
+        setPanX(0);
+        setPanY(0);
+        // This will be handled by the parent component state update
+      }
+    };
+
     return (
-      <div className="flex items-center justify-center">
+      <div
+        className="flex items-center justify-center cursor-grab active:cursor-grabbing select-none"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onDoubleClick={handleDoubleClick}
+        style={{ userSelect: 'none' }}
+      >
         <img
           src={previewUrl}
           alt="Document preview"
           className="h-auto rounded"
           style={{
-            transform: `scale(${imageZoom})`,
+            transform: `scale(${imageZoom}) translate(${panX / imageZoom}px, ${panY / imageZoom}px)`,
             transformOrigin: 'center',
             maxHeight: '600px',
+            pointerEvents: 'none',
           }}
+          draggable={false}
         />
       </div>
     );
