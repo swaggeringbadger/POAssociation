@@ -663,27 +663,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Document not found" });
       }
 
-      // Get download URL using the precalculated blob path
-      const downloadUrl = await azureBlobStorage.getDownloadUrl(
+      // Stream file through server (required for private storage accounts)
+      const fileBuffer = await azureBlobStorage.downloadFile(
         document.containerName,
         document.blobPath
       );
-
-      // For direct download, we could either:
-      // 1. Redirect to the Azure Blob URL (simple, but exposes Azure URLs)
-      // 2. Stream the file through our server (more control, but uses bandwidth)
-
-      // Option 1: Redirect (recommended for public blobs)
-      res.redirect(downloadUrl);
-
-      // Option 2: Stream through server (uncomment if needed)
-      // const fileBuffer = await azureBlobStorage.downloadFile(
-      //   document.containerName,
-      //   document.blobPath
-      // );
-      // res.setHeader('Content-Type', document.mimeType);
-      // res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-      // res.send(fileBuffer);
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+      res.send(fileBuffer);
     } catch (error: any) {
       console.error("Error downloading document:", error);
       res.status(500).json({ error: error.message });
