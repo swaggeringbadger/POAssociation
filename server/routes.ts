@@ -402,18 +402,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get count of applications for a tenant in a specific year (for application numbering)
-  app.get("/api/applications/count/:tenantId/:year", isAuthenticated, async (req, res) => {
-    try {
-      const { tenantId, year } = req.params;
-      const count = await storage.getApplicationCountForYear(tenantId, parseInt(year));
-      res.json(count);
-    } catch (error: any) {
-      console.error('[GET /api/applications/count] Error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   app.post("/api/applications", isAuthenticated, async (req, res) => {
     console.log('[POST /api/applications] Request body:', JSON.stringify(req.body, null, 2));
     try {

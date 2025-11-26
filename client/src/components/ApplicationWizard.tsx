@@ -43,7 +43,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { currentTenant } = useAppStore();
+  const { currentTenant, setCurrentPageTitle } = useAppStore();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
@@ -183,10 +183,11 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
       const completenessScore = Math.round((filledFields.length / requiredFields.length) * 100);
       console.log('[ApplicationWizard] completenessScore:', completenessScore);
 
-      // Generate application number
+      // Generate application number: {last-4-of-tenant-guid}-{year}-{random-4-alphanumeric}
       const year = new Date().getFullYear();
-      const count = await apiRequest('GET', `/api/applications/count/${currentTenant?.id}/${year}`);
-      const applicationNumber = `APP-${year}-${String(count + 1).padStart(4, '0')}`;
+      const tenantLast4 = currentTenant?.id.slice(-4).toUpperCase() || '0000';
+      const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const applicationNumber = `${tenantLast4}-${year}-${randomCode}`;
       console.log('[ApplicationWizard] applicationNumber:', applicationNumber);
 
       // Create the application
@@ -222,6 +223,8 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
 
       setCreatedApplicationId(application.id);
       setCurrentStep(3);
+      // Update page title with application number
+      setCurrentPageTitle(application.applicationNumber);
       toast({
         title: "Progress saved",
         description: "Your application has been saved. You can now upload documents.",

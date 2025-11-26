@@ -27,7 +27,8 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(psql:*)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(git -C /home/runner/workspace log --oneline -15)"
     ],
     "deny": [],
     "ask": []
