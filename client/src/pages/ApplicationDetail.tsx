@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Link } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
@@ -37,6 +37,7 @@ export default function ApplicationDetail() {
   const { setCurrentPageTitle } = useAppStore();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
+  const [imageZoom, setImageZoom] = useState(1);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -319,18 +320,46 @@ export default function ApplicationDetail() {
 
       {/* Document Preview Modal */}
       {previewDoc && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPreviewDoc(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setPreviewDoc(null); setImageZoom(1); }}>
           <Card className="w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
               <div>
                 <CardTitle className="text-lg">{previewDoc.fileName}</CardTitle>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setPreviewDoc(null)} data-testid="button-close-preview">
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                {isImage(previewDoc.fileName) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setImageZoom(Math.max(0.5, imageZoom - 0.25))}
+                      data-testid="button-zoom-out"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground px-2 min-w-12 text-center">
+                      {Math.round(imageZoom * 100)}%
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setImageZoom(Math.min(3, imageZoom + 0.25))}
+                      data-testid="button-zoom-in"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-border mx-2"></div>
+                  </>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => { setPreviewDoc(null); setImageZoom(1); }} data-testid="button-close-preview">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto p-4">
-              {getPreviewContent(previewDoc.id, previewDoc.fileName)}
+              {getPreviewContent(previewDoc.id, previewDoc.fileName, imageZoom)}
             </CardContent>
           </Card>
         </div>
@@ -344,7 +373,12 @@ function isPreviewable(fileName: string): boolean {
   return ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'csv'].includes(extension || '');
 }
 
-function getPreviewContent(docId: string, fileName: string) {
+function isImage(fileName: string): boolean {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '');
+}
+
+function getPreviewContent(docId: string, fileName: string, imageZoom: number = 1) {
   const extension = fileName.split('.').pop()?.toLowerCase();
   const previewUrl = `/api/documents/${docId}/preview`;
 
@@ -360,11 +394,18 @@ function getPreviewContent(docId: string, fileName: string) {
 
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '')) {
     return (
-      <img
-        src={previewUrl}
-        alt="Document preview"
-        className="max-w-full h-auto mx-auto max-h-[600px]"
-      />
+      <div className="flex items-center justify-center">
+        <img
+          src={previewUrl}
+          alt="Document preview"
+          className="h-auto rounded"
+          style={{
+            transform: `scale(${imageZoom})`,
+            transformOrigin: 'center',
+            maxHeight: '600px',
+          }}
+        />
+      </div>
     );
   }
 
