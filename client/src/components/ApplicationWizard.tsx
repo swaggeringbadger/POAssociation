@@ -148,21 +148,30 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     // Create application when moving from step 2 to 3
     // This gives us an applicationId for document uploads
     try {
+      console.log('[ApplicationWizard] Step 2 complete - starting application creation');
+      console.log('[ApplicationWizard] projectType:', projectType);
+      console.log('[ApplicationWizard] tenantId:', currentTenant?.id);
+
       const formTemplate = await apiRequest(
         'GET',
         `/api/additional-info/${currentTenant?.id}/${projectType}`
       );
+      console.log('[ApplicationWizard] formTemplate retrieved:', formTemplate);
 
       const templates = await apiRequest(
         'GET',
         `/api/tenants/${currentTenant?.id}/forms`
       );
+      console.log('[ApplicationWizard] templates retrieved, count:', templates.length);
+      console.log('[ApplicationWizard] templates:', templates.map((t: any) => ({ id: t.id, projectType: t.projectType, version: t.version, isActive: t.isActive })));
 
       const activeTemplate = templates.find(
         (t: any) => t.projectType === projectType && t.isActive
       );
+      console.log('[ApplicationWizard] activeTemplate found:', activeTemplate);
 
       if (!activeTemplate) {
+        console.error('[ApplicationWizard] No active template found for projectType:', projectType);
         throw new Error('No active form template found');
       }
 
@@ -172,13 +181,29 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         (fieldId) => additionalInfoData[fieldId] !== undefined && additionalInfoData[fieldId] !== ''
       );
       const completenessScore = Math.round((filledFields.length / requiredFields.length) * 100);
+      console.log('[ApplicationWizard] completenessScore:', completenessScore);
 
       // Generate application number
       const year = new Date().getFullYear();
       const count = await apiRequest('GET', `/api/applications/count/${currentTenant?.id}/${year}`);
       const applicationNumber = `APP-${year}-${String(count + 1).padStart(4, '0')}`;
+      console.log('[ApplicationWizard] applicationNumber:', applicationNumber);
 
       // Create the application
+      console.log('[ApplicationWizard] Creating application with data:', {
+        tenantId: currentTenant?.id,
+        projectType,
+        formTemplateId: activeTemplate.id,
+        formTemplateVersion: activeTemplate.version,
+        submittedByUserId: (user as any)?.id,
+        title: projectDetails.title,
+        description: projectDetails.description,
+        propertyAddress: projectDetails.propertyAddress,
+        completenessScore,
+        applicationNumber,
+        status: 'draft',
+      });
+
       const application = await apiRequest('POST', '/api/applications', {
         tenantId: currentTenant?.id,
         projectType,
@@ -193,6 +218,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         applicationNumber,
         status: 'draft', // Start as draft until final submission
       });
+      console.log('[ApplicationWizard] Application created:', application);
 
       setCreatedApplicationId(application.id);
       setCurrentStep(3);
@@ -201,6 +227,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         description: "Your application has been saved. You can now upload documents.",
       });
     } catch (error: any) {
+      console.error('[ApplicationWizard] Error in handleStep2Complete:', error);
       toast({
         title: "Error",
         description: error.message,
