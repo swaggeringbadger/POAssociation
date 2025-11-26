@@ -363,7 +363,7 @@ export default function ApplicationDetail() {
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto p-4" onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
-              {getPreviewContent(previewDoc.id, previewDoc.fileName, imageZoom, panX, panY, isDragging, dragStart, setIsDragging, setDragStart, setPanX, setPanY)}
+              {getPreviewContent(previewDoc.id, previewDoc.fileName, imageZoom, panX, panY, isDragging, dragStart, setImageZoom, setIsDragging, setDragStart, setPanX, setPanY)}
             </CardContent>
           </Card>
         </div>
@@ -390,6 +390,7 @@ function getPreviewContent(
   panY: number = 0,
   isDragging: boolean = false,
   dragStart: { x: number; y: number } = { x: 0, y: 0 },
+  setImageZoom: (val: number) => void = () => {},
   setIsDragging: (val: boolean) => void = () => {},
   setDragStart: (val: { x: number; y: number }) => void = () => {},
   setPanX: (val: number) => void = () => {},
@@ -427,19 +428,15 @@ function getPreviewContent(
       // Toggle between 100% and 200% on double-click
       if (imageZoom >= 1.5) {
         // Reset zoom to 100%
-        setIsDragging(false);
-        setDragStart({ x: 0, y: 0 });
-        setPanX(0);
-        setPanY(0);
-        // This will be handled by the parent component state update
+        setImageZoom(1);
       } else {
         // Zoom to 200%
-        setIsDragging(false);
-        setDragStart({ x: 0, y: 0 });
-        setPanX(0);
-        setPanY(0);
-        // This will be handled by the parent component state update
+        setImageZoom(2);
       }
+      setIsDragging(false);
+      setDragStart({ x: 0, y: 0 });
+      setPanX(0);
+      setPanY(0);
     };
 
     return (
