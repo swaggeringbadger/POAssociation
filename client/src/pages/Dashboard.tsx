@@ -561,6 +561,54 @@ function ContributorDashboard() {
 // Homeowner Dashboard - Focus on submitting and tracking own applications
 function HomeownerDashboard() {
   const { currentTenant } = useAppStore();
+  const { user } = useAuth();
+
+  // Fetch applications submitted by the current homeowner
+  const { data: applications = [] } = useQuery({
+    queryKey: ['homeowner-applications', currentTenant?.id, user?.id],
+    queryFn: async () => {
+      if (!user?.id || !currentTenant?.id) return [];
+      
+      const url = `/api/applications/list?tenantId=${currentTenant.id}&userId=${user.id}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data as any[];
+    },
+    enabled: !!user?.id && !!currentTenant?.id,
+  });
+
+  const totalApplications = applications.length;
+  const pending = applications.filter(app => app.status === 'pending').length;
+  const approved = applications.filter(app => app.status === 'approved').length;
+  const rejected = applications.filter(app => app.status === 'rejected').length;
+
+  const getTimeAgo = (date: string) => {
+    const now = new Date();
+    const submitted = new Date(date);
+    const diffMs = now.getTime() - submitted.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return 'Just now';
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge variant="default">Pending</Badge>;
+      case 'under_review':
+        return <Badge variant="secondary">In Review</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -581,10 +629,10 @@ function HomeownerDashboard() {
 
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="My Applications" value="3" icon={FileCheck} trend="Total submitted" />
-        <StatsCard title="Pending" value="1" icon={Clock} trend="Awaiting review" />
-        <StatsCard title="Approved" value="2" icon={CheckCircle} trend="This year" />
-        <StatsCard title="Next Meeting" value="Nov 28" icon={Users} trend="7:00 PM" />
+        <StatsCard title="My Applications" value={totalApplications.toString()} icon={FileCheck} trend="Total submitted" />
+        <StatsCard title="Pending" value={pending.toString()} icon={Clock} trend="Awaiting review" />
+        <StatsCard title="Approved" value={approved.toString()} icon={CheckCircle} trend="Total approved" />
+        <StatsCard title="Rejected" value={rejected.toString()} icon={AlertCircle} trend="Requires resubmission" />
       </div>
 
       <div className="grid gap-8 md:grid-cols-7">
@@ -615,25 +663,25 @@ function HomeownerDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {[
-                  { title: "Fence Installation - 123 Oak St", status: "Pending", days: 2 },
-                  { title: "Exterior Paint Change - 123 Oak St", status: "Approved", days: 14 },
-                  { title: "Mailbox Replacement - 123 Oak St", status: "Approved", days: 45 },
-                ].map((app, i) => (
-                  <div key={i} className="flex items-center justify-between group">
-                    <div>
-                      <p className="font-medium group-hover:text-primary transition-colors cursor-pointer">
-                        {app.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Submitted {app.days} days ago
-                      </p>
-                    </div>
-                    <Badge variant={app.status === "pending" ? "default" : "secondary"}>
-                      {app.status}
-                    </Badge>
-                  </div>
-                ))}
+                {applications.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No applications submitted yet</p>
+                ) : (
+                  applications.map((app) => (
+                    <Link key={app.id} href={`/applications/${app.id}`}>
+                      <div className="flex items-center justify-between group cursor-pointer">
+                        <div>
+                          <p className="font-medium group-hover:text-primary transition-colors">
+                            {app.title} - {app.propertyAddress}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Submitted {getTimeAgo(app.submittedAt)}
+                          </p>
+                        </div>
+                        {getStatusBadge(app.status)}
+                      </div>
+                    </Link>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -657,23 +705,23 @@ function HomeownerDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Community Info</CardTitle>
+              <CardTitle>Your Statistics</CardTitle>
               <CardDescription>{currentTenant?.name}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Next Board Meeting</span>
-                <span className="font-medium">Nov 28, 7:00 PM</span>
+                <span className="text-muted-foreground">Total Applications</span>
+                <span className="font-medium">{totalApplications}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Management Rep</span>
-                <span className="font-medium">Sarah Jenkins</span>
+                <span className="text-muted-foreground">Under Review</span>
+                <span className="font-medium">{applications.filter(a => a.status === 'under_review').length}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Office Hours</span>
-                <span className="font-medium">M-F, 9am - 5pm</span>
+                <span className="text-muted-foreground">Approval Rate</span>
+                <span className="font-medium">{totalApplications > 0 ? Math.round((approved / totalApplications) * 100) : 0}%</span>
               </div>
             </CardContent>
           </Card>
