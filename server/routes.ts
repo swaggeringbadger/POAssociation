@@ -419,10 +419,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
 
       // Generate application number
-      // Format: APP-YYYY-NNNN (e.g., APP-2024-0001)
+      // Format: {tenant-last-4-chars}-{year}-{random-4-alphanumeric}
+      const tenant = await storage.getTenant(req.body.tenantId);
+      if (!tenant) {
+        return res.status(400).json({ error: "Tenant not found" });
+      }
+      
       const year = new Date().getFullYear();
-      const count = await storage.getApplicationCountForYear(req.body.tenantId, year);
-      const applicationNumber = `APP-${year}-${String(count + 1).padStart(4, '0')}`;
+      const tenantId = req.body.tenantId;
+      const tenantSuffix = tenantId.slice(-4).toUpperCase();
+      
+      // Generate random 4-character alphanumeric string
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let randomPart = '';
+      for (let i = 0; i < 4; i++) {
+        randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      
+      const applicationNumber = `${tenantSuffix}-${year}-${randomPart}`;
 
       // Validate and create application
       const validated = insertApplicationSchema.parse({
