@@ -250,6 +250,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 currentUserRole && item.roles?.includes(currentUserRole)
               ).map((item) => {
                 const isActive = location === item.href;
+                
+                // For Settings item, management managers should open Company Settings modal
+                if (item.href === '/settings' && isManagementManager && managementCompanyId) {
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        onClick={() => setShowCompanySettings(true)}
+                        className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors cursor-pointer"
+                        data-testid="nav-company-settings"
+                      >
+                        <item.icon className="h-5 w-5" />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                }
+                
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -371,15 +388,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <UserIcon className="mr-2 h-4 w-4" />
                   Profile Settings
                 </DropdownMenuItem>
-                {isManagementManager && managementCompanyId && (
-                  <DropdownMenuItem
-                    onClick={() => setShowCompanySettings(true)}
-                    data-testid="button-company-settings"
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    Company Settings
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
