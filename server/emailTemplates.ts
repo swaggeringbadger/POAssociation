@@ -116,11 +116,6 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
       border-radius: 50%;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
-    .header-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      line-height: 1;
-    }
     .header-title {
       font-size: 32px;
       font-weight: 800;
@@ -296,7 +291,6 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
             <!-- Header -->
             <tr>
               <td class="header">
-                <div class="header-icon">🏘️</div>
                 <h1 class="header-title">${communityName || 'POA Association'}</h1>
                 <p class="header-subtitle">${title}</p>
               </td>
@@ -305,7 +299,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
             <!-- Content -->
             <tr>
               <td class="content">
-                ${recipientName ? `<p class="greeting">Hi ${recipientName}! 👋</p>` : ''}
+                ${recipientName ? `<p class="greeting">Hi ${recipientName},</p>` : ''}
 
                 <div class="main-message">
                   ${mainContent}
@@ -313,7 +307,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
 
                 ${actionButton ? `
                   <div class="button-container">
-                    <a href="${actionButton.url}" class="button">${actionButton.text} →</a>
+                    <a href="${actionButton.url}" class="button">${actionButton.text}</a>
                   </div>
                 ` : ''}
 
@@ -356,15 +350,15 @@ export function applicationSubmittedTemplate(
   applicationLink: string
 ): string {
   return buildEmailTemplate({
-    title: "Application Received ✓",
+    title: "Application Received",
     preheader: "Your application has been received and is under review.",
     recipientName,
     communityName,
     status: 'info',
     mainContent: `
-      <p>🎉 We have successfully received your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
+      <p>We have successfully received your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
-        <p><strong>📋 What's Next?</strong><br>Your application is now under review. Our team will carefully examine your submission and will get back to you shortly with next steps.</p>
+        <p><strong>What's Next?</strong><br>Your application is now under review. Our team will carefully examine your submission and will get back to you shortly with next steps.</p>
       </div>
       <p>In the meantime, you can check the status of your application anytime by logging into your account.</p>
     `,
@@ -373,7 +367,7 @@ export function applicationSubmittedTemplate(
       url: applicationLink,
     },
     secondaryContent: `
-      <strong>📬 Stay Updated</strong><br>We'll send you email notifications as your application progresses through each review stage. If you have any questions, please don't hesitate to reach out.
+      <strong>Stay Updated</strong><br>We'll send you email notifications as your application progresses through each review stage. If you have any questions, please don't hesitate to reach out.
     `,
   });
 }
@@ -392,17 +386,21 @@ export function applicationApprovedTemplate(
     preheader: "Great news! Your application has been approved.",
     recipientName,
     communityName,
+    status: 'success',
     mainContent: `
-      <p>Congratulations! Your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span> has been <span class="accent-text">approved</span>.</p>
+      <p><strong>Congratulations!</strong> Your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span> has been <strong>approved</strong>.</p>
       <div class="highlight-box">
-        <p>You may now proceed with your project. Please keep a copy of your approval for your records.</p>
+        <p><strong>You're All Set!</strong><br>You may now proceed with your project. Please keep a copy of your approval for your records and follow any conditions or guidelines outlined in the approval.</p>
       </div>
-      <p>If you have any questions or need any assistance, please don't hesitate to contact us.</p>
+      <p>If you have any questions or need any assistance getting started, please don't hesitate to contact us.</p>
     `,
     actionButton: {
       text: "View Approval Details",
       url: applicationLink,
     },
+    secondaryContent: `
+      <strong>Helpful Tip</strong><br>Make sure to review any conditions or requirements included in your approval before starting work.
+    `,
   });
 }
 
@@ -421,18 +419,22 @@ export function applicationRejectedTemplate(
     preheader: "Your application status has been updated.",
     recipientName,
     communityName,
+    status: 'warning',
     mainContent: `
-      <p>We have reviewed your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
+      <p>We have carefully reviewed your application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
-        <p>Unfortunately, your application has been <span class="accent-text">rejected</span> at this time.</p>
+        <p><strong>Not Approved</strong><br>Unfortunately, your application has not been approved at this time.</p>
       </div>
-      ${reason ? `<p><strong>Feedback:</strong> ${reason}</p>` : ''}
-      <p>We encourage you to review the feedback and consider resubmitting with the requested changes, or contact us to discuss further.</p>
+      ${reason ? `<p><strong>Reviewer Feedback:</strong><br>${reason}</p>` : ''}
+      <p>We encourage you to review the feedback carefully. You're welcome to resubmit with the requested changes or contact us to discuss further.</p>
     `,
     actionButton: {
-      text: "Review Details",
+      text: "Review Full Details",
       url: applicationLink,
     },
+    secondaryContent: `
+      <strong>Want to Resubmit?</strong><br>You can address the feedback and submit a revised application. We're here to help you succeed!
+    `,
   });
 }
 
@@ -451,17 +453,21 @@ export function stepAssignmentTemplate(
     preheader: "You have been assigned a new application review step.",
     recipientName,
     communityName,
+    status: 'action',
     mainContent: `
       <p>You have been assigned to review the <span class="accent-text">"${stepTitle}"</span> step for the application <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
       <div class="highlight-box">
-        <p>Please review the application details and take appropriate action as soon as possible.</p>
+        <p><strong>Action Needed</strong><br>Please review the application details and take appropriate action as soon as possible to keep things moving smoothly.</p>
       </div>
-      <p>Your timely review helps us process applications efficiently and serve our community better.</p>
+      <p>Your timely review helps us process applications efficiently and serve our community better. Thank you for your dedication!</p>
     `,
     actionButton: {
-      text: "Review Application",
+      text: "Start Review Now",
       url: applicationLink,
     },
+    secondaryContent: `
+      <strong>Quick Reviews Matter</strong><br>Your prompt attention helps homeowners get responses faster and keeps our community running smoothly.
+    `,
   });
 }
 
@@ -477,20 +483,24 @@ export function commentNotificationTemplate(
   communityName?: string
 ): string {
   return buildEmailTemplate({
-    title: "New Comment Added",
+    title: "New Comment",
     preheader: `${commenterName} commented on "${applicationTitle}"`,
     recipientName,
     communityName,
+    status: 'info',
     mainContent: `
       <p><span class="accent-text">${commenterName}</span> has left a comment on <span class="accent-text">"${applicationTitle}"</span>:</p>
       <div class="highlight-box">
-        <p>${comment}</p>
+        <p><em>"${comment}"</em></p>
       </div>
       <p>View the full conversation and respond to continue the discussion.</p>
     `,
     actionButton: {
-      text: "View Conversation",
+      text: "View & Reply",
       url: applicationLink,
     },
+    secondaryContent: `
+      <strong>Stay Engaged</strong><br>Quick responses help keep communication flowing and resolve questions faster.
+    `,
   });
 }
