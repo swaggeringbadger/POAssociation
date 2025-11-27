@@ -62,11 +62,11 @@ function ManagementDashboard() {
   });
 
   const pendingReviews = applications.filter(app => 
-    app.status === 'submitted' || app.status === 'needs_review'
+    app.status === 'pending'
   ).length;
 
   const activeProjects = applications.filter(app => 
-    app.status === 'in_progress' || app.status === 'under_review'
+    app.status === 'under_review'
   ).length;
 
   const selectedTenant = filterTenantId
