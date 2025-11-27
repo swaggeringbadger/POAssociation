@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAppStore } from "@/lib/store";
+import { useAuth } from "@/hooks/useAuth";
 import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -34,18 +35,25 @@ export default function Dashboard() {
 // Management Dashboard - Overview of multiple communities
 function ManagementDashboard() {
   const { currentTenant, availableTenants, selectedPropertyFilter } = useAppStore();
+  const { user } = useAuth();
 
-  // Fetch applications for filtering
+  // Fetch applications for management view
   const { data: applications = [] } = useQuery({
-    queryKey: [selectedPropertyFilter ? `/api/applications?tenantId=${selectedPropertyFilter}` : "/api/applications"],
+    queryKey: ['management-applications', selectedPropertyFilter, user?.id],
     queryFn: async () => {
-      const url = selectedPropertyFilter 
-        ? `/api/applications?tenantId=${selectedPropertyFilter}`
-        : "/api/applications";
+      if (!user?.id) return [];
+      
+      // For management users, fetch applications across all their tenants or filtered tenant
+      const tenantId = selectedPropertyFilter || currentTenant?.id;
+      if (!tenantId) return [];
+      
+      const url = `/api/applications/list?role=management_manager&tenantId=${tenantId}&userId=${user.id}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return [];
-      return res.json() as Promise<any[]>;
+      const data = await res.json();
+      return data as any[];
     },
+    enabled: !!user?.id,
   });
 
   const pendingReviews = applications.filter(app => 
