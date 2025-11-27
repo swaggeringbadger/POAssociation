@@ -5,6 +5,15 @@ import { Separator } from "@/components/ui/separator";
 import { useAppStore } from "@/lib/store";
 import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Dashboard() {
   const { currentUserRole, currentTenant } = useAppStore();
@@ -32,31 +41,84 @@ export default function Dashboard() {
 
 // Management Dashboard - Overview of multiple communities
 function ManagementDashboard() {
-  const { currentTenant, availableTenants } = useAppStore();
+  const { currentTenant, availableTenants, selectedPropertyFilter, setSelectedPropertyFilter } = useAppStore();
+  const [filterTenantId, setFilterTenantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFilterTenantId(selectedPropertyFilter);
+  }, [selectedPropertyFilter]);
+
+  // Fetch applications for filtering
+  const { data: applications = [] } = useQuery({
+    queryKey: [filterTenantId ? `/api/applications?tenantId=${filterTenantId}` : "/api/applications"],
+    queryFn: async () => {
+      const url = filterTenantId 
+        ? `/api/applications?tenantId=${filterTenantId}`
+        : "/api/applications";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json() as Promise<any[]>;
+    },
+  });
+
+  const pendingReviews = applications.filter(app => 
+    app.status === 'submitted' || app.status === 'needs_review'
+  ).length;
+
+  const activeProjects = applications.filter(app => 
+    app.status === 'in_progress' || app.status === 'under_review'
+  ).length;
+
+  const selectedTenant = filterTenantId
+    ? availableTenants.find(t => t.id === filterTenantId)
+    : null;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-none">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Building className="h-8 w-8" />
-            <div>
-              <CardTitle className="text-2xl">Management Dashboard</CardTitle>
-              <CardDescription className="text-blue-100">
-                {currentTenant?.name || 'Your Communities'}
-              </CardDescription>
+      {/* Welcome Banner with Filter */}
+      <div className="flex items-start justify-between gap-4">
+        <Card className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white border-none">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Building className="h-8 w-8" />
+              <div>
+                <CardTitle className="text-2xl">Management Dashboard</CardTitle>
+                <CardDescription className="text-blue-100">
+                  {selectedTenant?.name || 'All Communities'}
+                </CardDescription>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+        </Card>
+        
+        <Card className="w-64">
+          <CardContent className="pt-6">
+            <Select value={filterTenantId || "all"} onValueChange={(val) => {
+              setFilterTenantId(val === "all" ? null : val);
+              setSelectedPropertyFilter(val === "all" ? null : val);
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by community" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Communities</SelectItem>
+                {availableTenants.map(tenant => (
+                  <SelectItem key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Communities Managed" value={availableTenants.length.toString()} icon={Building} trend="Active" />
-        <StatsCard title="Pending Reviews" value="12" icon={Clock} trend="+2 from yesterday" />
-        <StatsCard title="Active Projects" value="89" icon={FileCheck} trend="+15% this month" />
-        <StatsCard title="Total Units" value="245" icon={Plus} trend="Across all communities" />
+        <StatsCard title="Communities Managed" value={filterTenantId ? "1" : availableTenants.length.toString()} icon={Building} trend="Active" />
+        <StatsCard title="Pending Reviews" value={pendingReviews.toString()} icon={Clock} trend={`Across ${filterTenantId ? 'community' : 'all communities'}`} />
+        <StatsCard title="Active Projects" value={activeProjects.toString()} icon={FileCheck} trend={`In progress`} />
+        <StatsCard title="Total Applications" value={applications.length.toString()} icon={Plus} trend={`${filterTenantId ? 'This community' : 'All communities'}`} />
       </div>
 
       <div className="grid gap-8 md:grid-cols-7">

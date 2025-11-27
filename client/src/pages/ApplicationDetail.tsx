@@ -5,12 +5,22 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot } from "lucide-react";
 import { Link } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
 import { useEffect, useState } from "react";
 import type { Application } from "@shared/schema";
+import type { AdditionalInfoConfig, BylawReference } from "@shared/formTypes";
+import type { DocumentRequirement } from "@shared/additionalInfoTypes";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface WorkflowData {
   id: string;
@@ -92,6 +102,17 @@ export default function ApplicationDetail() {
     enabled: !!application?.formTemplateId,
   });
 
+  // Fetch additional info config for rich field metadata
+  const { data: formConfig } = useQuery<AdditionalInfoConfig>({
+    queryKey: ['additional-info', application?.tenantId, application?.projectType],
+    queryFn: async () => {
+      const res = await fetch(`/api/additional-info/${application?.tenantId}/${application?.projectType}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<AdditionalInfoConfig>;
+    },
+    enabled: !!application?.tenantId && !!application?.projectType,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -154,6 +175,106 @@ export default function ApplicationDetail() {
     const variantClass = stageVariants[workflowStage] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     return (
       <Badge className={variantClass}>{workflowStage}</Badge>
+    );
+  };
+
+  /**
+   * Render bylaw reference dialog (matching edit form style)
+   */
+  const renderBylawReference = (bylaws: BylawReference) => {
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
+          >
+            <Info className="h-3 w-3 mr-1" />
+            Relevant Bylaws
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-primary" />
+              Relevant Bylaws & Covenants
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            {bylaws.reference && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Reference</h4>
+                <p className="text-sm">{bylaws.reference}</p>
+              </div>
+            )}
+            {bylaws.requirement && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-primary">Requirement</h4>
+                <p className="text-sm leading-relaxed">{bylaws.requirement}</p>
+              </div>
+            )}
+            {bylaws.requirements && bylaws.requirements.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Requirements</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.requirements.map((req, idx) => (
+                    <li key={idx}>{req}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.keyRestrictions && bylaws.keyRestrictions.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Key Restrictions</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.keyRestrictions.map((restriction, idx) => (
+                    <li key={idx}>{restriction}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.approvedMaterials && bylaws.approvedMaterials.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Approved Materials</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.approvedMaterials.map((material, idx) => (
+                    <li key={idx}>{material}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.preferredStyles && bylaws.preferredStyles.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-primary">Preferred Styles</h4>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  {bylaws.preferredStyles.map((style, idx) => (
+                    <li key={idx}>{style}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {bylaws.prohibited && (
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-destructive">Prohibited</h4>
+                <p className="text-sm">{bylaws.prohibited}</p>
+              </div>
+            )}
+            {bylaws.note && (
+              <div className="bg-muted p-3 rounded-lg">
+                <p className="text-sm italic text-muted-foreground">
+                  <span className="font-semibold not-italic">Note:</span> {bylaws.note}
+                </p>
+              </div>
+            )}
+            {bylaws.quote && (
+              <div className="border-l-4 border-primary pl-4 py-2 bg-muted/30">
+                <p className="text-sm italic text-muted-foreground">"{bylaws.quote}"</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -240,32 +361,224 @@ export default function ApplicationDetail() {
 
               {/* Form Data Tab */}
               {activeTab === 'form' && application.formData && Object.keys(application.formData).length > 0 && (
-                <div className="space-y-3">
-                  {Object.entries(application.formData as Record<string, any>).map(([key, value]) => {
-                    const fieldSchema = formTemplate?.schema?.fields?.find((f: any) => f.name === key);
-                    return (
-                      <div key={key} className="border rounded-lg p-4 bg-muted/50">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold" data-testid={`text-field-label-${key}`}>
-                              {fieldSchema?.label || key}
-                            </p>
-                            {fieldSchema?.description && (
-                              <p className="text-xs text-muted-foreground mt-1">{fieldSchema.description}</p>
-                            )}
-                            {fieldSchema?.bylawReference && (
-                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2 italic">
-                                📋 {fieldSchema.bylawReference}
+                <div className="space-y-8">
+                  {/* Form Title and Description */}
+                  {formConfig && (
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-bold">{formConfig.title}</h3>
+                      <p className="text-muted-foreground text-sm">{formConfig.description}</p>
+                    </div>
+                  )}
+
+                  {/* Top-level Relevant Bylaws */}
+                  {formConfig?.relevantBylaws && (
+                    <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+                      <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="text-blue-800 dark:text-blue-300 font-semibold text-base mb-1">
+                            Governing Documents: {formConfig.relevantBylaws.primary?.document}
+                          </h4>
+                          <p className="text-sm text-blue-700 dark:text-blue-400 mb-2">
+                            {formConfig.relevantBylaws.primary?.summary}
+                          </p>
+                          {formConfig.relevantBylaws.primary?.quote && (
+                            <div className="border-l-4 border-blue-400 pl-3 py-2 bg-blue-100/50 dark:bg-blue-950/50 mb-3">
+                              <p className="text-sm italic text-blue-700 dark:text-blue-300">
+                                "{formConfig.relevantBylaws.primary.quote}"
                               </p>
-                            )}
+                            </div>
+                          )}
+                          {formConfig.relevantBylaws.primary?.keyRequirements && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Key Requirements:</p>
+                              <ul className="list-disc list-inside text-sm space-y-1 text-blue-700 dark:text-blue-400">
+                                {formConfig.relevantBylaws.primary.keyRequirements.map((req, idx) => (
+                                  <li key={idx}>{req}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {formConfig.relevantBylaws.additionalReferences && formConfig.relevantBylaws.additionalReferences.length > 0 && (
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="mt-2">
+                                <Info className="h-4 w-4 mr-2" />
+                                View Additional References ({formConfig.relevantBylaws.additionalReferences.length})
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle>Additional Bylaw References</DialogTitle>
+                              </DialogHeader>
+                              <div className="mt-4 space-y-6">
+                                {formConfig.relevantBylaws.additionalReferences.map((ref, idx) => (
+                                  <div key={idx} className="border-l-4 border-primary pl-4 space-y-2">
+                                    <div>
+                                      <h4 className="font-semibold text-primary">{ref.document}</h4>
+                                      <p className="text-sm text-muted-foreground">{ref.section}</p>
+                                    </div>
+                                    <p className="text-sm">{ref.summary}</p>
+                                    {ref.keyProvisions && ref.keyProvisions.length > 0 && (
+                                      <div className="space-y-1">
+                                        <p className="text-sm font-semibold">Key Provisions:</p>
+                                        <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
+                                          {ref.keyProvisions.map((provision, pIdx) => (
+                                            <li key={pIdx}>{provision}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </div>
+                    </Alert>
+                  )}
+
+                  {/* Sections with Fields */}
+                  {formConfig?.sections ? (
+                    formConfig.sections.map((section, sectionIdx) => {
+                      // Get fields in this section that have values
+                      const sectionFields = section.fields.filter(field =>
+                        application.formData && (application.formData as Record<string, any>)[field.id] !== undefined
+                      );
+
+                      if (sectionFields.length === 0) return null;
+
+                      return (
+                        <div key={sectionIdx} className="space-y-4">
+                          <div className="border-b pb-2">
+                            <h4 className="text-lg font-semibold">{section.title}</h4>
+                          </div>
+
+                          <div className="space-y-4">
+                            {sectionFields.map((field) => {
+                              const value = (application.formData as Record<string, any>)[field.id];
+                              return (
+                                <div key={field.id} className="border rounded-lg p-4 bg-muted/50">
+                                  <div className="flex items-start justify-between gap-4 mb-2">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-semibold" data-testid={`text-field-label-${field.id}`}>
+                                          {field.label}
+                                        </p>
+                                        {field.relevantBylaws && typeof field.relevantBylaws !== 'string' && renderBylawReference(field.relevantBylaws as BylawReference)}
+                                      </div>
+                                      {field.description && (
+                                        <p className="text-xs text-muted-foreground mt-1">{field.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="pt-2 border-t">
+                                    <p className="text-sm whitespace-pre-wrap" data-testid={`text-field-value-${field.id}`}>
+                                      {Array.isArray(value) ? value.join(', ') : String(value)}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                        <div className="mt-3 pt-3 border-t">
-                          <p className="text-sm whitespace-pre-wrap" data-testid={`text-field-value-${key}`}>{String(value)}</p>
-                        </div>
+                      );
+                    })
+                  ) : (
+                    // Fallback for applications without formConfig
+                    <div className="space-y-3">
+                      {Object.entries(application.formData as Record<string, any>).map(([key, value]) => {
+                        const fieldSchema = formTemplate?.schema?.fields?.find((f: any) => f.name === key);
+                        return (
+                          <div key={key} className="border rounded-lg p-4 bg-muted/50">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold" data-testid={`text-field-label-${key}`}>
+                                  {fieldSchema?.label || key}
+                                </p>
+                                {fieldSchema?.description && (
+                                  <p className="text-xs text-muted-foreground mt-1">{fieldSchema.description}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-sm whitespace-pre-wrap" data-testid={`text-field-value-${key}`}>{String(value)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Document Requirements Reference */}
+                  {formConfig?.documents && formConfig.documents.length > 0 && (
+                    <div className="bg-muted/50 rounded-lg p-6 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <h4 className="text-lg font-semibold">Document Requirements</h4>
                       </div>
-                    );
-                  })}
+                      <p className="text-sm text-muted-foreground">
+                        The following documents were required for this application:
+                      </p>
+
+                      {/* Required Documents */}
+                      {(() => {
+                        const requiredDocs = formConfig.documents.filter(d => d.required);
+                        const optionalDocs = formConfig.documents.filter(d => !d.required);
+
+                        return (
+                          <>
+                            {requiredDocs.length > 0 && (
+                              <div className="space-y-2">
+                                <h5 className="text-sm font-semibold text-destructive flex items-center gap-2">
+                                  <CircleDot className="h-4 w-4" />
+                                  Required Documents
+                                </h5>
+                                <ul className="space-y-2 ml-6">
+                                  {requiredDocs.map((doc, idx) => (
+                                    <li key={idx} className="text-sm flex items-start gap-2">
+                                      <span className="text-destructive mt-0.5">•</span>
+                                      <div>
+                                        <span className="font-medium">{doc.name}</span>
+                                        {doc.description && (
+                                          <p className="text-muted-foreground text-xs mt-0.5">{doc.description}</p>
+                                        )}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {optionalDocs.length > 0 && (
+                              <div className="space-y-2">
+                                <h5 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                                  <CircleDot className="h-4 w-4" />
+                                  Optional Documents
+                                </h5>
+                                <ul className="space-y-2 ml-6">
+                                  {optionalDocs.map((doc, idx) => (
+                                    <li key={idx} className="text-sm flex items-start gap-2">
+                                      <span className="text-muted-foreground mt-0.5">•</span>
+                                      <div>
+                                        <span>{doc.name}</span>
+                                        {doc.description && (
+                                          <p className="text-muted-foreground text-xs mt-0.5">{doc.description}</p>
+                                        )}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
 
