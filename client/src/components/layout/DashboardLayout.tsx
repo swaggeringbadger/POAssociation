@@ -31,7 +31,7 @@ import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
 import { api, queryClient } from "@/lib/api";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings } from "lucide-react";
-import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
+import logoImage from "@assets/generated_images/POAssociationLogo.png";
 import ManagementSettingsModal from "@/components/ManagementSettingsModal";
 import type { User } from "@shared/schema";
 
@@ -161,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <SidebarHeader className="flex-col gap-2 p-2 border-b border-sidebar-border">
             <div className="flex items-center gap-2 font-bold text-lg text-sidebar-primary-foreground">
               <img src={logoImage} className="w-8 h-8 rounded" alt="Logo" />
-              <span>POA Association</span>
+              <span>POAssociation.com</span>
             </div>
 
             {/* Property Filter - Only show for management company users */}
