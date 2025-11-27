@@ -82,6 +82,16 @@ export default function ApplicationDetail() {
     enabled: !!applicationId,
   });
 
+  const { data: formTemplate } = useQuery({
+    queryKey: [`/api/form-templates/${application?.formTemplateId}`],
+    queryFn: async () => {
+      const res = await fetch(`/api/form-templates/${application?.formTemplateId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<any>;
+    },
+    enabled: !!application?.formTemplateId,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -231,12 +241,31 @@ export default function ApplicationDetail() {
               {/* Form Data Tab */}
               {activeTab === 'form' && application.formData && Object.keys(application.formData).length > 0 && (
                 <div className="space-y-3">
-                  {Object.entries(application.formData as Record<string, any>).map(([key, value]) => (
-                    <div key={key} className="border rounded-lg p-3 bg-muted/50">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">{key}</p>
-                      <p className="text-sm mt-1">{String(value)}</p>
-                    </div>
-                  ))}
+                  {Object.entries(application.formData as Record<string, any>).map(([key, value]) => {
+                    const fieldSchema = formTemplate?.schema?.fields?.find((f: any) => f.name === key);
+                    return (
+                      <div key={key} className="border rounded-lg p-4 bg-muted/50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold" data-testid={`text-field-label-${key}`}>
+                              {fieldSchema?.label || key}
+                            </p>
+                            {fieldSchema?.description && (
+                              <p className="text-xs text-muted-foreground mt-1">{fieldSchema.description}</p>
+                            )}
+                            {fieldSchema?.bylawReference && (
+                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2 italic">
+                                📋 {fieldSchema.bylawReference}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-sm whitespace-pre-wrap" data-testid={`text-field-value-${key}`}>{String(value)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
