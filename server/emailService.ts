@@ -1,6 +1,6 @@
 /**
  * SMTP2GO Email Service
- * Handles sending transactional emails for CivicFlow
+ * Handles sending transactional emails for POA Association
  */
 
 import {
@@ -24,7 +24,7 @@ export class EmailService {
   private apiKey: string;
   private apiUrl = 'https://api.smtp2go.com/v3/email/send';
   private fromEmail = 'noreply@poassociation.com';
-  private fromName = 'CivicFlow';
+  private fromName = 'POA Association';
 
   constructor() {
     this.apiKey = process.env.SMTP2GO_API_KEY || '';
@@ -107,7 +107,7 @@ export class EmailService {
       applicantName,
       applicationTitle,
       communityName,
-      applicationLink || 'https://civicflow.com'
+      applicationLink || 'https://poassociation.com'
     );
 
     return this.send({
@@ -131,7 +131,7 @@ export class EmailService {
       applicantName,
       applicationTitle,
       communityName,
-      applicationLink || 'https://civicflow.com'
+      applicationLink || 'https://poassociation.com'
     );
 
     return this.send({
@@ -157,7 +157,7 @@ export class EmailService {
       applicationTitle,
       communityName,
       reason,
-      applicationLink || 'https://civicflow.com'
+      applicationLink || 'https://poassociation.com'
     );
 
     return this.send({

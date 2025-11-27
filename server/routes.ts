@@ -533,7 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Only send email if we have a valid email address (skip demo users without email)
         if (user && tenant && user.email) {
           const { emailService } = await import('./emailService');
-          const applicationLink = `https://${tenant.subdomain}.civicflow.com/applications/${application.id}`;
+          const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${application.id}`;
           const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
           
           console.log(`[Email] SENDING to: ${user.email}, app: ${req.body.title}`);
