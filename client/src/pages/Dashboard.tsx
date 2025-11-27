@@ -245,6 +245,75 @@ function ManagementDashboard() {
 // Board Member Dashboard - Focus on reviewing applications
 function BoardMemberDashboard() {
   const { currentTenant } = useAppStore();
+  const { user } = useAuth();
+
+  // Fetch applications for board member view
+  const { data: applications = [] } = useQuery({
+    queryKey: ['board-applications', currentTenant?.id, user?.id],
+    queryFn: async () => {
+      if (!user?.id || !currentTenant?.id) return [];
+      
+      const url = `/api/applications/list?tenantId=${currentTenant.id}&userId=${user.id}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data as any[];
+    },
+    enabled: !!user?.id && !!currentTenant?.id,
+  });
+
+  const needsReview = applications.filter(app => 
+    app.status === 'pending'
+  ).length;
+
+  const underReview = applications.filter(app => 
+    app.status === 'under_review'
+  ).length;
+
+  const approved = applications.filter(app => 
+    app.status === 'approved'
+  ).length;
+
+  const rejected = applications.filter(app => 
+    app.status === 'rejected'
+  ).length;
+
+  const getInitials = (title: string) => {
+    const words = title.split(' ').filter(w => w.length > 0);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return title.slice(0, 2).toUpperCase();
+  };
+
+  const getTimeAgo = (date: string) => {
+    const now = new Date();
+    const submitted = new Date(date);
+    const diffMs = now.getTime() - submitted.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return 'Just now';
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge variant="default">Needs Review</Badge>;
+      case 'under_review':
+        return <Badge variant="secondary">In Review</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const pendingApps = applications.filter(app => app.status === 'pending').slice(0, 4);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -265,10 +334,10 @@ function BoardMemberDashboard() {
 
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Needs Review" value="8" icon={Clock} trend="Priority queue" />
-        <StatsCard title="Under Review" value="4" icon={ArrowUpRight} trend="In progress" />
-        <StatsCard title="Approved This Month" value="23" icon={CheckCircle} trend="+12% from last month" />
-        <StatsCard title="Rejected" value="2" icon={AlertCircle} trend="Requires resubmission" />
+        <StatsCard title="Needs Review" value={needsReview.toString()} icon={Clock} trend="Priority queue" />
+        <StatsCard title="Under Review" value={underReview.toString()} icon={ArrowUpRight} trend="In progress" />
+        <StatsCard title="Approved" value={approved.toString()} icon={CheckCircle} trend={`Total approved`} />
+        <StatsCard title="Rejected" value={rejected.toString()} icon={AlertCircle} trend="Requires resubmission" />
       </div>
 
       <div className="grid gap-8 md:grid-cols-7">
@@ -284,27 +353,30 @@ function BoardMemberDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-bold">
-                        {["JD", "RM", "SK", "TL"][i - 1]}
+                {pendingApps.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No applications pending review</p>
+                ) : (
+                  pendingApps.map((app) => (
+                    <Link key={app.id} href={`/applications/${app.id}`}>
+                      <div className="flex items-center justify-between group cursor-pointer">
+                        <div className="flex items-center gap-4">
+                          <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-bold">
+                            {getInitials(app.title)}
+                          </div>
+                          <div>
+                            <p className="font-medium group-hover:text-primary transition-colors">
+                              {app.title} - {app.propertyAddress}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Submitted {getTimeAgo(app.submittedAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <Button size="sm">Review</Button>
                       </div>
-                      <div>
-                        <p className="font-medium group-hover:text-primary transition-colors cursor-pointer">
-                          {["Fence Installation", "Deck Addition", "Exterior Paint Change", "Shed Installation"][i - 1]} -
-                          {[" 123 Oak St", " 456 Pine Ave", " 789 Maple Dr", " 321 Elm St"][i - 1]}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Submitted {i} {i === 1 ? "day" : "days"} ago
-                        </p>
-                      </div>
-                    </div>
-                    <Link href="/applications">
-                      <Button size="sm">Review</Button>
                     </Link>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -336,18 +408,18 @@ function BoardMemberDashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Next Board Meeting</span>
-                <span className="font-medium">Nov 28, 7:00 PM</span>
+                <span className="text-muted-foreground">Total Applications</span>
+                <span className="font-medium">{applications.length}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Pending Decisions</span>
-                <span className="font-medium">8 applications</span>
+                <span className="font-medium">{needsReview} applications</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Average Review Time</span>
-                <span className="font-medium">3.2 days</span>
+                <span className="text-muted-foreground">Under Review</span>
+                <span className="font-medium">{underReview} applications</span>
               </div>
             </CardContent>
           </Card>
