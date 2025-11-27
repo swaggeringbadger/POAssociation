@@ -99,26 +99,76 @@ function ManagementDashboard() {
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Recent Applications</CardTitle>
-              <CardDescription>Applications across all managed communities</CardDescription>
+              <CardDescription>
+                {selectedPropertyFilter ? 'Recent applications for this community' : 'Applications across all managed communities'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center justify-between group">
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-bold">
-                        JD
-                      </div>
-                      <div>
-                        <p className="font-medium group-hover:text-primary transition-colors cursor-pointer">Fence Installation - 123 Oak St</p>
-                        <p className="text-sm text-muted-foreground">Submitted 2 days ago • Markland POA</p>
-                      </div>
-                    </div>
-                    <Badge variant={i === 1 ? "default" : "secondary"}>
-                      {i === 1 ? "Needs Review" : "In Progress"}
-                    </Badge>
-                  </div>
-                ))}
+                {applications.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No applications found</p>
+                ) : (
+                  [...applications]
+                    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+                    .slice(0, 5)
+                    .map((app) => {
+                      const getInitials = (title: string) => {
+                        const words = title.split(' ').filter(w => w.length > 0);
+                        if (words.length >= 2) {
+                          return (words[0][0] + words[1][0]).toUpperCase();
+                        }
+                        return title.slice(0, 2).toUpperCase();
+                      };
+                      
+                      const getTimeAgo = (date: string) => {
+                        const now = new Date();
+                        const submitted = new Date(date);
+                        const diffMs = now.getTime() - submitted.getTime();
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                        
+                        if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+                        if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                        return 'Just now';
+                      };
+                      
+                      const getStatusBadge = (status: string) => {
+                        switch (status) {
+                          case 'pending':
+                            return <Badge variant="default">Needs Review</Badge>;
+                          case 'under_review':
+                            return <Badge variant="secondary">In Review</Badge>;
+                          case 'approved':
+                            return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
+                          case 'rejected':
+                            return <Badge variant="destructive">Rejected</Badge>;
+                          default:
+                            return <Badge variant="outline">{status}</Badge>;
+                        }
+                      };
+                      
+                      return (
+                        <Link key={app.id} href={`/applications/${app.id}`}>
+                          <div className="flex items-center justify-between group cursor-pointer">
+                            <div className="flex items-center gap-4">
+                              <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-bold">
+                                {getInitials(app.title)}
+                              </div>
+                              <div>
+                                <p className="font-medium group-hover:text-primary transition-colors">
+                                  {app.title} - {app.propertyAddress}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {getTimeAgo(app.submittedAt)} • {app.tenantName || 'Unknown Community'}
+                                </p>
+                              </div>
+                            </div>
+                            {getStatusBadge(app.status)}
+                          </div>
+                        </Link>
+                      );
+                    })
+                )}
               </div>
             </CardContent>
           </Card>
@@ -148,18 +198,42 @@ function ManagementDashboard() {
               <CardTitle>Community Overview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {availableTenants.slice(0, 3).map((tenant, i) => (
-                <div key={tenant.id}>
-                  {i > 0 && <Separator className="my-4" />}
-                  <div className="space-y-2">
-                    <p className="font-medium">{tenant.name}</p>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Pending</span>
-                      <span className="font-medium">{Math.floor(Math.random() * 5) + 1}</span>
+              {(() => {
+                const tenantsToShow = selectedPropertyFilter 
+                  ? availableTenants.filter(t => t.id === selectedPropertyFilter)
+                  : availableTenants;
+                const uniqueTenants = tenantsToShow.filter((tenant, index, self) => 
+                  self.findIndex(t => t.id === tenant.id) === index
+                ).slice(0, 5);
+                
+                return uniqueTenants.map((tenant, i) => {
+                  const tenantApps = applications.filter(app => app.tenantId === tenant.id);
+                  const pendingCount = tenantApps.filter(app => app.status === 'pending').length;
+                  const reviewCount = tenantApps.filter(app => app.status === 'under_review').length;
+                  const totalCount = tenantApps.length;
+                  
+                  return (
+                    <div key={`community-${tenant.id}-${i}`}>
+                      {i > 0 && <Separator className="my-4" />}
+                      <div className="space-y-2">
+                        <p className="font-medium">{tenant.name}</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Pending</span>
+                          <span className="font-medium">{pendingCount}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">In Review</span>
+                          <span className="font-medium">{reviewCount}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Total</span>
+                          <span className="font-medium">{totalCount}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </CardContent>
           </Card>
         </div>
