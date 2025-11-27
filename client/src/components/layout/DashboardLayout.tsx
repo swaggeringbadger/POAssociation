@@ -340,7 +340,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {availableRolesForCurrentTenant.map(role => (
                       <DropdownMenuItem
                         key={role}
-                        onClick={() => setCurrentUserRole(role)}
+                        onClick={() => {
+                          setCurrentUserRole(role);
+                          window.location.href = '/dashboard';
+                        }}
                         className="cursor-pointer"
                       >
                         <span className="mr-2 text-base">{getRoleIcon(role)}</span>
