@@ -21,6 +21,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface WorkflowData {
   id: string;
@@ -46,6 +53,7 @@ export default function ApplicationDetail() {
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
+  const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -176,6 +184,27 @@ export default function ApplicationDetail() {
     return (
       <Badge className={variantClass}>{workflowStage}</Badge>
     );
+  };
+
+  /**
+   * Helper to determine if a field value is considered "filled"
+   */
+  const isFieldFilled = (value: any): boolean => {
+    if (value === undefined || value === null || value === '') return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+  };
+
+  /**
+   * Helper to determine if a field should be shown based on view mode
+   */
+  const shouldShowField = (value: any, mode: 'all' | 'filled' | 'empty'): boolean => {
+    if (mode === 'all') return true;
+    const filled = isFieldFilled(value);
+    if (mode === 'filled') return filled; // Only show filled fields
+    if (mode === 'empty') return !filled; // Only show empty fields
+    return true;
   };
 
   /**
@@ -336,27 +365,45 @@ export default function ApplicationDetail() {
           {(application.formData && Object.keys(application.formData).length > 0) || documents.length > 0 ? (
             <div className="border-t pt-6">
               {/* Tabs */}
-              <div className="flex gap-4 mb-4 border-b">
-                <button
-                  onClick={() => setActiveTab('form')}
-                  className={`text-sm font-medium pb-2 px-1 transition-colors ${
-                    activeTab === 'form'
-                      ? 'text-foreground border-b-2 border-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Form Data
-                </button>
-                <button
-                  onClick={() => setActiveTab('documents')}
-                  className={`text-sm font-medium pb-2 px-1 transition-colors ${
-                    activeTab === 'documents'
-                      ? 'text-foreground border-b-2 border-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Documents ({documents.length})
-                </button>
+              <div className="flex justify-between items-center mb-4 border-b">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setActiveTab('form')}
+                    className={`text-sm font-medium pb-2 px-1 transition-colors ${
+                      activeTab === 'form'
+                        ? 'text-foreground border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Form Data
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('documents')}
+                    className={`text-sm font-medium pb-2 px-1 transition-colors ${
+                      activeTab === 'documents'
+                        ? 'text-foreground border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Documents ({documents.length})
+                  </button>
+                </div>
+                
+                {/* View Filter - only show on Form Data tab */}
+                {activeTab === 'form' && (
+                  <div className="pb-2">
+                    <Select value={viewMode} onValueChange={(value: 'all' | 'filled' | 'empty') => setViewMode(value)}>
+                      <SelectTrigger className="w-[200px] h-8 text-xs" data-testid="select-view-mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" data-testid="select-view-all">View all fields</SelectItem>
+                        <SelectItem value="filled" data-testid="select-view-filled">Emphasis what's here</SelectItem>
+                        <SelectItem value="empty" data-testid="select-view-empty">Emphasis what's missing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               {/* Form Data Tab */}
@@ -444,10 +491,13 @@ export default function ApplicationDetail() {
                   {/* Sections with Fields */}
                   {formConfig?.sections ? (
                     formConfig.sections.map((section, sectionIdx) => {
-                      // Get fields in this section that have values
-                      const sectionFields = section.fields.filter(field =>
-                        application.formData && (application.formData as Record<string, any>)[field.id] !== undefined
-                      );
+                      // Get fields in this section based on view mode
+                      const sectionFields = section.fields.filter(field => {
+                        if (!application.formData) return false;
+                        const value = (application.formData as Record<string, any>)[field.id];
+                        // Only show fields that exist AND match the view mode filter
+                        return value !== undefined && shouldShowField(value, viewMode);
+                      });
 
                       if (sectionFields.length === 0) return null;
 
@@ -461,12 +511,18 @@ export default function ApplicationDetail() {
                             {sectionFields.map((field) => {
                               const value = (application.formData as Record<string, any>)[field.id];
                               return (
-                                <div key={field.id} className="border rounded-lg p-4 bg-muted/50">
+                                <div
+                                  key={field.id}
+                                  className={`border rounded-lg p-4 bg-muted/50 ${
+                                    field.required ? 'border-l-4 border-l-red-300 dark:border-l-red-700' : ''
+                                  }`}
+                                >
                                   <div className="flex items-start justify-between gap-4 mb-2">
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2">
                                         <p className="text-sm font-semibold" data-testid={`text-field-label-${field.id}`}>
                                           {field.label}
+                                          {field.required && <span className="text-red-500 ml-1">*</span>}
                                         </p>
                                         {field.relevantBylaws && typeof field.relevantBylaws !== 'string' && renderBylawReference(field.relevantBylaws as BylawReference)}
                                       </div>
@@ -490,14 +546,23 @@ export default function ApplicationDetail() {
                   ) : (
                     // Fallback for applications without formConfig
                     <div className="space-y-3">
-                      {Object.entries(application.formData as Record<string, any>).map(([key, value]) => {
+                      {Object.entries(application.formData as Record<string, any>)
+                        .filter(([_, value]) => shouldShowField(value, viewMode))
+                        .map(([key, value]) => {
                         const fieldSchema = formTemplate?.schema?.fields?.find((f: any) => f.name === key);
+                        const isRequired = fieldSchema?.required || false;
                         return (
-                          <div key={key} className="border rounded-lg p-4 bg-muted/50">
+                          <div
+                            key={key}
+                            className={`border rounded-lg p-4 bg-muted/50 ${
+                              isRequired ? 'border-l-4 border-l-red-300 dark:border-l-red-700' : ''
+                            }`}
+                          >
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
                                 <p className="text-sm font-semibold" data-testid={`text-field-label-${key}`}>
                                   {fieldSchema?.label || key}
+                                  {isRequired && <span className="text-red-500 ml-1">*</span>}
                                 </p>
                                 {fieldSchema?.description && (
                                   <p className="text-xs text-muted-foreground mt-1">{fieldSchema.description}</p>
