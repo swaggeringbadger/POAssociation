@@ -215,6 +215,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Management Company Settings - Protected routes
+  app.get("/api/management-company/:id/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Management company not found" });
+      }
+      if (tenant.type !== 'management_company') {
+        return res.status(400).json({ error: "Tenant is not a management company" });
+      }
+      res.json({
+        id: tenant.id,
+        name: tenant.name,
+        subdomain: tenant.subdomain,
+        settings: tenant.settings || {},
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/management-company/:id/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, settings } = req.body;
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Management company not found" });
+      }
+      if (tenant.type !== 'management_company') {
+        return res.status(400).json({ error: "Tenant is not a management company" });
+      }
+      
+      // Validate settings schema
+      const { managementCompanySettingsSchema } = await import("@shared/schema");
+      const validatedSettings = managementCompanySettingsSchema.parse(settings || {});
+      
+      // Update the tenant
+      const updatedTenant = await storage.updateTenant(req.params.id, {
+        name: name || tenant.name,
+        settings: validatedSettings,
+      });
+      
+      res.json({
+        id: updatedTenant.id,
+        name: updatedTenant.name,
+        subdomain: updatedTenant.subdomain,
+        settings: updatedTenant.settings || {},
+      });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: fromZodError(error).message });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Form Templates - Protected routes
   app.get("/api/tenants/:tenantId/forms", isAuthenticated, async (req, res) => {
     try {

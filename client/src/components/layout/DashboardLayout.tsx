@@ -30,8 +30,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
 import { api, queryClient } from "@/lib/api";
-import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter } from "lucide-react";
+import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings } from "lucide-react";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
+import ManagementSettingsModal from "@/components/ManagementSettingsModal";
 import type { User } from "@shared/schema";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const user = authUser as User | undefined;
   const { isLoading: tenantsLoading } = useUserTenants();
   const { subdomain, isSubdomainMode } = useSubdomain();
+  const [showCompanySettings, setShowCompanySettings] = useState(false);
+
+  // Check if user is a management manager viewing a management company
+  const isManagementManager = currentUserRole === 'management_manager' || currentUserRole === 'account_admin';
+  const managementCompanyId = currentTenant?.type === 'management_company' ? currentTenant.id : currentTenant?.managementCompanyId;
 
   // Fetch managed properties for property filter (management company users only)
   const { data: managedProperties = [] } = useQuery({
@@ -365,6 +371,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <UserIcon className="mr-2 h-4 w-4" />
                   Profile Settings
                 </DropdownMenuItem>
+                {isManagementManager && managementCompanyId && (
+                  <DropdownMenuItem
+                    onClick={() => setShowCompanySettings(true)}
+                    data-testid="button-company-settings"
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    Company Settings
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -414,6 +429,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
       </div>
+
+      {/* Management Company Settings Modal */}
+      {managementCompanyId && (
+        <ManagementSettingsModal
+          open={showCompanySettings}
+          onOpenChange={setShowCompanySettings}
+          managementCompanyId={managementCompanyId}
+        />
+      )}
     </SidebarProvider>
   );
 }

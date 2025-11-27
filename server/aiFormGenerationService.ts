@@ -27,18 +27,36 @@ const anthropic = new Anthropic({
 export class AIFormGenerationService {
   /**
    * Fetch content from a URL (design guidelines)
-   * This simulates fetching - in production, you'd use a proper HTTP client
+   * Supports both HTML pages and PDF documents
    */
-  private async fetchDesignGuidelines(url: string): Promise<string> {
+  private async fetchDesignGuidelines(url: string): Promise<{
+    type: 'text' | 'pdf';
+    content: string | Buffer;
+    mediaType?: string;
+  }> {
     try {
-      // In production, use fetch or axios to get the content
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch guidelines: ${response.statusText}`);
       }
+
+      const contentType = response.headers.get('content-type') || '';
+
+      // Check if it's a PDF
+      if (contentType.includes('application/pdf') || url.toLowerCase().endsWith('.pdf')) {
+        console.log('Detected PDF document, will send to Claude as document source');
+        const pdfBuffer = Buffer.from(await response.arrayBuffer());
+        return {
+          type: 'pdf',
+          content: pdfBuffer,
+          mediaType: 'application/pdf'
+        };
+      }
+
+      // Otherwise treat as HTML
       const html = await response.text();
 
-      // Basic HTML to text conversion (you may want to use a library like cheerio for better parsing)
+      // Basic HTML to text conversion
       const text = html
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
         .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
@@ -46,7 +64,10 @@ export class AIFormGenerationService {
         .replace(/\s+/g, ' ')
         .trim();
 
-      return text;
+      return {
+        type: 'text',
+        content: text
+      };
     } catch (error) {
       console.error('Error fetching design guidelines:', error);
       throw new Error(`Failed to fetch design guidelines from ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -81,6 +102,19 @@ export class AIFormGenerationService {
   }
 
   /**
+   * Load prompt template from file
+   */
+  private loadPromptTemplate(filename: string): string {
+    try {
+      const promptPath = join(process.cwd(), 'server', 'prompts', filename);
+      return readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+      console.error(`Error loading prompt template ${filename}:`, error);
+      throw new Error(`Failed to load prompt template: ${filename}`);
+    }
+  }
+
+  /**
    * Build the system prompt for AI generation
    */
   private buildSystemPrompt(
@@ -88,163 +122,21 @@ export class AIFormGenerationService {
     referenceArchitecture: string,
     exampleForm: string
   ): string {
-    return `You are an expert form builder for property owners associations (POAs) and homeowners associations (HOAs).
+    const template = this.loadPromptTemplate('system-prompt.md');
 
-Your task is to generate a custom application form configuration in JSON format for a "${applicationType}" application.
-
-REFERENCE ARCHITECTURE:
-The form MUST follow this exact structure:
-${referenceArchitecture}
-
-EXAMPLE FORM (for reference):
-${exampleForm}
-
-CRITICAL REQUIREMENTS:
-1. Output MUST be valid JSON matching the AdditionalInfoConfig interface
-2. Include a "relevantBylaws" section with:
-   - primary: { section, document, summary, keyRequirements, quote }
-   - additionalReferences: array of related bylaw sections
-   - PAY SPECIAL ATTENTION to lot type classifications and requirements
-3. Create "sections" array with appropriate field groups
-4. Each field must have: id, label, type, required, and relevant properties
-5. Extract ACTUAL QUOTES from the design guidelines for the "quote" fields
-   - ALWAYS include the specific location (page number, section number, or article) where the quote comes from
-   - Format quotes like: "Quote text here" (Section 3.2, Page 15)
-   - If the location is in the section/document field, that's acceptable too
-6. Include "required_documents" array listing needed documentation
-7. Create "scoring_weights" object mapping field IDs to numerical weights
-8. Add "complianceNotes" with criticalReminders and commonViolations arrays
-9. **LOT TYPE CONSIDERATIONS** - This is CRITICAL:
-   - Communities often have different lot types (corner lots, interior lots, waterfront, golf course, etc.)
-   - Many requirements vary by lot type (setbacks, heights, materials, approval processes)
-   - If lot types are mentioned in guidelines, create form fields to capture lot type
-   - When providing bylaw references, include lot-type-specific requirements when applicable
-   - Example: "Corner lots require 25ft setbacks (Section 2.1), Interior lots require 15ft setbacks (Section 2.2)"
-
-FIELD TYPES AVAILABLE:
-- text: Single-line text input
-- textarea: Multi-line text input
-- select: Dropdown selection
-- radio: Single choice from options
-- checkbox: Multiple selections
-- number: Numerical input
-- date: Date picker
-
-OUTPUT FORMAT:
-Return ONLY the JSON object. No markdown, no explanations, no additional text.
-The JSON must be parseable and match the AdditionalInfoConfig interface exactly.`;
+    return template
+      .replace(/{APPLICATION_TYPE}/g, applicationType)
+      .replace(/{REFERENCE_ARCHITECTURE}/g, referenceArchitecture)
+      .replace(/{EXAMPLE_FORM}/g, exampleForm);
   }
 
   /**
    * Build the user prompt with design guidelines
    */
-  private buildUserPrompt(
-    applicationType: ApplicationType,
-    designGuidelinesContent: string
-  ): string {
-    return `Generate a custom form for "${applicationType}" applications based on these design guidelines:
+  private buildUserPrompt(applicationType: ApplicationType): string {
+    const template = this.loadPromptTemplate('user-prompt.md');
 
-DESIGN GUIDELINES:
-${designGuidelinesContent}
-
-CRITICAL LOT TYPE EXTRACTION INSTRUCTIONS:
-**IMPORTANT: DO NOT HALLUCINATE OR INVENT LOT TYPES. Only extract lot types explicitly mentioned or clearly defined in the provided design guidelines.**
-
-When processing these guidelines, search for and extract ONLY the following lot classification information that is ACTUALLY PRESENT in the document:
-
-**Lot Type Categories to Search For (Extract ONLY if found in guidelines):**
-1. **Size/Width Classifications**: Search for any lot categorization based on dimensions ACTUALLY MENTIONED (e.g., width in feet, square footage tiers, "estate lots," "villa lots")
-
-2. **Physical Location Types**: Search for lots by their position relative to features ACTUALLY MENTIONED:
-   - Water features (lakefront, pond-view, waterfront, canal-front)
-   - Streets (corner lots, cul-de-sac, interior, through lots)
-   - Natural areas (conservation-adjacent, preserve-view, greenbelt)
-   - Community amenities (golf course, clubhouse-adjacent, park-adjacent)
-
-3. **Configuration Types**: Search for classifications based on lot shape/access ACTUALLY MENTIONED:
-   - Flag/pipe-stem lots, Pie-shaped/wedge lots, Double-frontage lots, Zero lot line, Terminal vista lots
-
-4. **Development Categories**: Search for phase or builder-specific classifications ACTUALLY MENTIONED:
-   - Type A/B/C designations, Phase-specific categories, Builder model designations
-
-5. **Special Conditions/Overlays**: Search for any additional classifications ACTUALLY MENTIONED that modify standard rules:
-   - Architectural control zones, Setback variations, Height restriction areas, View corridors
-
-**Key Phrases to Search For:**
-- "lot type," "lot classification," "lot category"
-- "feet wide," "ft width," "square footage"
-- "corner," "interior," "flag," "cul-de-sac"
-- "lakefront," "waterfront," "conservation," "preserve"
-- "Type [A-Z]," "Phase," "Section"
-
-**CRITICAL RULES:**
-- ONLY include lot types that are explicitly stated in the guidelines
-- If a category is mentioned but no specific lot types are listed, DO NOT INVENT any
-- If you search for lot types and find NONE, include a note/placeholder in the form
-- NEVER make assumptions about what lot types might exist - only extract what is explicitly documented
-
-General Instructions:
-1. Read through the design guidelines carefully and search for ANY LOT TYPE classifications using the categories above
-   - Extract ONLY the lot types that are explicitly mentioned or defined
-   - If NO lot types are found: create a placeholder field with a note that lot type information should be added later
-   - Note: Lot types are CRITICAL as requirements often vary significantly by lot type - but only if they actually exist in the guidelines
-
-2. Identify all requirements, restrictions, and approval processes relevant to ${applicationType}
-   - Pay special attention to requirements that differ by lot type
-   - Note setback requirements, height restrictions, material allowances that vary by lot type
-
-3. Extract actual bylaw quotes and section references
-   - IMPORTANT: When including quotes, ALWAYS cite the specific location (page, section, article, or paragraph number)
-   - Example: "All exterior modifications require ARB approval" (Section 4.2, Page 12)
-   - Example: reference: "Design Guidelines Section 3.4 - Color Standards"
-   - This helps homeowners find the original source material for verification
-   - When requirements differ by lot type, include ALL lot type variations in the bylaw references
-
-4. Create form fields that collect all required information
-   - IF lot types were found in the guidelines: Include a field to capture the applicant's lot type as a dropdown (select field)
-   - IF NO lot types were found: Include a text field with a placeholder and description explaining "Lot type information was not defined in the community guidelines. Please consult your property survey or contact the community office for your lot classification."
-   - Only populate the dropdown with lot types that you actually found in the guidelines
-   - Use appropriate field types (select/radio) to let users choose their lot type
-   - Make lot type an early field if requirements depend on it
-
-5. Include relevant bylaw references for each field where applicable
-   - Always include the specific section/article/page reference in the "reference" field
-   - Only create lot-type-specific requirements if actual lot types exist in the guidelines
-   - Example structure for lot-type-specific requirements (IF lot types exist):
-     {
-       "reference": "Section 4.2 - Setback Requirements",
-       "requirement": "Setback requirements vary by lot type",
-       "requirements": [
-         "Corner lots: 25ft front, 20ft side (Section 4.2.1)",
-         "Interior lots: 20ft front, 10ft side (Section 4.2.2)",
-         "Waterfront lots: 30ft from water, 20ft other sides (Section 4.2.3)"
-       ],
-       "note": "Verify your lot type with the property survey before proceeding"
-     }
-
-6. Organize fields into logical sections
-   - Create a dedicated "Property Information" section as the first section
-   - Include lot type field (either dropdown if found, or text with note if not found) in this section
-
-7. Create appropriate field types and options based on what you found
-   - IF lot types found: Use a select dropdown with only the lot types that exist in the guidelines
-   - IF NO lot types found: Use a text input with clear description that lot types weren't defined
-   - NEVER invent lot type options - populate dropdown ONLY with what you found
-
-8. Set scoring weights based on field importance
-   - Lot type field should have high weight if it actually affects other requirements
-   - If lot types were not found, the field weight can be lower
-
-9. List all required documents mentioned in the guidelines
-   - Include property survey as a required document only if it's explicitly needed for lot type verification
-   - If lot types weren't found in guidelines, still mention survey in case the community uses it
-
-10. Include compliance notes with critical reminders
-    - IF lot types were found: Add reminders about lot-type-specific requirements
-    - IF lot types were NOT found: Add note explaining that the community guidelines did not specify distinct lot type classifications
-    - NEVER make up reminders about lot types that don't exist
-
-Generate the complete JSON form configuration now:`;
+    return template.replace(/{APPLICATION_TYPE}/g, applicationType);
   }
 
   /**
@@ -252,11 +144,41 @@ Generate the complete JSON form configuration now:`;
    */
   private async callAnthropicAPI(
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
+    guidelinesData: { type: 'text' | 'pdf'; content: string | Buffer; mediaType?: string }
   ): Promise<{ content: string; tokensUsed: number }> {
     const startTime = Date.now();
 
     try {
+      // Build the message content based on whether we have PDF or text
+      const messageContent: any[] = [];
+
+      if (guidelinesData.type === 'pdf') {
+        // For PDF, send as document source
+        messageContent.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: guidelinesData.mediaType,
+            data: (guidelinesData.content as Buffer).toString('base64'),
+          },
+        });
+        console.log('Sending PDF document to Claude for analysis');
+      } else {
+        // For text/HTML, include in the user prompt
+        const textContent = guidelinesData.content as string;
+        userPrompt = userPrompt.replace(
+          '{DESIGN_GUIDELINES_CONTENT}',
+          textContent
+        );
+      }
+
+      // Add the user prompt text
+      messageContent.push({
+        type: 'text',
+        text: userPrompt,
+      });
+
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 16000,
@@ -265,7 +187,7 @@ Generate the complete JSON form configuration now:`;
         messages: [
           {
             role: 'user',
-            content: userPrompt,
+            content: messageContent,
           },
         ],
       });
@@ -393,11 +315,11 @@ Generate the complete JSON form configuration now:`;
 
       // Step 3: Build prompts
       const systemPrompt = this.buildSystemPrompt(applicationType, referenceArchitecture, exampleForm);
-      const userPrompt = this.buildUserPrompt(applicationType, guidelinesContent);
+      const userPrompt = this.buildUserPrompt(applicationType);
 
       // Step 4: Call Anthropic API
       console.log('Calling Anthropic API for form generation...');
-      const { content, tokensUsed } = await this.callAnthropicAPI(systemPrompt, userPrompt);
+      const { content, tokensUsed } = await this.callAnthropicAPI(systemPrompt, userPrompt, guidelinesContent);
 
       // Step 5: Parse and validate
       console.log('Parsing and validating generated form...');

@@ -64,6 +64,30 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
+// Management company settings type
+export const managementCompanySettingsSchema = z.object({
+  description: z.string().optional(),
+  address: z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zip: z.string().optional(),
+  }).optional(),
+  mailingAddress: z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zip: z.string().optional(),
+  }).optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  website: z.string().optional(),
+  paymentInstructions: z.string().optional(),
+  logoUrl: z.string().optional(),
+});
+
+export type ManagementCompanySettings = z.infer<typeof managementCompanySettingsSchema>;
+
 // Tenants table (Communities and Management Companies)
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -73,6 +97,7 @@ export const tenants = pgTable("tenants", {
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
   workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
   designGuidelinesUrl: text("design_guidelines_url"), // URL to property's design guidelines/covenants
+  settings: jsonb("settings").$type<ManagementCompanySettings>(), // Management company settings (address, payment instructions, etc.)
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
