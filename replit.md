@@ -2,14 +2,14 @@
 
 ## Overview
 
-POA Association is a full-stack SaaS platform for managing homeowner and property owner associations. The system provides architectural review board (ARB) workflows, dynamic form generation, document management, and multi-tenant isolation for management companies overseeing multiple communities.
+POA Association is a full-stack SaaS platform for managing homeowner and property owner associations (HOAs/POAs). The system provides architectural review board (ARB) workflows, AI-powered dynamic form generation, multi-tenant isolation with subdomain routing, and comprehensive document management.
 
 **Core Value Proposition:**
-- Dynamic, AI-powered form builder for community-specific applications
-- Multi-tenant architecture with subdomain-based isolation
+- AI-powered form generation from community design guidelines (PDF/HTML)
+- Multi-tenant architecture with subdomain-based tenant isolation
 - Complete application submission and review workflows
 - Azure Blob Storage document management with GUID-based paths
-- Demo ecosystem system for prospect evaluation
+- Demo ecosystem system for prospect evaluation with gated access
 
 ## User Preferences
 
@@ -21,13 +21,13 @@ Preferred communication style: Simple, everyday language.
 
 **Three-Tier Tenant Hierarchy:**
 1. **Management Companies** - Top-level organizations managing multiple communities
-2. **Communities** - Individual HOAs/POAs (Markland POA, Whispering Pines HOA, etc.)
+2. **Communities** - Individual HOAs/POAs (e.g., Markland POA, Whispering Pines HOA)
 3. **Users** - Assigned to tenants with specific roles via `userTenantRoles` join table
 
-**Tenant Isolation:**
+**Tenant Isolation Strategy:**
 - Subdomain-based routing (e.g., `markland.poassociation.com`)
 - All database queries filtered by `tenantId`
-- Demo data tagged with `demoCodeId` for safe deletion
+- Demo data tagged with `demoCodeId` for safe deletion via CASCADE constraints
 - Zustand store persists `currentTenant` selection in localStorage
 
 **Role-Based Access Control:**
@@ -39,174 +39,182 @@ Preferred communication style: Simple, everyday language.
 - `poa_board_contributor` - Board contributors
 - `resident` - Homeowners/residents
 
+**Key Design Decision: Demo Isolation**
+- Demo codes generate isolated ecosystems with unique subdomains
+- All demo entities (users, tenants, applications, forms) tagged with `demoCodeId`
+- Automatic CASCADE deletion when demo code expires
+- Production data (`demoCodeId = NULL`) is never affected
+
+### Frontend Architecture
+
+**Stack:**
+- React 19 + TypeScript 5.6
+- Vite 7 (build tool) with HMR
+- Wouter 3.3 (lightweight routing)
+- Tailwind CSS 4 + shadcn/ui (New York variant)
+- TanStack React Query 5.6 (server state)
+- Zustand 5.0 (client state with localStorage persistence)
+- React Hook Form 7.66 + Zod 3.25 (forms and validation)
+
+**State Management Strategy:**
+- **Server State**: React Query with automatic caching, refetching, and optimistic updates
+- **Client State**: Zustand for UI state (current tenant, sidebar collapsed, etc.)
+- **Form State**: React Hook Form with Zod validation schemas
+
+**Component Organization:**
+- `/client/src/components` - Reusable UI components (ApplicationCard, DynamicForm, etc.)
+- `/client/src/pages` - Route-level page components
+- `/client/src/hooks` - Custom React hooks (useAuth, useTenant, etc.)
+- `/client/src/lib` - Utilities and API client
+
+### Backend Architecture
+
+**Stack:**
+- Node.js 20 + Express 4.21 + TypeScript
+- Neon Serverless PostgreSQL 16
+- Drizzle ORM 0.39 (schema-first with migrations)
+- Express Session + connect-pg-simple (PostgreSQL-backed sessions)
+- Passport.js + OpenID Connect (Replit Auth)
+
+**Service Layer:**
+- `storage.ts` - Database access layer (single source of truth for all DB operations)
+- `additionalInfoService.ts` - Form configuration management and validation
+- `aiFormGenerationService.ts` - Anthropic Claude integration for form generation
+- `azureBlobStorage.ts` - Document upload/download/deletion
+- `emailService.ts` - SMTP2GO transactional email sending
+- `provision.ts` - Demo ecosystem provisioning
+
+**API Design:**
+- RESTful endpoints under `/api/*`
+- All routes protected with `isAuthenticated` middleware
+- Subdomain detection middleware extracts tenant context
+- Zod validation for all request payloads
+
+### Database Schema
+
+**Core Tables:**
+- `users` - User profiles (Replit Auth integration)
+- `tenants` - Management companies and communities
+- `userTenantRoles` - Many-to-many user-tenant-role assignments
+- `formTemplates` - AI-generated form configurations (JSON)
+- `applications` - Submitted applications with workflow state
+- `documents` - File metadata with Azure Blob Storage paths
+- `sessions` - Express session storage (required for Replit Auth)
+- `demoCodes` - Time-limited demo access codes
+
+**Key Relationships:**
+- Tenant hierarchy: `tenants.managementCompanyId` → `tenants.id`
+- User-tenant roles: `users` ↔ `userTenantRoles` ↔ `tenants`
+- Applications: `applications.tenantId` → `tenants.id`
+- Documents: `documents.applicationId` → `applications.id`
+- Demo isolation: All demo entities have `demoCodeId` → `demoCodes.id`
+
+**Document Storage Path Structure:**
+```
+application-documents/{tenant-guid}/{application-guid}/{document-guid}.{ext}
+```
+- Paths precalculated at upload time using `crypto.randomUUID()`
+- Full path stored in `documents.blobPath` column
+- No runtime reassembly required (performance optimization)
+
 ### Authentication & Sessions
 
-**Replit OpenID Connect Integration:**
+**Replit OpenID Connect:**
 - Session storage in PostgreSQL via `connect-pg-simple`
-- 7-day session TTL
-- Sessions table tracks `sid`, `sess` (JSON), and `expire`
+- 7-day session TTL with automatic cleanup
+- `sessions` table tracks `sid`, `sess` (JSON), and `expire`
 - Passport.js with `openid-client` strategy
 - All API routes protected with `isAuthenticated` middleware
 
-**Demo System (Isolated Ecosystems):**
-- Time-limited demo codes with scheduled validity windows
-- Each code provisions complete isolated ecosystem: 1 management company, 2 communities, 4 users, 4 form templates, 30+ sample applications
-- Demo users are real users in database, tagged with `demoCodeId`
-- Zero behavioral differences between demo and production users
-- Cascade delete removes entire ecosystem atomically
-- Session tracking via `demoSessions` table
+**Demo Mode:**
+- Demo codes create temporary access without Replit Auth
+- Demo users auto-created during ecosystem provisioning
+- Demo sessions expire when `validUntil` date passes
+- Purge script (`purgeExpiredDemos.ts`) cleans up expired demos
 
-### Database Schema (Drizzle ORM + Neon PostgreSQL)
+### AI Form Generation
 
-**Core Tables:**
-- `users` - User profiles with Replit auth data
-- `tenants` - Management companies and communities
-- `userTenantRoles` - Many-to-many user-tenant assignments with roles
-- `formTemplates` - Dynamic form configurations (JSON schema)
-- `applications` - Submitted applications with status workflow
-- `documents` - File metadata with Azure blob paths (GUID-based)
-- `demoCodes` - Demo access codes with provisioning state
-- `demoSessions` - Demo usage analytics
-- `sessions` - Express session store
+**Anthropic Claude Sonnet 4.5 Integration:**
+- Fetches community design guidelines (PDF or HTML)
+- PDF support via Anthropic's native document API (OCR included)
+- Generates structured JSON forms matching `AdditionalInfoConfig` schema
+- Prompts externalized to markdown files for easy iteration
 
-**Design Decisions:**
-- UUID primary keys for all entities (via `gen_random_uuid()`)
-- JSONB columns for flexible form schemas and metadata
-- Timestamp tracking (`createdAt`, `updatedAt`) on all mutable tables
-- Soft deletes avoided - hard deletes with cascade constraints
-- Foreign key constraints enforce referential integrity
+**Prompt Structure:**
+- `server/prompts/system-prompt.md` - Defines Claude's role and output format
+- `server/prompts/user-prompt.md` - Instructions for analyzing guidelines
+- Emphasizes extracting actual lot types (not hallucinating)
+- Includes bylaw references with section/page citations
 
-### Dynamic Form System
-
-**Configuration-Driven Architecture:**
-- Form templates stored as JSONB in `formTemplates` table
-- Each template tied to specific `tenantId` and `projectType`
-- Version tracking with `isActive` flag (only one active per type)
-- Field types: text, textarea, select, radio, checkbox, number, date
-- Inline compliance guidance with `relevantBylaws` references
-- Scoring system for form completeness calculation
-
-**Form Template Structure:**
-```typescript
-{
-  title: string,
-  description: string,
-  sections: [{
-    title: string,
-    fields: [{
-      id: string,
-      label: string,
-      type: FieldType,
-      required: boolean,
-      options?: string[],
-      description?: string,
-      relevantBylaws?: BylawReference
-    }]
-  }],
-  documents?: DocumentRequirement[],
-  scoring_weights?: object
-}
-```
-
-**AI Form Generation (Anthropic Claude):**
-- Service reads community design guidelines from URLs
-- Analyzes reference architecture examples from `ref_docs/`
-- Generates custom form configurations via Claude API
-- Validates output against TypeScript schema
-- Currently dormant - seeded forms in use
-
-### Application Workflow
-
-**4-Step Submission Wizard:**
-1. **Project Type Selection** - 6 types: exterior modifications, structural changes, landscaping, fencing, outdoor structures, signage
-2. **Project Details** - Generic fields (title, description, address)
-3. **Additional Information** - Project-type-specific dynamic form
-4. **Document Upload** - Azure Blob Storage with drag-and-drop
-
-**Application States:**
-- `draft` - Created in Step 2, not yet submitted
-- `pending` - Submitted, awaiting initial review
-- `under_review` - Active review in progress
-- `approved` - Final approval granted
-- `rejected` - Application denied
-- `conditionally_approved` - Approved with conditions
-
-**Workflow System (Partially Implemented):**
-- `workflowTemplates` table with multi-step review processes
-- `workflowSteps` track current position in workflow
-- 4 pre-built templates: Standard 3-Step, Management + Board, Management Only, Extended Board
-- Schema created, API endpoints pending
-
-### Document Management (Azure Blob Storage)
-
-**GUID-Based Hierarchical Paths:**
-```
-application-documents/
-  {tenant-guid}/
-    {application-guid}/
-      {document-guid}.{extension}
-```
-
-**Path Precalculation Strategy:**
-- Document ID generated once at upload: `crypto.randomUUID()`
-- Full path constructed immediately: `${tenantId}/${applicationId}/${documentId}.${ext}`
-- Path stored in `blob_path` column
-- No runtime reassembly - direct retrieval from database
-- Performance optimization: avoids multiple table joins
-
-**Upload Flow:**
-1. Frontend: User drops files in `DocumentUpload` component
-2. Multer middleware: Stores file in memory (50MB limit)
-3. Backend: Generates document GUID, constructs path
-4. Azure: Uploads blob to container `application-documents`
-5. Database: Inserts record with `blobPath`, `fileName`, `fileSize`, `mimeType`
-
-**Required vs Optional Documents:**
-- Form templates include `documents` array with `DocumentRequirement[]`
-- Each requirement has `name`, `required` boolean, `description`
-- Visual indicators in UI (red asterisk for required)
-- Backward compatible with legacy `required_documents` string array
+**Form Validation:**
+- Generated forms validated against Zod schemas
+- Completeness scoring based on field weights
+- Caching prevents redundant AI calls
 
 ## External Dependencies
 
-### Database
-- **Neon Serverless PostgreSQL** - Managed Postgres with websocket connections
-- Connection via `@neondatabase/serverless` Pool
-- Environment variable: `DATABASE_URL`
-- Schema migrations via Drizzle Kit (`drizzle-kit push`)
+### Cloud Services
 
-### Cloud Storage
-- **Azure Blob Storage** - Document/file storage
-- Connection via `@azure/storage-blob` SDK
+**Neon PostgreSQL:**
+- Serverless PostgreSQL 16 database
+- Environment variable: `DATABASE_URL`
+- Used for all persistent data storage
+- Auto-scaling with connection pooling
+
+**Azure Blob Storage:**
+- Document storage for application uploads
 - Environment variables: `AZURE_STORAGE_CONNECTION_STRING` or `AZURE_STORAGE_ACCOUNT_NAME` + `AZURE_STORAGE_SAS_TOKEN`
 - Container: `application-documents`
+- GUID-based hierarchical path structure
 
-### Authentication
-- **Replit OpenID Connect** - Primary authentication provider
-- Environment variables: `ISSUER_URL`, `REPL_ID`, `SESSION_SECRET`
-- Fallback: Demo code entry bypasses auth for sandboxed demos
-
-### AI Services
-- **Anthropic Claude API** - Form generation service
+**Anthropic Claude API:**
+- AI form generation from design guidelines
 - Environment variable: `ANTHROPIC_API_KEY`
-- Currently dormant - used for initial form template generation
+- Model: Claude Sonnet 4.5
+- Supports both PDF and HTML input
 
-### Email (Planned)
-- **SMTP2GO** - Transactional email service
+**SMTP2GO:**
+- Transactional email service
 - Environment variable: `SMTP2GO_API_KEY`
-- Templates created, sending infrastructure ready
-- Not yet integrated into application workflow
+- Used for application notifications and workflow updates
 
-### Frontend Build & Development
-- **Vite** - Dev server and production bundler
-- **Tailwind CSS 4** - Utility-first styling
-- **shadcn/ui** - Radix UI component library (55 components installed)
-- **TanStack React Query** - Server state management
-- **Wouter** - Lightweight client-side routing
-- **Replit Vite Plugins** - Runtime error overlay, dev banner, cartographer (dev only)
+**Replit Auth:**
+- OpenID Connect authentication
+- Environment variables: `ISSUER_URL`, `REPL_ID`, `SESSION_SECRET`
+- Session persistence in PostgreSQL
 
-### Build & Deployment
-- **esbuild** - Server bundling for production
-- **tsx** - TypeScript execution for scripts
-- **Replit Autoscale** - Deployment platform
-- Build output: `dist/public` (client), `dist/index.js` (server)
+### NPM Packages
+
+**Core Dependencies:**
+- `express` - HTTP server framework
+- `drizzle-orm` + `@neondatabase/serverless` - Database ORM
+- `@anthropic-ai/sdk` - AI form generation
+- `@azure/storage-blob` - Document storage
+- `react` + `vite` - Frontend framework and build tool
+- `@tanstack/react-query` - Server state management
+- `zustand` - Client state management
+- `react-hook-form` + `zod` - Form handling and validation
+
+**UI Component Library:**
+- `@radix-ui/*` (20+ packages) - Headless UI primitives
+- `tailwindcss` - Utility-first CSS framework
+- `lucide-react` - Icon library
+- `shadcn/ui` - Pre-built accessible components
+
+**Authentication:**
+- `passport` + `openid-client` - OAuth/OIDC integration
+- `express-session` + `connect-pg-simple` - Session management
+
+### Development Tools
+
+**Build & Development:**
+- `tsx` - TypeScript execution for dev and scripts
+- `esbuild` - Fast backend bundling
+- `drizzle-kit` - Database migrations
+- `vite` - Frontend HMR and build
+
+**Deployment:**
+- Replit Autoscale for production hosting
+- Database migrations via `npm run db:push`
+- Build command: `npm run build` (frontend + backend)
+- Start command: `npm start`

@@ -7,7 +7,7 @@
 
 import { useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload, FileText, X, Download, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, FileText, X, Download, Loader2, CheckCircle2, AlertCircle, Smartphone } from 'lucide-react';
 import type { DocumentRequirement } from '@shared/additionalInfoTypes';
 import { uploadDocument, listDocuments, deleteDocument, getDocumentDownloadUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { QRCodeUploadDialog } from '@/components/QRCodeUploadDialog';
 
 interface DocumentUploadProps {
   applicationId: string | null; // null if application not created yet
@@ -36,6 +37,8 @@ export function DocumentUpload({ applicationId, documents, onUploadComplete }: D
   const queryClient = useQueryClient();
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrDocumentName, setQrDocumentName] = useState<string>('');
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Fetch uploaded documents if application exists
@@ -221,39 +224,65 @@ export function DocumentUpload({ applicationId, documents, onUploadComplete }: D
 
                       {/* Upload area */}
                       {uploaded.length === 0 && (
-                        <div
-                          className={cn(
-                            "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer hover:border-primary hover:bg-primary/5",
-                            dragOver === doc.name && "border-primary bg-primary/5"
-                          )}
-                          onDrop={(e) => handleDrop(e, doc.name)}
-                          onDragOver={(e) => handleDragOver(e, doc.name)}
-                          onDragLeave={handleDragLeave}
-                          onClick={() => fileInputRefs.current[doc.name]?.click()}
-                        >
-                          {isUploading ? (
-                            <div className="flex flex-col items-center gap-2">
-                              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                              <p className="text-sm text-muted-foreground">Uploading...</p>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center gap-2">
-                              <Upload className="h-8 w-8 text-muted-foreground" />
-                              <p className="text-sm font-medium">Click to upload or drag and drop</p>
-                              <p className="text-xs text-muted-foreground">PDF, JPG, PNG up to 50MB</p>
-                            </div>
-                          )}
-                          <input
-                            ref={(el) => (fileInputRefs.current[doc.name] = el)}
-                            type="file"
-                            className="hidden"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileSelect(file, doc.name);
-                            }}
-                          />
+                        <div className="space-y-3">
+                          <div
+                            className={cn(
+                              "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer hover:border-primary hover:bg-primary/5",
+                              dragOver === doc.name && "border-primary bg-primary/5"
+                            )}
+                            onDrop={(e) => handleDrop(e, doc.name)}
+                            onDragOver={(e) => handleDragOver(e, doc.name)}
+                            onDragLeave={handleDragLeave}
+                            onClick={() => fileInputRefs.current[doc.name]?.click()}
+                          >
+                            {isUploading ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                <p className="text-sm text-muted-foreground">Uploading...</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-2">
+                                <Upload className="h-8 w-8 text-muted-foreground" />
+                                <p className="text-sm font-medium">Click to upload or drag and drop</p>
+                                <p className="text-xs text-muted-foreground">PDF, JPG, PNG up to 50MB</p>
+                              </div>
+                            )}
+                            <input
+                              ref={(el) => (fileInputRefs.current[doc.name] = el)}
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileSelect(file, doc.name);
+                              }}
+                            />
+                          </div>
+
+                          {/* Upload from Phone button */}
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">Or</span>
+                          </div>
                         </div>
+
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          className="w-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQrDocumentName(doc.name);
+                            setQrDialogOpen(true);
+                          }}
+                        >
+                          <Smartphone className="h-4 w-4 mr-2" />
+                          Upload from Phone
+                        </Button>
+                      </div>
                       )}
 
                       {/* Uploaded files */}
@@ -328,37 +357,63 @@ export function DocumentUpload({ applicationId, documents, onUploadComplete }: D
 
                       {/* Upload area */}
                       {uploaded.length === 0 && (
-                        <div
-                          className={cn(
-                            "border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer hover:border-primary hover:bg-primary/5",
-                            dragOver === doc.name && "border-primary bg-primary/5"
-                          )}
-                          onDrop={(e) => handleDrop(e, doc.name)}
-                          onDragOver={(e) => handleDragOver(e, doc.name)}
-                          onDragLeave={handleDragLeave}
-                          onClick={() => fileInputRefs.current[doc.name]?.click()}
-                        >
-                          {isUploading ? (
-                            <div className="flex flex-col items-center gap-2">
-                              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                              <p className="text-xs text-muted-foreground">Uploading...</p>
+                        <div className="space-y-3">
+                          <div
+                            className={cn(
+                              "border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer hover:border-primary hover:bg-primary/5",
+                              dragOver === doc.name && "border-primary bg-primary/5"
+                            )}
+                            onDrop={(e) => handleDrop(e, doc.name)}
+                            onDragOver={(e) => handleDragOver(e, doc.name)}
+                            onDragLeave={handleDragLeave}
+                            onClick={() => fileInputRefs.current[doc.name]?.click()}
+                          >
+                            {isUploading ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                <p className="text-xs text-muted-foreground">Uploading...</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1">
+                                <Upload className="h-6 w-6 text-muted-foreground" />
+                                <p className="text-xs font-medium">Click to upload or drag and drop</p>
+                              </div>
+                            )}
+                            <input
+                              ref={(el) => (fileInputRefs.current[doc.name] = el)}
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileSelect(file, doc.name);
+                              }}
+                            />
+                          </div>
+
+                          {/* Upload from Phone button */}
+                          <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                              <span className="w-full border-t" />
                             </div>
-                          ) : (
-                            <div className="flex flex-col items-center gap-1">
-                              <Upload className="h-6 w-6 text-muted-foreground" />
-                              <p className="text-xs font-medium">Click to upload or drag and drop</p>
+                            <div className="relative flex justify-center text-xs uppercase">
+                              <span className="bg-background px-2 text-muted-foreground">Or</span>
                             </div>
-                          )}
-                          <input
-                            ref={(el) => (fileInputRefs.current[doc.name] = el)}
-                            type="file"
-                            className="hidden"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileSelect(file, doc.name);
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            className="w-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQrDocumentName(doc.name);
+                              setQrDialogOpen(true);
                             }}
-                          />
+                          >
+                            <Smartphone className="h-4 w-4 mr-2" />
+                            Upload from Phone
+                          </Button>
                         </div>
                       )}
 
@@ -399,6 +454,24 @@ export function DocumentUpload({ applicationId, documents, onUploadComplete }: D
             })}
           </div>
         </div>
+      )}
+
+      {/* QR Code Upload Dialog */}
+      {applicationId && qrDialogOpen && (
+        <QRCodeUploadDialog
+          open={qrDialogOpen}
+          onOpenChange={setQrDialogOpen}
+          applicationId={applicationId}
+          documentRequirementName={qrDocumentName}
+          onUploadComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ['documents', applicationId] });
+            toast({
+              title: "Document uploaded from phone",
+              description: `${qrDocumentName} has been uploaded successfully.`,
+            });
+            onUploadComplete?.();
+          }}
+        />
       )}
     </div>
   );

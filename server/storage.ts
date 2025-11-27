@@ -105,6 +105,12 @@ export interface IStorage {
   listDocumentsByApplication(applicationId: string): Promise<schema.Document[]>;
   deleteDocument(id: string): Promise<void>;
   getDocumentsByRequirement(applicationId: string, requirementName: string): Promise<schema.Document[]>;
+
+  // Document Upload Tokens (QR Code Mobile Upload)
+  createDocumentUploadToken(token: schema.InsertDocumentUploadToken): Promise<schema.DocumentUploadToken>;
+  getDocumentUploadToken(token: string): Promise<schema.DocumentUploadToken | undefined>;
+  markTokenAsUsed(token: string, uploadedDocumentId: string): Promise<schema.DocumentUploadToken>;
+  cleanupExpiredTokens(): Promise<number>;
 }
 
 export class DbStorage implements IStorage {
@@ -755,6 +761,39 @@ export class DbStorage implements IStorage {
         )
       )
       .orderBy(schema.documents.uploadedAt);
+  }
+
+  // Document Upload Tokens (QR Code Mobile Upload)
+  async createDocumentUploadToken(token: schema.InsertDocumentUploadToken): Promise<schema.DocumentUploadToken> {
+    const [created] = await db.insert(schema.documentUploadTokens)
+      .values(token)
+      .returning();
+    return created;
+  }
+
+  async getDocumentUploadToken(token: string): Promise<schema.DocumentUploadToken | undefined> {
+    const [uploadToken] = await db.select()
+      .from(schema.documentUploadTokens)
+      .where(eq(schema.documentUploadTokens.token, token));
+    return uploadToken;
+  }
+
+  async markTokenAsUsed(token: string, uploadedDocumentId: string): Promise<schema.DocumentUploadToken> {
+    const [updated] = await db.update(schema.documentUploadTokens)
+      .set({
+        isUsed: true,
+        uploadedDocumentId,
+        usedAt: new Date(),
+      })
+      .where(eq(schema.documentUploadTokens.token, token))
+      .returning();
+    return updated;
+  }
+
+  async cleanupExpiredTokens(): Promise<number> {
+    const result = await db.delete(schema.documentUploadTokens)
+      .where(sql`${schema.documentUploadTokens.expiresAt} < NOW()`);
+    return result.rowCount || 0;
   }
 }
 

@@ -390,6 +390,92 @@ class ApiClient {
     if (!response.ok) throw new Error("Failed to approve AI generation");
     return response.json();
   }
+
+  // QR Code Upload Token Methods
+  async createDocumentUploadToken(
+    applicationId: string,
+    documentRequirementName: string
+  ): Promise<{
+    token: string;
+    uploadUrl: string;
+    expiresAt: string;
+    expiresInMs: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/applications/${applicationId}/upload-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentRequirementName }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create upload token');
+    }
+    return response.json();
+  }
+
+  async validateUploadToken(token: string): Promise<{
+    documentRequirement: string;
+    applicationTitle: string;
+    applicationNumber: string;
+    expiresAt: string;
+    isValid: boolean;
+  }> {
+    const response = await fetch(`/api/upload/${token}`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to validate upload token');
+    }
+    return response.json();
+  }
+
+  async uploadViaToken(token: string, file: File): Promise<any> {
+    console.log('Uploading file via token:', {
+      token,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+    });
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Log FormData contents (for debugging)
+    console.log('FormData created with file');
+
+    const response = await fetch(`/api/upload/${token}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    console.log('Upload response status:', response.status);
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Upload error response:', error);
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    const result = await response.json();
+    console.log('Upload successful:', result);
+    return result;
+  }
+
+  async checkUploadTokenStatus(token: string): Promise<{
+    isUsed: boolean;
+    isExpired: boolean;
+    uploadedDocumentId: string | null;
+    usedAt: string | null;
+  }> {
+    const response = await fetch(`/api/upload/${token}/status`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to check upload status');
+    }
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();

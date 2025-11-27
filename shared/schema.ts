@@ -222,6 +222,31 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
 
+// Document Upload Tokens table - for QR code mobile uploads
+export const documentUploadTokens = pgTable("document_upload_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(), // Crypto-random token (64 chars hex)
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  documentRequirementName: text("document_requirement_name").notNull(), // Which document this is for
+  expiresAt: timestamp("expires_at").notNull(), // 10 minutes from creation
+  isUsed: boolean("is_used").notNull().default(false),
+  uploadedDocumentId: varchar("uploaded_document_id").references(() => documents.id),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  usedAt: timestamp("used_at"),
+}, (table) => ({
+  tokenIdx: index("token_idx").on(table.token),
+}));
+
+export const insertDocumentUploadTokenSchema = createInsertSchema(documentUploadTokens).omit({
+  id: true,
+  createdAt: true,
+  usedAt: true,
+});
+
+export type InsertDocumentUploadToken = z.infer<typeof insertDocumentUploadTokenSchema>;
+export type DocumentUploadToken = typeof documentUploadTokens.$inferSelect;
+
 // Demo Sessions table (for analytics and tracking)
 export const demoSessions = pgTable("demo_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -32,7 +32,11 @@
       "Bash(git -C /home/runner/workspace show 1af9792 --stat)",
       "Bash(git -C /home/runner/workspace show 1af9792:client/src/components/ApplicationWizard.tsx)",
       "WebFetch(domain:markland.com)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git -C /home/runner/workspace status)",
+      "Bash(tree:*)",
+      "Bash(xargs:*)",
+      "Bash(journalctl:*)"
     ],
     "deny": [],
     "ask": []

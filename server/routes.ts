@@ -812,6 +812,218 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // QR Code Document Upload - Generate upload token
+  app.post("/api/applications/:applicationId/upload-token", isAuthenticated, async (req: any, res) => {
+    try {
+      const { documentRequirementName } = req.body;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      if (!documentRequirementName) {
+        return res.status(400).json({ error: "Document requirement name is required" });
+      }
+
+      // Generate cryptographically secure token (64 character hex string)
+      const token = crypto.randomBytes(32).toString('hex');
+
+      // Token expires in 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      const uploadToken = await storage.createDocumentUploadToken({
+        token,
+        applicationId: req.params.applicationId,
+        documentRequirementName,
+        expiresAt,
+        isUsed: false,
+        createdByUserId: userId,
+      });
+
+      res.json({
+        token: uploadToken.token,
+        uploadUrl: `/upload/${uploadToken.token}`,
+        expiresAt: uploadToken.expiresAt,
+        expiresInMs: 10 * 60 * 1000,
+      });
+    } catch (error: any) {
+      console.error("Error creating upload token:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // QR Code Document Upload - Validate token and get upload info
+  app.get("/api/upload/:token", async (req, res) => {
+    try {
+      const uploadToken = await storage.getDocumentUploadToken(req.params.token);
+
+      if (!uploadToken) {
+        return res.status(404).json({ error: "Invalid upload link" });
+      }
+
+      // Check if expired
+      if (new Date() > uploadToken.expiresAt) {
+        return res.status(410).json({ error: "This upload link has expired" });
+      }
+
+      // Check if already used
+      if (uploadToken.isUsed) {
+        return res.status(410).json({ error: "This upload link has already been used" });
+      }
+
+      // Get application details
+      const application = await storage.getApplication(uploadToken.applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      res.json({
+        documentRequirement: uploadToken.documentRequirementName,
+        applicationTitle: application.title,
+        applicationNumber: application.applicationNumber,
+        expiresAt: uploadToken.expiresAt,
+        isValid: true,
+      });
+    } catch (error: any) {
+      console.error("Error validating upload token:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // QR Code Document Upload - Upload document using token
+  app.post("/api/upload/:token", upload.single('file'), async (req: any, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Document storage is not configured"
+        });
+      }
+
+      const uploadToken = await storage.getDocumentUploadToken(req.params.token);
+
+      if (!uploadToken) {
+        return res.status(404).json({ error: "Invalid upload link" });
+      }
+
+      // Check if expired
+      if (new Date() > uploadToken.expiresAt) {
+        return res.status(410).json({ error: "This upload link has expired" });
+      }
+
+      // Check if already used
+      if (uploadToken.isUsed) {
+        return res.status(410).json({ error: "This upload link has already been used" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      const file = req.file;
+
+      // Debug logging
+      console.log('=== UPLOAD DEBUG ===');
+      console.log('Token:', req.params.token);
+      console.log('File object:', file);
+      console.log('File keys:', file ? Object.keys(file) : 'FILE IS NULL');
+      console.log('req.body:', req.body);
+      console.log('req.headers:', req.headers);
+
+      if (!file.originalname && !file.filename) {
+        console.error('ERROR: No file name found in upload');
+        return res.status(400).json({
+          error: "File name is missing",
+          debug: {
+            hasFile: !!file,
+            fileKeys: file ? Object.keys(file) : null,
+            fieldname: file?.fieldname
+          }
+        });
+      }
+
+      const application = await storage.getApplication(uploadToken.applicationId);
+
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      // Generate document ID and construct blob path
+      const documentId = crypto.randomUUID();
+      const fileName = file.originalname || file.filename || 'document';
+      const fileExtension = fileName.includes('.') ? fileName.split('.').pop() : 'bin';
+      const blobPath = `${application.tenantId}/${uploadToken.applicationId}/${documentId}.${fileExtension}`;
+
+      console.log('Calculated blobPath:', blobPath);
+      console.log('=== END DEBUG ===');
+
+      // Upload to Azure Blob Storage
+      console.log('Uploading to Azure with:', {
+        container: 'application-documents',
+        bufferSize: file.buffer?.length,
+        fileName,
+        mimetype: file.mimetype,
+        blobPath
+      });
+
+      await azureBlobStorage.uploadFile(
+        'application-documents',
+        file.buffer,
+        fileName,
+        file.mimetype,
+        blobPath
+      );
+
+      // Create document record with the token creator as uploader
+      const document = await storage.createDocument({
+        id: documentId,
+        applicationId: uploadToken.applicationId,
+        documentRequirementName: uploadToken.documentRequirementName,
+        fileName,
+        blobPath,
+        containerName: 'application-documents',
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        uploadedByUserId: uploadToken.createdByUserId, // Use token creator as uploader
+      });
+
+      // Mark token as used
+      await storage.markTokenAsUsed(req.params.token, document.id);
+
+      res.json({
+        success: true,
+        document: {
+          id: document.id,
+          fileName: document.fileName,
+          fileSize: document.fileSize,
+          uploadedAt: document.uploadedAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error uploading document via token:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // QR Code Document Upload - Check upload status (for polling)
+  app.get("/api/upload/:token/status", async (req, res) => {
+    try {
+      const uploadToken = await storage.getDocumentUploadToken(req.params.token);
+
+      if (!uploadToken) {
+        return res.status(404).json({ error: "Invalid upload link" });
+      }
+
+      const isExpired = new Date() > uploadToken.expiresAt;
+
+      res.json({
+        isUsed: uploadToken.isUsed,
+        isExpired,
+        uploadedDocumentId: uploadToken.uploadedDocumentId,
+        usedAt: uploadToken.usedAt,
+      });
+    } catch (error: any) {
+      console.error("Error checking upload status:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // User-Tenant relationships - Protected routes
   app.get("/api/users/:userId/tenants", isAuthenticated, async (req, res) => {
     try {

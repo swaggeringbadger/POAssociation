@@ -24,6 +24,7 @@ import DemoCodeStats from "@/pages/admin/DemoCodeStats";
 import ManagementCompanies from "@/pages/admin/ManagementCompanies";
 import Communities from "@/pages/admin/Communities";
 import AIActivity from "@/pages/admin/AIActivity";
+import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -40,6 +41,9 @@ function Router() {
       {/* Demo routes - accessible without auth */}
       <Route path="/demo" component={DemoCodeEntry} />
       <Route path="/demo/personas" component={DemoPersonaSelect} />
+
+      {/* Mobile document upload - accessible without auth */}
+      <Route path="/upload/:token" component={MobileDocumentUpload} />
 
       {isLoading || !isAuthenticated || isLoggingOut ? (
         <Route path="/" component={Landing} />
