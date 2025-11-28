@@ -385,14 +385,20 @@ export default function ApplicationDetail() {
   // Check if current user is the application submitter
   const isSubmitter = user?.id === application?.submittedByUserId;
   
-  // Check if application can be edited
-  const canEdit = isSubmitter && (application?.status === 'draft' || application?.status === 'pending');
-  const canEditWithWarning = isSubmitter && (application?.status === 'under_review' || application?.status === 'approved' || application?.status === 'rejected');
+  // Check if application has progressed through workflow steps
+  const hasProgressedInWorkflow = workflow && workflow.currentStepIndex > 0;
   
-  // Determine warning message based on status
+  // Check if application can be edited
+  const canEdit = isSubmitter && (application?.status === 'draft' || application?.status === 'pending') && !hasProgressedInWorkflow;
+  const canEditWithWarning = isSubmitter && ((application?.status === 'under_review' || application?.status === 'approved' || application?.status === 'rejected') || hasProgressedInWorkflow);
+  
+  // Determine warning message based on status and workflow
   const getWarningMessage = () => {
     if (application?.status === 'approved' || application?.status === 'rejected') {
       return `This application has received a final decision (${application.status}). Editing it will reset the status to pending review. Continue?`;
+    }
+    if (hasProgressedInWorkflow) {
+      return 'This application is in the review workflow. Editing it will reset the status to pending review. Continue?';
     }
     return 'This application is under review. Editing it will reset the status to pending review. Continue?';
   };
