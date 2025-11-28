@@ -2,10 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
+import { listApplicationSignatures } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
@@ -135,6 +136,13 @@ export default function ApplicationDetail() {
       return res.json() as Promise<AdditionalInfoConfig>;
     },
     enabled: !!application?.tenantId && !!application?.projectType,
+  });
+
+  // Fetch signatures for this application
+  const { data: signatures = [] } = useQuery({
+    queryKey: [`/api/applications/${applicationId}/signatures`],
+    queryFn: () => listApplicationSignatures(applicationId),
+    enabled: !!applicationId,
   });
 
   // Upload document mutation
@@ -939,6 +947,71 @@ export default function ApplicationDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Signatures and Initials Section */}
+      {signatures.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PenTool className="h-5 w-5" />
+              Signatures & Initials
+            </CardTitle>
+            <CardDescription>
+              Electronic signatures and initials for this application
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {signatures.map((sig: any) => (
+                <div key={sig.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={sig.type === 'signature' ? 'default' : 'secondary'}>
+                          {sig.type === 'signature' ? 'Signature' : 'Initial'}
+                        </Badge>
+                        <span className="text-sm font-medium">{sig.signedByName}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{sig.signedByEmail}</p>
+                    </div>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <p>{new Date(sig.signedAt).toLocaleDateString()}</p>
+                      <p>{new Date(sig.signedAt).toLocaleTimeString()}</p>
+                    </div>
+                  </div>
+
+                  {/* Display signature image */}
+                  {sig.signatureImageUrl && (
+                    <div className="border rounded bg-white p-3">
+                      <img
+                        src={sig.signatureImageUrl}
+                        alt={`${sig.type} by ${sig.signedByName}`}
+                        className="max-h-24 mx-auto"
+                      />
+                    </div>
+                  )}
+
+                  {/* Consent information */}
+                  {sig.consentText && (
+                    <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                      <p className="font-medium mb-1">Consent Given:</p>
+                      <p className="italic">{sig.consentText}</p>
+                    </div>
+                  )}
+
+                  {/* Audit trail */}
+                  <div className="text-xs text-muted-foreground border-t pt-2">
+                    <p>
+                      IP Address: {sig.ipAddress || 'Not recorded'} |
+                      Document Hash: {sig.documentHash ? sig.documentHash.substring(0, 16) + '...' : 'Not recorded'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Workflow Section */}
       <div>

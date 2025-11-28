@@ -4,8 +4,9 @@ import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, createSignature } from "@/lib/api";
 import { DynamicAdditionalInfoForm } from "@/components/DynamicAdditionalInfoForm";
+import { SignatureCanvas } from "@/components/SignatureCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, AlertTriangle, Check } from "lucide-react";
 import type { Application } from "@shared/schema";
 import type { AdditionalInfoConfig } from "@shared/additionalInfoTypes";
 
@@ -40,6 +41,8 @@ export default function ApplicationEdit() {
     propertyAddress: '',
   });
   const [additionalInfoData, setAdditionalInfoData] = useState<any>({});
+  const [initialId, setInitialId] = useState<string | null>(null);
+  const [isCreatingInitial, setIsCreatingInitial] = useState(false);
 
   // Fetch application
   const { data: application, isLoading: appLoading } = useQuery({
@@ -118,6 +121,49 @@ export default function ApplicationEdit() {
   const handleStep1Submit = (data: ProjectDetails) => {
     setProjectDetails(data);
     setCurrentStep(2);
+  };
+
+  const handleStep2Complete = () => {
+    setCurrentStep(3);
+  };
+
+  const handleInitialSave = async (dataUrl: string) => {
+    if (!applicationId) {
+      toast({
+        title: "Error",
+        description: "Application not found. Please go back and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingInitial(true);
+    try {
+      const initial = await createSignature({
+        applicationId: applicationId,
+        type: 'initial',
+        signatureDataUrl: dataUrl,
+        consentText: 'I consent to use electronic initials and agree this has the same legal effect as handwritten initials. I acknowledge that I have made changes to this application.',
+      });
+
+      setInitialId(initial.id);
+
+      toast({
+        title: "Initials Saved",
+        description: "Your initials have been saved successfully.",
+      });
+
+      // Auto-save the application changes
+      await handleSave();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingInitial(false);
+    }
   };
 
   const handleSave = async () => {
@@ -207,12 +253,12 @@ export default function ApplicationEdit() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {currentStep === 1 ? 'Project Details' : 'Additional Information'}
+            {currentStep === 1 ? 'Project Details' : currentStep === 2 ? 'Additional Information' : 'Initial Changes'}
           </CardTitle>
           <CardDescription>
-            Step {currentStep} of 2
+            Step {currentStep} of 3
           </CardDescription>
-          <Progress value={(currentStep / 2) * 100} className="mt-4" />
+          <Progress value={(currentStep / 3) * 100} className="mt-4" />
         </CardHeader>
         <CardContent className="space-y-6">
           {currentStep === 1 ? (
@@ -287,7 +333,7 @@ export default function ApplicationEdit() {
                 </Button>
               </div>
             </form>
-          ) : (
+          ) : currentStep === 2 ? (
             <div className="space-y-6">
               <DynamicAdditionalInfoForm
                 tenantId={currentTenant?.id || ''}
@@ -302,6 +348,7 @@ export default function ApplicationEdit() {
                   variant="outline"
                   onClick={() => setCurrentStep(1)}
                   className="gap-2"
+                  disabled={updateMutation.isPending}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Back
@@ -311,18 +358,74 @@ export default function ApplicationEdit() {
                     type="button"
                     variant="outline"
                     onClick={handleCancel}
+                    disabled={updateMutation.isPending}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="button"
-                    onClick={handleSave}
+                    onClick={handleStep2Complete}
                     disabled={updateMutation.isPending}
                     className="gap-2"
                   >
-                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    {updateMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </>
+                    )}
                   </Button>
                 </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <Alert>
+                <AlertDescription>
+                  By initialing below, you acknowledge that you have made changes to this application and understand that it may be reset to pending status for review.
+                </AlertDescription>
+              </Alert>
+
+              <SignatureCanvas
+                type="initial"
+                onSave={handleInitialSave}
+                legalText="I acknowledge that I have reviewed and made changes to this application. I understand that these changes may reset the application status and restart the review process. This electronic initial has the same legal effect as a handwritten initial."
+                disabled={isCreatingInitial || updateMutation.isPending}
+              />
+
+              {initialId && (
+                <Alert className="bg-green-50 border-green-200">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    Initials saved successfully. Saving your changes...
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex justify-between gap-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCurrentStep(2)}
+                  disabled={isCreatingInitial || updateMutation.isPending}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={isCreatingInitial || updateMutation.isPending}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
           )}

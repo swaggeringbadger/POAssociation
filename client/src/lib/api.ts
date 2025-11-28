@@ -583,7 +583,7 @@ export interface CreateSignatureRequest {
   type: 'signature' | 'initial';
   signatureDataUrl: string;
   consentText: string;
-  documentData: any;
+  documentData?: any;
 }
 
 // Create a signature or initial

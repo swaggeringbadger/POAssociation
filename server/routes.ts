@@ -2048,17 +2048,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Convert data URL to blob and upload to Azure
-      const base64Data = signatureDataUrl.split(',')[1];
-      if (!base64Data) {
-        return res.status(400).json({ error: 'Invalid signature data URL' });
+      console.log('[Signature Creation] Processing signatureDataUrl, length:', signatureDataUrl?.length);
+
+      if (!signatureDataUrl || typeof signatureDataUrl !== 'string') {
+        console.error('[Signature Creation] Invalid signatureDataUrl:', typeof signatureDataUrl);
+        return res.status(400).json({ error: 'signatureDataUrl is required and must be a string' });
       }
 
+      const base64Data = signatureDataUrl.split(',')[1];
+      if (!base64Data) {
+        console.error('[Signature Creation] Could not extract base64 data from data URL');
+        return res.status(400).json({ error: 'Invalid signature data URL format - must be a data URL' });
+      }
+
+      console.log('[Signature Creation] Creating buffer from base64 data, length:', base64Data.length);
       const buffer = Buffer.from(base64Data, 'base64');
+      console.log('[Signature Creation] Buffer created, size:', buffer.length);
 
       const fileName = `${type}-${Date.now()}.png`;
       const blobPath = `${application.tenantId}/${applicationId}/${fileName}`;
       const containerName = 'signatures';
 
+      console.log('[Signature Creation] Uploading to Azure, path:', blobPath);
       // Upload to Azure Blob Storage
       const uploadResult = await azureBlobStorage.uploadFile(
         containerName,
@@ -2067,15 +2078,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'image/png',
         blobPath
       );
+      console.log('[Signature Creation] Upload successful');
 
       // Get download URL
       const signatureImageUrl = await azureBlobStorage.getDownloadUrl(
         containerName,
         blobPath
       );
+      console.log('[Signature Creation] Download URL obtained:', signatureImageUrl);
 
-      // Calculate document hash
-      const documentHash = calculateDocumentHash(documentData);
+      // Calculate document hash (optional)
+      const documentHash = documentData ? calculateDocumentHash(documentData) : null;
 
       // Create signature record
       const signature = await storage.createSignature({

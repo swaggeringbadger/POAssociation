@@ -1,11 +1,12 @@
 /**
  * Application Wizard
  *
- * 4-step wizard for submitting applications:
+ * 5-step wizard for submitting applications:
  * Step 1: Project Details (Generic)
  * Step 2: Additional Information (Project-Type-Specific)
  * Step 3: Document Upload (Placeholder for Azure Blob)
- * Step 4: Review & Submit
+ * Step 4: Signature
+ * Step 5: Review & Submit
  */
 
 import { useState } from 'react';
@@ -19,7 +20,8 @@ import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/hooks/useAuth';
 import { DynamicAdditionalInfoForm } from './DynamicAdditionalInfoForm';
 import { DocumentUpload } from './DocumentUpload';
-import { apiRequest } from '@/lib/api';
+import { SignatureCanvas } from './SignatureCanvas';
+import { apiRequest, createSignature } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -53,6 +55,8 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   });
   const [additionalInfoData, setAdditionalInfoData] = useState<FormData>({});
   const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
+  const [signatureId, setSignatureId] = useState<string | null>(null);
+  const [isCreatingSignature, setIsCreatingSignature] = useState(false);
 
   // Form for step 1 (project details)
   const form = useForm<ProjectDetails>({
@@ -246,12 +250,62 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
       handleStep2Complete();
     } else if (currentStep === 3) {
       setCurrentStep(4);
+    } else if (currentStep === 4) {
+      // Signature step - user must save signature before proceeding
+      // This will be handled by the signature component's onSave callback
+      if (signatureId) {
+        setCurrentStep(5);
+      }
     }
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSignatureSave = async (dataUrl: string) => {
+    if (!createdApplicationId) {
+      toast({
+        title: "Error",
+        description: "Application not found. Please go back and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingSignature(true);
+    try {
+      const signature = await createSignature({
+        applicationId: createdApplicationId,
+        type: 'signature',
+        signatureDataUrl: dataUrl,
+        consentText: 'I consent to use electronic signatures and agree this has the same legal effect as a handwritten signature.',
+      });
+
+      setSignatureId(signature.id);
+
+      // Update the application with the signatureId
+      await apiRequest('PATCH', `/api/applications/${createdApplicationId}`, {
+        signatureId: signature.id,
+      });
+
+      toast({
+        title: "Signature Saved",
+        description: "Your signature has been saved successfully.",
+      });
+
+      // Auto-advance to review step
+      setCurrentStep(5);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingSignature(false);
     }
   };
 
@@ -273,6 +327,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     if (currentStep === 1) return isValid;
     if (currentStep === 2) return Object.keys(additionalInfoData).length > 0;
     if (currentStep === 3) return true; // Document upload is optional for now
+    if (currentStep === 4) return !!signatureId; // Signature is required
     return false;
   };
 
@@ -361,6 +416,33 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
           <div className="space-y-6">
             <Alert>
               <AlertDescription>
+                By signing below, you certify that all information provided in this application is true and accurate to the best of your knowledge.
+              </AlertDescription>
+            </Alert>
+
+            <SignatureCanvas
+              type="signature"
+              onSave={handleSignatureSave}
+              legalText="I hereby submit this application and certify that all information provided is true and accurate. I understand that this electronic signature has the same legal effect as a handwritten signature."
+              disabled={isCreatingSignature}
+            />
+
+            {signatureId && (
+              <Alert className="bg-green-50 border-green-200">
+                <Check className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  Signature saved successfully. Click Next to review your application.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-6">
+            <Alert>
+              <AlertDescription>
                 Please review your application carefully before submitting.
               </AlertDescription>
             </Alert>
@@ -408,6 +490,24 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Signature</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {signatureId ? (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <Check className="h-5 w-5" />
+                    <span>Application has been signed electronically</span>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">
+                    No signature captured
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         );
 
@@ -424,18 +524,19 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
           {getProjectTypeName(projectType)} Application
         </h1>
         <p className="text-muted-foreground">
-          Step {currentStep} of 4
+          Step {currentStep} of 5
         </p>
       </div>
 
       {/* Progress Bar */}
       <div className="mb-8">
-        <Progress value={(currentStep / 4) * 100} className="h-2" />
+        <Progress value={(currentStep / 5) * 100} className="h-2" />
         <div className="flex justify-between mt-2 text-sm text-muted-foreground">
           <span className={currentStep >= 1 ? 'text-primary font-medium' : ''}>Details</span>
-          <span className={currentStep >= 2 ? 'text-primary font-medium' : ''}>Additional Info</span>
+          <span className={currentStep >= 2 ? 'text-primary font-medium' : ''}>Info</span>
           <span className={currentStep >= 3 ? 'text-primary font-medium' : ''}>Documents</span>
-          <span className={currentStep >= 4 ? 'text-primary font-medium' : ''}>Review</span>
+          <span className={currentStep >= 4 ? 'text-primary font-medium' : ''}>Signature</span>
+          <span className={currentStep >= 5 ? 'text-primary font-medium' : ''}>Review</span>
         </div>
       </div>
 
@@ -457,7 +558,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
           Back
         </Button>
 
-        {currentStep < 4 ? (
+        {currentStep < 5 ? (
           <Button onClick={handleNext} disabled={!canProceed()}>
             Next
             <ChevronRight className="h-4 w-4 ml-2" />
