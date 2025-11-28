@@ -5,8 +5,8 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot } from "lucide-react";
-import { Link } from "wouter";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
 import { useEffect, useState } from "react";
@@ -21,6 +21,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -52,6 +61,7 @@ export default function ApplicationDetail() {
   const applicationId = params.id as string;
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
@@ -60,6 +70,7 @@ export default function ApplicationDetail() {
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [editWarningOpen, setEditWarningOpen] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -307,6 +318,28 @@ export default function ApplicationDetail() {
     );
   };
 
+  // Check if current user is the application submitter
+  const isSubmitter = user?.id === application?.submittedByUserId;
+  
+  // Check if application can be edited
+  const canEdit = isSubmitter && (application?.status === 'draft' || application?.status === 'pending');
+  const canEditWithWarning = isSubmitter && application?.status === 'under_review';
+  
+  // Handle edit button click
+  const handleEditClick = () => {
+    if (application?.status === 'under_review') {
+      setEditWarningOpen(true);
+    } else {
+      navigate(`/applications/${application?.id}/edit`);
+    }
+  };
+  
+  // Handle confirm edit with warning
+  const handleConfirmEdit = () => {
+    setEditWarningOpen(false);
+    navigate(`/applications/${application?.id}/edit`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -314,13 +347,56 @@ export default function ApplicationDetail() {
           <h1 className="text-3xl font-bold tracking-tight">{application.title}</h1>
           <p className="text-muted-foreground mt-1">Application #{application.applicationNumber}</p>
         </div>
-        <Link href="/applications">
-          <Button variant="outline" className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          {(canEdit || canEditWithWarning) && (
+            <Button 
+              variant="default" 
+              className="gap-2"
+              onClick={handleEditClick}
+              data-testid="button-edit-application"
+            >
+              <Edit className="h-4 w-4" />
+              Edit Application
+            </Button>
+          )}
+          <Link href="/applications">
+            <Button variant="outline" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* Warning dialog for editing under review applications */}
+      <AlertDialog open={editWarningOpen} onOpenChange={setEditWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Application Under Review?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This application is currently under review. If you edit it now, it will be reset to "submitted" status and the review process will restart. Are you sure you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 bg-amber-50 dark:bg-amber-950/20 p-3 rounded border border-amber-200 dark:border-amber-800/50">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">This will:</p>
+            <ul className="list-disc list-inside text-sm text-amber-800 dark:text-amber-300 space-y-1">
+              <li>Reset your application status to submitted</li>
+              <li>Clear any review comments or feedback</li>
+              <li>Restart the review process from the beginning</li>
+            </ul>
+          </div>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel data-testid="button-cancel-edit-warning">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmEdit}
+              className="bg-amber-600 hover:bg-amber-700"
+              data-testid="button-confirm-edit-warning"
+            >
+              Edit Application
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="border-l-4 border-l-primary/50" data-testid={`card-application-${application.id}`}>
         <CardHeader>
