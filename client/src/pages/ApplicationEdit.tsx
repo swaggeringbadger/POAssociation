@@ -1,5 +1,5 @@
 import { useParams, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,7 @@ export default function ApplicationEdit() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { currentTenant, setCurrentPageTitle } = useAppStore();
+  const queryClient = useQueryClient();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
@@ -92,10 +93,15 @@ export default function ApplicationEdit() {
       });
     },
     onSuccess: (updatedApp) => {
+      const wasUnderReview = application?.status === 'under_review';
+      
+      // Invalidate the application query cache to force a fresh fetch
+      queryClient.invalidateQueries({ queryKey: ["/api/applications", applicationId] });
+      
       toast({
         title: "Application Updated",
-        description: application?.status === 'under_review' 
-          ? "Your application has been updated and reset to submitted status."
+        description: wasUnderReview 
+          ? "Your application has been updated and reset to pending status. The review process will restart."
           : "Your application has been updated successfully.",
       });
       navigate(`/applications/${applicationId}`);
