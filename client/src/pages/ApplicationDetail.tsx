@@ -387,11 +387,19 @@ export default function ApplicationDetail() {
   
   // Check if application can be edited
   const canEdit = isSubmitter && (application?.status === 'draft' || application?.status === 'pending');
-  const canEditWithWarning = isSubmitter && application?.status === 'under_review';
+  const canEditWithWarning = isSubmitter && (application?.status === 'under_review' || application?.status === 'approved' || application?.status === 'rejected');
+  
+  // Determine warning message based on status
+  const getWarningMessage = () => {
+    if (application?.status === 'approved' || application?.status === 'rejected') {
+      return `This application has received a final decision (${application.status}). Editing it will reset the status to pending review. Continue?`;
+    }
+    return 'This application is under review. Editing it will reset the status to pending review. Continue?';
+  };
   
   // Handle edit button click
   const handleEditClick = () => {
-    if (application?.status === 'under_review') {
+    if (canEditWithWarning) {
       setEditWarningOpen(true);
     } else {
       navigate(`/applications/${application?.id}/edit`);
@@ -432,19 +440,23 @@ export default function ApplicationDetail() {
         </div>
       </div>
 
-      {/* Warning dialog for editing under review applications */}
+      {/* Warning dialog for editing applications under review or with final decisions */}
       <AlertDialog open={editWarningOpen} onOpenChange={setEditWarningOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit Application Under Review?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {application?.status === 'approved' || application?.status === 'rejected' 
+                ? 'Edit Finalized Application?' 
+                : 'Edit Application Under Review?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This application is currently under review. If you edit it now, it will be reset to "submitted" status and the review process will restart. Are you sure you want to continue?
+              {getWarningMessage()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 bg-amber-50 dark:bg-amber-950/20 p-3 rounded border border-amber-200 dark:border-amber-800/50">
             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">This will:</p>
             <ul className="list-disc list-inside text-sm text-amber-800 dark:text-amber-300 space-y-1">
-              <li>Reset your application status to submitted</li>
+              <li>Reset your application status to pending</li>
               <li>Clear any review comments or feedback</li>
               <li>Restart the review process from the beginning</li>
             </ul>
