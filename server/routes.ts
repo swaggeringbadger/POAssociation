@@ -2000,6 +2000,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Helper function to calculate document hash
   function calculateDocumentHash(data: any): string {
+    if (!data) {
+      return '';
+    }
     const content = JSON.stringify(data);
     return crypto.createHash('sha256').update(content).digest('hex');
   }
@@ -2062,14 +2065,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log('[Signature Creation] Creating buffer from base64 data, length:', base64Data.length);
-      const buffer = Buffer.from(base64Data, 'base64');
-      console.log('[Signature Creation] Buffer created, size:', buffer.length);
+
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(base64Data, 'base64');
+        if (!buffer || !Buffer.isBuffer(buffer)) {
+          throw new Error('Buffer creation failed - result is not a valid Buffer');
+        }
+        console.log('[Signature Creation] Buffer created successfully, size:', buffer.length, 'bytes');
+      } catch (bufferError: any) {
+        console.error('[Signature Creation] Failed to create buffer:', bufferError.message);
+        return res.status(400).json({ error: `Failed to create buffer from signature data: ${bufferError.message}` });
+      }
 
       const fileName = `${type}-${Date.now()}.png`;
       const blobPath = `${application.tenantId}/${applicationId}/${fileName}`;
       const containerName = 'signatures';
 
       console.log('[Signature Creation] Uploading to Azure, path:', blobPath);
+      console.log('[Signature Creation] Upload params:', {
+        containerName,
+        bufferSize: buffer?.length,
+        bufferIsBuffer: Buffer.isBuffer(buffer),
+        fileName,
+        contentType: 'image/png',
+        blobPath
+      });
+
       // Upload to Azure Blob Storage
       const uploadResult = await azureBlobStorage.uploadFile(
         containerName,
