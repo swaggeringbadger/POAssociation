@@ -552,3 +552,64 @@ export function getDocumentDownloadUrl(documentId: string): string {
 export async function deleteDocument(documentId: string): Promise<void> {
   return apiRequest('DELETE', `/api/documents/${documentId}`);
 }
+
+// ============================================================
+// SIGNATURE API METHODS
+// ============================================================
+
+export interface Signature {
+  id: string;
+  applicationId: string;
+  applicationEditId?: string | null;
+  signedBy: string;
+  signedByName: string;
+  signedByEmail: string;
+  type: 'signature' | 'initial';
+  signatureImageUrl: string;
+  signatureDataUrl?: string | null;
+  signedAt: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  documentHash?: string | null;
+  consentText: string;
+  consentGiven: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSignatureRequest {
+  applicationId: string;
+  applicationEditId?: string;
+  type: 'signature' | 'initial';
+  signatureDataUrl: string;
+  consentText: string;
+  documentData: any;
+}
+
+// Create a signature or initial
+export async function createSignature(data: CreateSignatureRequest): Promise<Signature> {
+  return apiRequest('POST', '/api/signatures', data);
+}
+
+// Get signature by ID
+export async function getSignature(id: string): Promise<Signature> {
+  return apiRequest('GET', `/api/signatures/${id}`);
+}
+
+// Get application's primary signature
+export async function getApplicationSignature(applicationId: string): Promise<Signature | null> {
+  try {
+    return await apiRequest('GET', `/api/applications/${applicationId}/signature`);
+  } catch (error: any) {
+    // Return null if signature not found (404)
+    if (error.message?.includes('not found')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+// Get all signatures for an application
+export async function listApplicationSignatures(applicationId: string): Promise<Signature[]> {
+  return apiRequest('GET', `/api/applications/${applicationId}/signatures`);
+}

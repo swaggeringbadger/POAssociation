@@ -122,6 +122,12 @@ export interface IStorage {
   getDocumentUploadToken(token: string): Promise<schema.DocumentUploadToken | undefined>;
   markTokenAsUsed(token: string, uploadedDocumentId: string): Promise<schema.DocumentUploadToken>;
   cleanupExpiredTokens(): Promise<number>;
+
+  // Signatures
+  createSignature(signature: schema.InsertSignature): Promise<schema.Signature>;
+  getSignature(id: string): Promise<schema.Signature | undefined>;
+  getApplicationSignature(applicationId: string): Promise<schema.Signature | undefined>;
+  listApplicationSignatures(applicationId: string): Promise<schema.Signature[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -508,6 +514,7 @@ export class DbStorage implements IStorage {
       formData: any;
       status: string;
       completenessScore: number;
+      signatureId: string;
     }>
   ): Promise<schema.Application> {
     const [application] = await db
@@ -824,6 +831,43 @@ export class DbStorage implements IStorage {
     const result = await db.delete(schema.documentUploadTokens)
       .where(sql`${schema.documentUploadTokens.expiresAt} < NOW()`);
     return result.rowCount || 0;
+  }
+
+  // Signatures
+  async createSignature(signature: schema.InsertSignature): Promise<schema.Signature> {
+    const [created] = await db.insert(schema.signatures)
+      .values(signature)
+      .returning();
+    return created;
+  }
+
+  async getSignature(id: string): Promise<schema.Signature | undefined> {
+    const [signature] = await db.select()
+      .from(schema.signatures)
+      .where(eq(schema.signatures.id, id))
+      .limit(1);
+    return signature;
+  }
+
+  async getApplicationSignature(applicationId: string): Promise<schema.Signature | undefined> {
+    const [signature] = await db.select()
+      .from(schema.signatures)
+      .where(
+        and(
+          eq(schema.signatures.applicationId, applicationId),
+          eq(schema.signatures.type, 'signature')
+        )
+      )
+      .orderBy(desc(schema.signatures.signedAt))
+      .limit(1);
+    return signature;
+  }
+
+  async listApplicationSignatures(applicationId: string): Promise<schema.Signature[]> {
+    return await db.select()
+      .from(schema.signatures)
+      .where(eq(schema.signatures.applicationId, applicationId))
+      .orderBy(desc(schema.signatures.signedAt));
   }
 }
 

@@ -625,6 +625,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updatedApplication = await storage.updateApplication(applicationId, updates);
       
+      // Reset workflow step back to 0 (Application Submitted) when application is edited
+      try {
+        const [workflow] = await db.select().from(schema.applicationWorkflows).where(eq(schema.applicationWorkflows.applicationId, applicationId));
+        if (workflow) {
+          await db.update(schema.applicationWorkflows)
+            .set({ currentStepIndex: 0 })
+            .where(eq(schema.applicationWorkflows.id, workflow.id));
+        }
+      } catch (workflowError) {
+        console.error("[PATCH /api/applications/:id] Error resetting workflow:", workflowError);
+        // Don't fail the update if workflow reset fails
+      }
+      
       // Send email notification if application was reset to pending from under_review
       try {
         if (application.status === 'under_review' && status === 'pending') {
@@ -1969,6 +1982,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error deleting form template:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // SIGNATURE ENDPOINTS
+  // ============================================================
+
+  // Helper function to get client IP
+  function getClientIP(req: any): string {
+    return (
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+      req.ip ||
+      'unknown'
+    );
+  }
+
+  // Helper function to calculate document hash
+  function calculateDocumentHash(data: any): string {
+    const content = JSON.stringify(data);
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+
+  // Create signature or initial
+  app.post("/api/signatures", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const {
+        applicationId,
+        applicationEditId,
+        type,
+        signatureDataUrl,
+        consentText,
+        documentData,
+      } = req.body;
+
+      // Validate required fields
+      if (!applicationId || !type || !signatureDataUrl || !consentText) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Validate type
+      if (!['signature', 'initial'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid signature type' });
+      }
+
+      // Verify user owns the application
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      if (application.submittedByUserId !== userId) {
+        return res.status(403).json({ error: 'Not authorized to sign this application' });
+      }
+
+      // Get user details
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Convert data URL to blob and upload to Azure
+      const base64Data = signatureDataUrl.split(',')[1];
+      if (!base64Data) {
+        return res.status(400).json({ error: 'Invalid signature data URL' });
+      }
+
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      const fileName = `${type}-${Date.now()}.png`;
+      const blobPath = `${application.tenantId}/${applicationId}/${fileName}`;
+      const containerName = 'signatures';
+
+      // Upload to Azure Blob Storage
+      const uploadResult = await azureBlobStorage.uploadFile(
+        containerName,
+        buffer,
+        fileName,
+        'image/png',
+        blobPath
+      );
+
+      // Get download URL
+      const signatureImageUrl = await azureBlobStorage.getDownloadUrl(
+        containerName,
+        blobPath
+      );
+
+      // Calculate document hash
+      const documentHash = calculateDocumentHash(documentData);
+
+      // Create signature record
+      const signature = await storage.createSignature({
+        applicationId,
+        applicationEditId: applicationEditId || null,
+        signedBy: userId,
+        signedByName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        signedByEmail: user.email || '',
+        type,
+        signatureImageUrl,
+        signatureDataUrl, // Store for backup
+        signedAt: new Date(),
+        ipAddress: getClientIP(req),
+        userAgent: req.headers['user-agent'] || null,
+        documentHash,
+        consentText,
+        consentGiven: true,
+        demoCodeId: application.demoCodeId || null,
+      });
+
+      // Update application with signature ID (if type is 'signature')
+      if (type === 'signature' && !applicationEditId) {
+        await storage.updateApplication(applicationId, {
+          signatureId: signature.id,
+        });
+      }
+
+      res.status(201).json(signature);
+    } catch (error: any) {
+      console.error('Error creating signature:', error);
+      res.status(500).json({ error: error.message || 'Failed to create signature' });
+    }
+  });
+
+  // Get signature by ID
+  app.get("/api/signatures/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const signature = await storage.getSignature(id);
+
+      if (!signature) {
+        return res.status(404).json({ error: 'Signature not found' });
+      }
+
+      // Verify user has access (owner or board member)
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const application = await storage.getApplication(signature.applicationId);
+
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Allow access if user is the owner
+      if (application.submittedByUserId !== userId) {
+        // TODO: Check if user is board member for this tenant
+        // For now, only allow owner
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      res.json(signature);
+    } catch (error: any) {
+      console.error('Error fetching signature:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch signature' });
+    }
+  });
+
+  // Get application's primary signature
+  app.get("/api/applications/:id/signature", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const signature = await storage.getApplicationSignature(id);
+
+      if (!signature) {
+        return res.status(404).json({ error: 'Signature not found' });
+      }
+
+      res.json(signature);
+    } catch (error: any) {
+      console.error('Error fetching application signature:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch signature' });
+    }
+  });
+
+  // Get all signatures for application
+  app.get("/api/applications/:id/signatures", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const signatures = await storage.listApplicationSignatures(id);
+      res.json(signatures);
+    } catch (error: any) {
+      console.error('Error fetching signatures:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch signatures' });
     }
   });
 

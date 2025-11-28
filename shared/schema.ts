@@ -182,6 +182,9 @@ export const applications = pgTable("applications", {
   formData: jsonb("form_data").notNull(), // The actual submitted data from dynamic form
   completenessScore: integer("completeness_score").default(0).notNull(),
 
+  // Signature
+  signatureId: varchar("signature_id"), // Reference to signatures table (added after signature created)
+
   // Status and Review
   status: text("status").default("pending").notNull(), // 'pending', 'under_review', 'approved', 'rejected'
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
@@ -376,6 +379,58 @@ export const insertAiFormGenerationSchema = createInsertSchema(aiFormGenerations
 
 export type InsertAiFormGeneration = z.infer<typeof insertAiFormGenerationSchema>;
 export type AiFormGeneration = typeof aiFormGenerations.$inferSelect;
+
+// Signatures table - electronic signatures and initials for applications
+export const signatures = pgTable("signatures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // What was signed
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  applicationEditId: varchar("application_edit_id"), // For future use with application edits
+
+  // Who signed
+  signedBy: varchar("signed_by").notNull().references(() => users.id),
+  signedByName: varchar("signed_by_name", { length: 255 }).notNull(),
+  signedByEmail: varchar("signed_by_email", { length: 255 }).notNull(),
+
+  // Type of signature
+  type: varchar("type", { length: 20 }).notNull(), // 'signature' | 'initial'
+
+  // Signature data
+  signatureImageUrl: text("signature_image_url").notNull(), // Azure Blob Storage URL
+  signatureDataUrl: text("signature_data_url"), // Base64 data URL (backup)
+
+  // Audit trail
+  signedAt: timestamp("signed_at").notNull().defaultNow(),
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv4 or IPv6
+  userAgent: text("user_agent"),
+  documentHash: varchar("document_hash", { length: 64 }), // SHA-256
+
+  // Consent
+  consentText: text("consent_text").notNull(),
+  consentGiven: boolean("consent_given").notNull().default(true),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  applicationIdIdx: index("signatures_application_id_idx").on(table.applicationId),
+  signedByIdx: index("signatures_signed_by_idx").on(table.signedBy),
+  typeIdx: index("signatures_type_idx").on(table.type),
+  signedAtIdx: index("signatures_signed_at_idx").on(table.signedAt),
+}));
+
+export const insertSignatureSchema = createInsertSchema(signatures).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSignature = z.infer<typeof insertSignatureSchema>;
+export type Signature = typeof signatures.$inferSelect;
 
 // Add workflowTemplateId to tenants - track which workflow is active for a community
 export const updateTenantWorkflowTemplateId = () => {
