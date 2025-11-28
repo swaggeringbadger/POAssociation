@@ -137,6 +137,65 @@ export default function ApplicationDetail() {
     enabled: !!application?.tenantId && !!application?.projectType,
   });
 
+  // Upload document mutation
+  const uploadDocMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentRequirementName', 'Additional Document');
+      
+      const res = await fetch(`/api/applications/${applicationId}/documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to upload document');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
+      setUploadingFile(null);
+      toast({
+        title: "Document Uploaded",
+        description: "Your document has been added successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete document mutation
+  const deleteDocMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to delete document');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
+      setDeletingDocId(null);
+      toast({
+        title: "Document Deleted",
+        description: "The document has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -344,65 +403,6 @@ export default function ApplicationDetail() {
     setEditWarningOpen(false);
     navigate(`/applications/${application?.id}/edit`);
   };
-
-  // Upload document mutation
-  const uploadDocMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('documentRequirementName', 'Additional Document');
-      
-      const res = await fetch(`/api/applications/${applicationId}/documents`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error('Failed to upload document');
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
-      setUploadingFile(null);
-      toast({
-        title: "Document Uploaded",
-        description: "Your document has been added successfully.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Upload Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Delete document mutation
-  const deleteDocMutation = useMutation({
-    mutationFn: async (docId: string) => {
-      const res = await fetch(`/api/documents/${docId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error('Failed to delete document');
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
-      setDeletingDocId(null);
-      toast({
-        title: "Document Deleted",
-        description: "The document has been removed.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Delete Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   return (
     <div className="space-y-6">
