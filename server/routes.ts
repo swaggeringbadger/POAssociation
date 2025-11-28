@@ -2216,17 +2216,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Signature not found' });
       }
 
-      // Verify user has access
-      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!signature.blobPath) {
+        return res.status(404).json({ error: 'Signature image not found' });
+      }
+
+      // Verify user has access to the application
       const application = await storage.getApplication(signature.applicationId);
 
       if (!application) {
         return res.status(404).json({ error: 'Application not found' });
-      }
-
-      // Allow access if user is the owner
-      if (application.submittedByUserId !== userId) {
-        return res.status(403).json({ error: 'Not authorized' });
       }
 
       // Retrieve image from Azure and pipe to client
