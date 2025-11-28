@@ -981,12 +981,13 @@ export default function ApplicationDetail() {
                   </div>
 
                   {/* Display signature image */}
-                  {sig.signatureImageUrl && (
+                  {sig.id && (
                     <div className="border rounded bg-white p-3">
                       <img
-                        src={sig.signatureImageUrl}
+                        src={`/api/signatures/${sig.id}/image`}
                         alt={`${sig.type} by ${sig.signedByName}`}
                         className="max-h-24 mx-auto"
+                        crossOrigin="include"
                       />
                     </div>
                   )}

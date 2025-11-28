@@ -18,6 +18,7 @@ import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
 import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
 import FormWizard from "@/pages/FormWizard";
+import FormBuilderPage from "@/pages/FormBuilderPage";
 import Settings from "@/pages/Settings";
 import DemoCodes from "@/pages/admin/DemoCodes";
 import DemoCodeForm from "@/pages/admin/DemoCodeForm";
@@ -127,6 +128,10 @@ function Router() {
             <DashboardLayout>
               <FormWizard />
             </DashboardLayout>
+          </Route>
+
+          <Route path="/form-builder/:templateId">
+            <FormBuilderPage />
           </Route>
 
           <Route path="/settings">
