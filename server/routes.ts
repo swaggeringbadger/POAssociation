@@ -581,6 +581,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update application (for homeowner edits)
+  app.patch("/api/applications/:id", isAuthenticated, async (req, res) => {
+    try {
+      const applicationId = req.params.id;
+      const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+      
+      // Fetch application to verify ownership
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+      
+      // Verify user is the submitter
+      if (application.submittedByUserId !== userId) {
+        return res.status(403).json({ error: "You don't have permission to edit this application" });
+      }
+      
+      // Verify application can be edited (draft, pending, or under_review)
+      if (!['draft', 'pending', 'under_review'].includes(application.status)) {
+        return res.status(400).json({ error: "This application cannot be edited in its current status" });
+      }
+      
+      const { title, description, propertyAddress, formData, status } = req.body;
+      
+      // Calculate new completeness score if formData changed
+      let completenessScore = application.completenessScore;
+      if (formData) {
+        const config = await additionalInfoService.getFormTemplateConfig(application.formTemplateId);
+        if (config) {
+          completenessScore = additionalInfoService.calculateCompletenessScore(config, formData);
+        }
+      }
+      
+      // Update the application
+      const updates: Partial<any> = {};
+      if (title !== undefined) updates.title = title;
+      if (description !== undefined) updates.description = description;
+      if (propertyAddress !== undefined) updates.propertyAddress = propertyAddress;
+      if (formData !== undefined) updates.formData = formData;
+      if (status !== undefined) updates.status = status;
+      if (completenessScore !== undefined) updates.completenessScore = completenessScore;
+      
+      const updatedApplication = await storage.updateApplication(applicationId, updates);
+      
+      // Send email notification if application was reset to pending from under_review
+      try {
+        if (application.status === 'under_review' && status === 'pending') {
+          const user = await storage.getUser(userId);
+          const tenant = await storage.getTenant(application.tenantId);
+          
+          if (user && tenant && user.email) {
+            const { emailService } = await import('./emailService');
+            const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
+            const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
+            
+            await emailService.sendApplicationSubmitted(
+              user.email,
+              title || application.title,
+              applicantName,
+              tenant.name,
+              applicationLink
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error("[Email] Error sending application update email:", emailError);
+        // Don't fail the update if email fails
+      }
+      
+      res.json(updatedApplication);
+    } catch (error: any) {
+      console.error("[PATCH /api/applications/:id] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Document Management - Protected routes
   // Upload a document for an application
   app.post("/api/applications/:applicationId/documents", isAuthenticated, upload.single('file'), async (req: any, res) => {

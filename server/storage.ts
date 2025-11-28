@@ -50,6 +50,17 @@ export interface IStorage {
   listApplicationsForUser(userId: string): Promise<schema.Application[]>;
   listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<schema.Application[]>;
   createApplication(application: schema.InsertApplication): Promise<schema.Application>;
+  updateApplication(
+    id: string,
+    updates: Partial<{
+      title: string;
+      description: string;
+      propertyAddress: string;
+      formData: any;
+      status: string;
+      completenessScore: number;
+    }>
+  ): Promise<schema.Application>;
   updateApplicationStatus(
     id: string,
     status: string,
@@ -485,6 +496,25 @@ export class DbStorage implements IStorage {
 
   async createApplication(insertApplication: schema.InsertApplication): Promise<schema.Application> {
     const [application] = await db.insert(schema.applications).values(insertApplication).returning();
+    return application;
+  }
+
+  async updateApplication(
+    id: string,
+    updates: Partial<{
+      title: string;
+      description: string;
+      propertyAddress: string;
+      formData: any;
+      status: string;
+      completenessScore: number;
+    }>
+  ): Promise<schema.Application> {
+    const [application] = await db
+      .update(schema.applications)
+      .set(updates)
+      .where(eq(schema.applications.id, id))
+      .returning();
     return application;
   }
 
