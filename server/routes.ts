@@ -2206,6 +2206,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Proxy endpoint to serve signature images from Azure
+  app.get("/api/signatures/:id/image", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const signature = await storage.getSignature(id);
+
+      if (!signature) {
+        return res.status(404).json({ error: 'Signature not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const application = await storage.getApplication(signature.applicationId);
+
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Allow access if user is the owner
+      if (application.submittedByUserId !== userId) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      // Retrieve image from Azure and pipe to client
+      const imageBuffer = await azureBlobStorage.downloadFile(
+        'signatures',
+        signature.blobPath
+      );
+
+      if (!imageBuffer) {
+        return res.status(404).json({ error: 'Image not found' });
+      }
+
+      res.set('Content-Type', 'image/png');
+      res.send(imageBuffer);
+    } catch (error: any) {
+      console.error('Error serving signature image:', error);
+      res.status(500).json({ error: error.message || 'Failed to serve signature image' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
