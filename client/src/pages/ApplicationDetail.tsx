@@ -1,11 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
@@ -62,6 +63,8 @@ export default function ApplicationDetail() {
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
@@ -71,6 +74,8 @@ export default function ApplicationDetail() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [editWarningOpen, setEditWarningOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -339,6 +344,65 @@ export default function ApplicationDetail() {
     setEditWarningOpen(false);
     navigate(`/applications/${application?.id}/edit`);
   };
+
+  // Upload document mutation
+  const uploadDocMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentRequirementName', 'Additional Document');
+      
+      const res = await fetch(`/api/applications/${applicationId}/documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to upload document');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
+      setUploadingFile(null);
+      toast({
+        title: "Document Uploaded",
+        description: "Your document has been added successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete document mutation
+  const deleteDocMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to delete document');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/documents`] });
+      setDeletingDocId(null);
+      toast({
+        title: "Document Deleted",
+        description: "The document has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -725,43 +789,108 @@ export default function ApplicationDetail() {
 
               {/* Documents Tab */}
               {activeTab === 'documents' && (
-                <div className="space-y-2">
+                <div className="space-y-4">
+                  {/* Upload section for submitter */}
+                  {isSubmitter && (
+                    <div className="border-2 border-dashed rounded-lg p-4 bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="file"
+                          id="doc-upload"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setUploadingFile(file);
+                              uploadDocMutation.mutate(file);
+                            }
+                          }}
+                          disabled={uploadDocMutation.isPending}
+                          className="hidden"
+                        />
+                        <label htmlFor="doc-upload" className="flex-1">
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="gap-2 cursor-pointer"
+                            disabled={uploadDocMutation.isPending}
+                            data-testid="button-upload-document"
+                          >
+                            <span>
+                              {uploadDocMutation.isPending ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4" />
+                                  Add Document
+                                </>
+                              )}
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">Click to upload a new document to this application</p>
+                    </div>
+                  )}
+
+                  {/* Documents list */}
                   {documents.length > 0 ? (
-                    documents.map((doc: any) => (
-                      <div key={doc.id} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" data-testid={`text-document-${doc.id}`}>{doc.fileName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
-                            </p>
+                    <div className="space-y-2">
+                      {documents.map((doc: any) => (
+                        <div key={doc.id} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" data-testid={`text-document-${doc.id}`}>{doc.fileName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex gap-2 ml-2">
-                          {isPreviewable(doc.fileName) && (
+                          <div className="flex gap-2 ml-2">
+                            {isPreviewable(doc.fileName) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPreviewDoc(doc)}
+                                data-testid={`button-preview-${doc.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setPreviewDoc(doc)}
-                              data-testid={`button-preview-${doc.id}`}
+                              asChild
+                              data-testid={`button-download-${doc.id}`}
                             >
-                              <Eye className="h-4 w-4" />
+                              <a href={`/api/documents/${doc.id}/download`} download>
+                                <Download className="h-4 w-4" />
+                              </a>
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                            data-testid={`button-download-${doc.id}`}
-                          >
-                            <a href={`/api/documents/${doc.id}/download`} download>
-                              <Download className="h-4 w-4" />
-                            </a>
-                          </Button>
+                            {/* Delete button for document uploader */}
+                            {isSubmitter && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteDocMutation.mutate(doc.id)}
+                                disabled={deletingDocId === doc.id || deleteDocMutation.isPending}
+                                data-testid={`button-delete-document-${doc.id}`}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                {deletingDocId === doc.id && deleteDocMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   ) : (
                     <div className="text-center py-6 text-muted-foreground">
                       <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
