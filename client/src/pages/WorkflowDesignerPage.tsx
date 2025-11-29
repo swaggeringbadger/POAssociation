@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
-import { useParams } from 'wouter';
+import { useParams, useLocation } from 'wouter';
 import ReactFlow, {
   Background,
   Controls,
@@ -18,11 +18,20 @@ import ReactFlow, {
   ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Play, AlertCircle, Crown, Lock } from 'lucide-react';
+import { Save, Play, AlertCircle, Lock, Copy, X } from 'lucide-react';
 import { useWorkflowDesignerStore } from '@/stores/workflowDesignerStore';
 import { StartNode, StepNode, DecisionNode, EndNode } from '@/components/workflow-designer/nodes';
 import { StepPropertiesPanel } from '@/components/workflow-designer/StepPropertiesPanel';
@@ -40,10 +49,14 @@ const nodeTypes: NodeTypes = {
 
 export default function WorkflowDesignerPage() {
   const { templateId } = useParams<{ templateId: string }>();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [hasCustomWorkflows, setHasCustomWorkflows] = useState(true);
+  const [showCloneDialog, setShowCloneDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cloneName, setCloneName] = useState('');
 
   const {
     template,
@@ -59,6 +72,7 @@ export default function WorkflowDesignerPage() {
     setLoading,
     validate,
     markAsSaved,
+    reset,
   } = useWorkflowDesignerStore();
 
   const isReadOnly = !hasCustomWorkflows && !template?.isBlueprint;
@@ -242,6 +256,75 @@ export default function WorkflowDesignerPage() {
     });
   };
 
+  // Handle save as clone
+  const handleSaveAsClone = async () => {
+    if (!template || !templateId || !cloneName.trim()) return;
+
+    // Run validation first
+    const isValid = validate();
+    if (!isValid) {
+      toast({
+        title: 'Validation failed',
+        description: 'Please fix the validation errors before saving.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/workflow-designer/templates/${templateId}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: cloneName.trim(),
+          steps: template.steps,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to clone template');
+      }
+
+      const newTemplate = await response.json();
+      setShowCloneDialog(false);
+      setCloneName('');
+
+      toast({
+        title: 'Template cloned',
+        description: `Created new template "${cloneName.trim()}" successfully.`,
+      });
+
+      // Navigate to the new template
+      navigate(`/workflow-designer/${newTemplate.id}`);
+    } catch (error) {
+      console.error('Error cloning template:', error);
+      toast({
+        title: 'Clone failed',
+        description: error instanceof Error ? error.message : 'Failed to clone template',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle cancel
+  const handleCancel = () => {
+    if (hasUnsavedChanges) {
+      setShowCancelDialog(true);
+    } else {
+      doCancel();
+    }
+  };
+
+  const doCancel = () => {
+    reset();
+    navigate('/workflow-templates');
+  };
+
   // Handle drag over
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -314,10 +397,27 @@ export default function WorkflowDesignerPage() {
           {hasUnsavedChanges && !isReadOnly && (
             <span className="text-sm text-orange-600">Unsaved changes</span>
           )}
+          <Button variant="ghost" size="sm" onClick={handleCancel}>
+            <X className="h-4 w-4 mr-2" />
+            Cancel
+          </Button>
           <Button variant="outline" size="sm" onClick={handleTest}>
             <Play className="h-4 w-4 mr-2" />
-            Test Workflow
+            Test
           </Button>
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCloneName(template?.name ? `${template.name} (Copy)` : '');
+                setShowCloneDialog(true);
+              }}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Save as Clone
+            </Button>
+          )}
           {!isReadOnly && (
             <Button
               onClick={handleSave}
@@ -383,6 +483,58 @@ export default function WorkflowDesignerPage() {
           )}
         </div>
       </div>
+
+      {/* Clone Dialog */}
+      <Dialog open={showCloneDialog} onOpenChange={setShowCloneDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Clone</DialogTitle>
+            <DialogDescription>
+              Create a new workflow template based on the current workflow. The original template will remain unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="clone-name">New Template Name</Label>
+              <Input
+                id="clone-name"
+                value={cloneName}
+                onChange={(e) => setCloneName(e.target.value)}
+                placeholder="Enter a name for the cloned template"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCloneDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAsClone} disabled={!cloneName.trim()}>
+              <Copy className="h-4 w-4 mr-2" />
+              Create Clone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. Are you sure you want to leave? Your changes will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+              Continue Editing
+            </Button>
+            <Button variant="destructive" onClick={doCancel}>
+              Discard Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
