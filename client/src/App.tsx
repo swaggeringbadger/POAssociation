@@ -19,7 +19,13 @@ import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
 import FormWizard from "@/pages/FormWizard";
 import FormBuilderPage from "@/pages/FormBuilderPage";
-import Settings from "@/pages/Settings";
+import WorkflowDesignerPage from "@/pages/WorkflowDesignerPage";
+import WorkflowTemplatesPage from "@/pages/WorkflowTemplatesPage";
+import TenantSettings from "@/pages/TenantSettings";
+import Compliance from "@/pages/Compliance";
+import Calendar from "@/pages/Calendar";
+import ProfileSettings from "@/pages/ProfileSettings";
+import PropertySubscription from "@/pages/PropertySubscription";
 import DemoCodes from "@/pages/admin/DemoCodes";
 import DemoCodeForm from "@/pages/admin/DemoCodeForm";
 import DemoCodeStats from "@/pages/admin/DemoCodeStats";
@@ -29,6 +35,7 @@ import AIActivity from "@/pages/admin/AIActivity";
 import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 function Router() {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
@@ -58,124 +65,206 @@ function Router() {
 
           {/* Dashboard Routes wrapped in Layout */}
           <Route path="/dashboard">
-            <DashboardLayout>
-              <Dashboard />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Dashboard />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           {/* Add other dashboard pages here similarly */}
           <Route path="/applications">
-            <DashboardLayout>
-              <div className="p-8">
-                <Applications />
-              </div>
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <Applications />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/applications/:id">
-            <DashboardLayout>
-              <div className="p-8">
-                <ApplicationDetail />
-              </div>
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <ApplicationDetail />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/applications/:id/edit">
-            <DashboardLayout>
-              <div className="p-8">
-                <ApplicationEdit />
-              </div>
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <ApplicationEdit />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/admin/form-builder">
-            <DashboardLayout>
-              <FormBuilder />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <FormBuilder />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/apply">
-            <DashboardLayout>
-              <ApplicationTypeSelect />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ApplicationTypeSelect />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/applications/submit/:typeId">
-            <DashboardLayout>
-              <ApplicationSubmit />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ApplicationSubmit />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/apply/markland-demo">
-            <DashboardLayout>
-              <MarklandExample />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <MarklandExample />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/directory">
-            <DashboardLayout>
-              <Directory />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Directory />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/properties">
-            <DashboardLayout>
-              <Properties />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Properties />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/compliance">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Compliance />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/calendar">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Calendar />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/form-wizard">
-            <DashboardLayout>
-              <FormWizard />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <FormWizard />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/form-builder/:templateId">
-            <FormBuilderPage />
+            <ProtectedRoute>
+              <FormBuilderPage />
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/workflows">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <WorkflowTemplatesPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/workflow-designer/:templateId">
+            <ProtectedRoute>
+              <WorkflowDesignerPage />
+            </ProtectedRoute>
           </Route>
 
           <Route path="/settings">
-            <DashboardLayout>
-              <Settings />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <TenantSettings />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/profile">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ProfileSettings />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/properties/:propertyId/subscription">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <PropertySubscription />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           {/* Admin Routes */}
           <Route path="/admin/management-companies">
-            <DashboardLayout>
-              <ManagementCompanies />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ManagementCompanies />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/admin/communities">
-            <DashboardLayout>
-              <Communities />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Communities />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/admin/ai-activity">
-            <DashboardLayout>
-              <AIActivity />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <AIActivity />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/admin/demo-codes">
-            <DashboardLayout>
-              <DemoCodes />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DemoCodes />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
 
           <Route path="/admin/demo-codes/:id">
-            {(params) => (
-              <DashboardLayout>
-                {params.id === 'new' || params.id?.endsWith('/edit') ? (
-                  <DemoCodeForm />
-                ) : params.id?.endsWith('/stats') ? (
-                  <DemoCodeStats />
-                ) : (
-                  <DemoCodeForm />
-                )}
-              </DashboardLayout>
+            {(params: { id?: string }) => (
+              <ProtectedRoute>
+                <DashboardLayout>
+                  {params.id === 'new' || params.id?.endsWith('/edit') ? (
+                    <DemoCodeForm />
+                  ) : params.id?.endsWith('/stats') ? (
+                    <DemoCodeStats />
+                  ) : (
+                    <DemoCodeForm />
+                  )}
+                </DashboardLayout>
+              </ProtectedRoute>
             )}
           </Route>
         </>

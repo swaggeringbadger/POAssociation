@@ -1,11 +1,167 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-11-26
-**Current Session:** Azure Blob Storage Document Management - GUID-Based Paths Complete
+**Last Updated:** 2025-11-28
+**Current Session:** Visual Workflow Designer with Branching Decision Trees - IN PROGRESS
 
 ---
 
 ## Current Status
+
+### 🎯 Latest Session Summary (2025-11-28 - Workflow Designer Implementation)
+
+**Session Goal:** Build visual workflow designer for Admin/Super Admin with branching decision trees
+
+**Progress:** 45% Complete (5 of 11 phases)
+
+**Major Accomplishments:**
+
+**Phase 1: Database & Backend Foundation** ✅
+- Created database migration `008_add_workflow_versioning.sql`
+- Added versioning columns: `version`, `parent_template_id`, `is_blueprint`, `created_by_user_id`
+- Marked existing 4 seed templates as immutable blueprints
+- Created comprehensive TypeScript interfaces in `/shared/workflowTypes.ts`
+- Built `WorkflowEngine` class with condition evaluation logic (action, field, compound)
+- Applied migration successfully
+
+**Phase 2: Backend API Endpoints** ✅
+- Created 8 new workflow designer endpoints:
+  - `GET /api/workflow-designer/templates` - List all (blueprints + custom)
+  - `GET /api/workflow-designer/templates/:id` - Get template for editing
+  - `POST /api/workflow-designer/templates/:id/clone` - Clone blueprint
+  - `PUT /api/workflow-designer/templates/:id` - Update template
+  - `POST /api/workflow-designer/templates/:id/version` - Save new version
+  - `DELETE /api/workflow-designer/templates/:id` - Delete custom template
+  - `POST /api/workflow-designer/test-condition` - Test condition with sample data
+  - `POST /api/workflow-designer/test-workflow` - Simulate workflow execution
+- Added role-based access control (Admin/Super Admin only via `requireAdmin` helper)
+- Implemented storage methods: `cloneWorkflowTemplate`, `createWorkflowTemplateVersion`, `updateWorkflowTemplate`, `deleteWorkflowTemplate`
+- Updated `advanceApplicationWorkflow` to use WorkflowEngine for branching logic
+- Backwards compatible: detects enhanced vs legacy workflows
+
+**Phase 3: Frontend Store** ✅
+- Created `/client/src/stores/workflowDesignerStore.ts` (Zustand)
+- Implemented full CRUD operations for steps and transitions
+- Added validation logic with error tracking
+- Dirty state tracking (hasUnsavedChanges)
+- Deep cloning for immutability
+- Following formBuilderStore.ts pattern
+
+**Phase 4: React Flow Components** ✅
+- Installed `reactflow` package (v11 latest)
+- Created 4 custom node components:
+  - `StartNode.tsx` - Circular green node with Play icon
+  - `StepNode.tsx` - Card-style node with role and actions
+  - `DecisionNode.tsx` - Diamond-shaped yellow node with GitBranch icon
+  - `EndNode.tsx` - Circular red node with CheckCircle icon
+- All nodes support validation errors display
+- Nodes styled with Tailwind and shadcn/ui
+- Created `/client/src/pages/WorkflowDesignerPage.tsx` with React Flow canvas
+- Added route `/workflow-designer/:templateId` to App.tsx
+- 3-column layout: Node Palette | Canvas | Properties Panel
+
+**Phase 5: Properties Panels** ✅
+- Created `/client/src/components/workflow-designer/StepPropertiesPanel.tsx`
+  - Edit step title, description, role, and actions
+  - Role selector with all available roles
+  - Action multi-select from predefined list
+  - "Save Changes" button with dirty state detection
+- Created `/client/src/components/workflow-designer/TransitionPropertiesPanel.tsx`
+  - Edit transition label and isDefault flag
+  - Shows source and target step names
+  - Placeholder for condition editing (Phase 6)
+- Integrated both panels into WorkflowDesignerPage
+- Node/edge selection handlers implemented
+- Conditional rendering: shows step panel for nodes, transition panel for edges
+
+**Key Implementation Details:**
+
+**WorkflowEngine Features:**
+- Evaluates action-based conditions (e.g., "if approved")
+- Evaluates field-based conditions with 10 operators (equals, greaterThan, contains, isEmpty, etc.)
+- Evaluates compound conditions (AND/OR logic with nested conditions)
+- Determines next step based on transitions
+- Validates workflow structure (start/end steps, transitions, conditions)
+- Supports legacy linear workflows (backwards compatible)
+
+**Enhanced Workflow Step Schema:**
+```typescript
+interface WorkflowStep {
+  id: string;                    // UUID
+  type: 'start' | 'step' | 'decision' | 'end';
+  title: string;
+  role?: string;                 // For step type
+  actions?: string[];            // Available actions
+  position: { x, y };            // Canvas coordinates
+  transitions?: WorkflowTransition[];
+}
+
+interface WorkflowTransition {
+  id: string;
+  targetStepId: string;          // Points to next step
+  condition?: WorkflowCondition; // Optional branching logic
+  label?: string;                // Display label
+  isDefault?: boolean;           // Fallback path
+}
+```
+
+**Backend-Frontend Integration:**
+- WorkflowEngine imported in storage.ts for workflow advancement
+- advanceApplicationWorkflow now checks if workflow is enhanced (has step IDs)
+- If enhanced: uses WorkflowEngine.getNextStep() with form data + action
+- If legacy: simple index increment (backwards compatible)
+- Proper error handling for missing next steps
+
+**Files Created:**
+- `/db/migrations/008_add_workflow_versioning.sql`
+- `/shared/workflowTypes.ts` - Complete type definitions
+- `/server/workflowEngine.ts` - Condition evaluation engine
+- `/client/src/stores/workflowDesignerStore.ts` - State management
+- `/client/src/components/workflow-designer/nodes/StartNode.tsx`
+- `/client/src/components/workflow-designer/nodes/StepNode.tsx`
+- `/client/src/components/workflow-designer/nodes/DecisionNode.tsx`
+- `/client/src/components/workflow-designer/nodes/EndNode.tsx`
+- `/client/src/components/workflow-designer/nodes/index.ts`
+- `/client/src/pages/WorkflowDesignerPage.tsx` - Main designer page
+- `/client/src/components/workflow-designer/StepPropertiesPanel.tsx`
+- `/client/src/components/workflow-designer/TransitionPropertiesPanel.tsx`
+
+**Files Modified:**
+- `/server/routes.ts` - Added workflowEngine import, 8 new endpoints
+- `/server/storage.ts` - Added 4 new methods, updated advanceApplicationWorkflow
+- `/client/src/App.tsx` - Added workflow designer route
+- `package.json` - Added reactflow dependency
+
+**Remaining Work (Phases 6-11):**
+- Phase 6: Condition builder UI (for transition condition editing)
+- Phase 7: Template management pages (list, clone dialog)
+- Phase 8: Node palette & toolbar (add/delete nodes)
+- Phase 9: Validation & test workflow dialog
+- Phase 10: Navigation integration & polish
+- Phase 11: Tests & documentation
+
+**Architecture Decisions:**
+- Use React Flow for visual flowchart (industry standard, ~200KB)
+- Sequential workflows only (no parallel approval paths per requirements)
+- Branching based on actions AND form field values
+- Templates as blueprints (clone to modify)
+- Full implementation approach (not MVP)
+
+**Next Steps for Continuation:**
+1. ✅ Create WorkflowDesignerPage skeleton with React Flow canvas
+2. ✅ Build FlowCanvas component that converts store state to React Flow nodes
+3. ✅ Create PropertiesPanel for editing selected nodes/transitions
+4. **Next:** Build ConditionBuilder component for transition conditions
+5. Create WorkflowTemplatesPage for template management (list, clone, delete)
+6. Add node palette for adding/deleting nodes (drag-and-drop)
+7. Add navigation menu item for Workflow Designer (admin only)
+8. Test end-to-end: clone template → edit visually → save → test execution
+
+**Plan File Location:**
+`/home/runner/.claude/plans/glistening-riding-creek.md` - Complete 11-phase implementation plan
+
+---
+
+## Previous Session Status
 
 ### 🎯 Latest Session Summary (2025-11-26 - Azure Blob Storage Implementation)
 

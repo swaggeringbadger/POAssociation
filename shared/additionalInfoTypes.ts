@@ -69,7 +69,7 @@ export interface AdditionalInfoConfig {
   title: string;                        // Form heading displayed to user
   description: string;                  // Subtitle/helper text for the form
   sections: AdditionalInfoSection[];    // Groups of related fields
-  required_documents: string[];         // DEPRECATED: Use documents instead
+  required_documents?: string[];        // DEPRECATED: Use documents instead
   documents?: DocumentRequirement[];    // List of required and optional documents
   scoring_weights: Record<string, number>;  // Maps field IDs → numerical weights for completeness
 }

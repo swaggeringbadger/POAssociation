@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +42,8 @@ import {
   Eye,
   Info,
   MoreVertical,
-  Trash2
+  Trash2,
+  Pencil
 } from "lucide-react";
 import { toast } from "sonner";
 import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
@@ -56,6 +58,7 @@ interface FormStatus {
 
 export default function FormWizard() {
   const { currentTenant, selectedPropertyFilter, availableTenants, setCurrentPageTitle } = useAppStore();
+  const [, setLocation] = useLocation();
   const [formStatuses, setFormStatuses] = useState<Record<ApplicationType, FormStatus>>({} as any);
   const [generatingType, setGeneratingType] = useState<ApplicationType | null>(null);
   const [viewingType, setViewingType] = useState<ApplicationType | null>(null);
@@ -168,6 +171,10 @@ export default function FormWizard() {
   const handlePreviewVersion = (version: any) => {
     setPreviewVersion(version);
     setPreviewModalOpen(true);
+  };
+
+  const handleEditForm = (templateId: string) => {
+    setLocation(`/form-builder/${templateId}`);
   };
 
   const handleGenerateForm = async (applicationType: ApplicationType) => {
@@ -483,6 +490,10 @@ export default function FormWizard() {
                               <DropdownMenuItem onClick={() => handlePreviewVersion(version)}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 Preview Form
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditForm(version.id)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit Form
                               </DropdownMenuItem>
                               {!version.isActive && (
                                 <>

@@ -36,7 +36,17 @@
       "Bash(git -C /home/runner/workspace status)",
       "Bash(tree:*)",
       "Bash(xargs:*)",
-      "Bash(journalctl:*)"
+      "Bash(journalctl:*)",
+      "Bash(python3:*)",
+      "Bash(npx playwright install chromium)",
+      "Bash(npx playwright test:*)",
+      "Bash(find:*)",
+      "Bash(npm run demo:create:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(git -C /home/runner/workspace show HEAD:client/src/pages/Properties.tsx)",
+      "Bash(npx vitest:*)",
+      "Bash(npm test)"
     ],
     "deny": [],
     "ask": []

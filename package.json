@@ -13,7 +13,17 @@
     "demo:create": "tsx server/createDemoCode.ts",
     "demo:purge": "tsx server/purgeExpiredDemos.ts",
     "demo:purge:dry": "tsx server/purgeExpiredDemos.ts --dry-run",
-    "demo:purge:all": "tsx server/purgeExpiredDemos.ts --inactive"
+    "demo:purge:all": "tsx server/purgeExpiredDemos.ts --inactive",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:codegen": "playwright codegen"
   },
   "notes": "removed framer motion dependency",
   "dependencies": {
@@ -83,6 +93,7 @@
     "react-hook-form": "^7.66.0",
     "react-resizable-panels": "^2.1.9",
     "react-signature-canvas": "^1.1.0-alpha.2",
+    "reactflow": "^11.11.4",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
@@ -96,10 +107,14 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
     "@tailwindcss/vite": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "4.17.21",
     "@types/express-session": "^1.18.0",
@@ -111,14 +126,19 @@
     "@types/react-signature-canvas": "^1.0.7",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/ui": "^4.0.14",
     "autoprefixer": "^10.4.21",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
+    "happy-dom": "^20.0.11",
+    "jsdom": "^27.2.0",
+    "playwright": "^1.57.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^7.1.9"
+    "vite": "^7.1.9",
+    "vitest": "^4.0.14"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"

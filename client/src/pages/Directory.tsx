@@ -50,17 +50,22 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, UserPlus, MoreVertical, Mail, Shield, Trash2, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
+import type { Tenant } from "@shared/schema";
 
-// Role definitions and permissions
-const ALL_ROLES = [
-  { value: 'homeowner', label: 'Homeowner', icon: '🏠' },
-  { value: 'poa_board_contributor', label: 'Board Contributor', icon: '📋' },
-  { value: 'poa_board_member', label: 'Board Member', icon: '👔' },
-  { value: 'delegated_rep', label: 'Delegated Rep', icon: '📝' },
-  { value: 'management_rep', label: 'Management Rep', icon: '💼' },
-  { value: 'management_manager', label: 'Management Manager', icon: '🏢' },
-  { value: 'account_admin', label: 'Account Admin', icon: '⚙️' },
-];
+// Role definitions - labels are dynamically adjusted based on tenant's legal entity type
+const getRoles = (tenant: Tenant | null) => {
+  const label = getLegalEntityLabel(tenant);
+  return [
+    { value: 'homeowner', label: 'Homeowner', icon: '🏠' },
+    { value: 'poa_board_contributor', label: `${label} Board Contributor`, icon: '📋' },
+    { value: 'poa_board_member', label: `${label} Board Member`, icon: '👔' },
+    { value: 'delegated_rep', label: 'Delegated Rep', icon: '📝' },
+    { value: 'management_rep', label: 'Management Rep', icon: '💼' },
+    { value: 'management_manager', label: 'Management Manager', icon: '🏢' },
+    { value: 'account_admin', label: 'Account Admin', icon: '⚙️' },
+  ];
+};
 
 // Permission matrix based on user's role
 const PERMISSIONS = {
@@ -93,15 +98,21 @@ function hasPermission(userRole: string, action: string, targetRole?: string): b
   return false;
 }
 
-function formatRole(role: string) {
-  return role
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
 export default function Directory() {
   const { currentTenant, currentUserRole, selectedPropertyFilter } = useAppStore();
+
+  // Get roles with dynamic labels based on tenant's legal entity type
+  const ALL_ROLES = getRoles(currentTenant);
+  const legalEntityLabel = getLegalEntityLabel(currentTenant);
+
+  // Format role for display - replaces "Poa" with correct entity label
+  const formatRole = (role: string) => {
+    const formatted = role
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    return formatted.replace(/\bPoa\b/g, legalEntityLabel).replace(/\bHoa\b/g, legalEntityLabel);
+  };
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");

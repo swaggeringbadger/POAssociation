@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
 import { listApplicationSignatures } from "@/lib/api";
+import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,7 @@ export default function ApplicationDetail() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const legalEntityLabel = useLegalEntityLabel();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
@@ -254,6 +256,7 @@ export default function ApplicationDetail() {
       "Management Only": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
       "Initial Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
       "POA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "HOA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Board Review & Vote": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Committee Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Board Approval": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
@@ -264,8 +267,10 @@ export default function ApplicationDetail() {
     };
 
     const variantClass = stageVariants[workflowStage] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
+    // Replace POA/HOA with the correct label based on tenant settings
+    const displayStage = workflowStage.replace(/\bPOA\b/g, legalEntityLabel).replace(/\bHOA\b/g, legalEntityLabel);
     return (
-      <Badge className={variantClass}>{workflowStage}</Badge>
+      <Badge className={variantClass}>{displayStage}</Badge>
     );
   };
 

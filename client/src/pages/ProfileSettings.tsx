@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,13 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Calendar, Copy, RefreshCw, ExternalLink, Check, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
+import { getCalendarFeedToken, regenerateCalendarFeedToken, type CalendarFeedToken } from "@/lib/api";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -39,7 +41,7 @@ const notificationTypes: { key: keyof NotificationPreferences; label: string; de
   { key: "stepAssigned", label: "Step Assigned", description: "When you're assigned a new workflow step" },
 ];
 
-export default function Settings() {
+export default function ProfileSettings() {
   const { user } = useAuth();
   const { setCurrentPageTitle } = useAppStore();
   const [isEditingEmail, setIsEditingEmail] = useState(false);
@@ -128,12 +130,44 @@ export default function Settings() {
     }));
   };
 
+  // Calendar feed state
+  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
+
+  const { data: feedToken, isLoading: feedLoading } = useQuery({
+    queryKey: ['calendarFeedToken'],
+    queryFn: getCalendarFeedToken,
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: regenerateCalendarFeedToken,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['calendarFeedToken'], data);
+      toast.success('Calendar feed URL regenerated. Your old URL will no longer work.');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to regenerate calendar feed');
+    },
+  });
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2" data-testid="settings-tabs">
+        <TabsList className="grid w-full grid-cols-3" data-testid="settings-tabs">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -315,6 +349,132 @@ export default function Settings() {
                   "Save Preferences"
                 )}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="calendar">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Calendar Subscription
+              </CardTitle>
+              <CardDescription>
+                Subscribe to your events in iPhone Calendar, Google Calendar, Outlook, or any calendar app
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {feedLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : feedToken ? (
+                <>
+                  {/* Feed URL */}
+                  <div className="space-y-2">
+                    <Label>Your Calendar Feed URL</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={feedToken.feedUrl}
+                        readOnly
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(feedToken.feedUrl)}
+                        title="Copy to clipboard"
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This URL is unique to you. Keep it private and don't share it.
+                    </p>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm">How to subscribe:</h4>
+
+                    <div className="space-y-3 text-sm">
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="font-medium">iPhone / iPad Calendar</p>
+                        <ol className="list-decimal list-inside mt-2 text-muted-foreground space-y-1">
+                          <li>Go to <strong>Settings &gt; Calendar &gt; Accounts</strong></li>
+                          <li>Tap <strong>Add Account &gt; Other</strong></li>
+                          <li>Tap <strong>Add Subscribed Calendar</strong></li>
+                          <li>Paste the URL above and tap <strong>Next</strong></li>
+                        </ol>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="font-medium">Google Calendar</p>
+                        <ol className="list-decimal list-inside mt-2 text-muted-foreground space-y-1">
+                          <li>Open Google Calendar on desktop</li>
+                          <li>Click <strong>+ next to "Other calendars"</strong></li>
+                          <li>Select <strong>From URL</strong></li>
+                          <li>Paste the URL above and click <strong>Add calendar</strong></li>
+                        </ol>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <p className="font-medium">Outlook</p>
+                        <ol className="list-decimal list-inside mt-2 text-muted-foreground space-y-1">
+                          <li>Open Outlook and go to Calendar</li>
+                          <li>Click <strong>Add calendar &gt; Subscribe from web</strong></li>
+                          <li>Paste the URL above and click <strong>Import</strong></li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  {feedToken.lastAccessedAt && (
+                    <div className="p-3 rounded-lg border bg-muted/30">
+                      <p className="text-xs text-muted-foreground">
+                        Last synced: {new Date(feedToken.lastAccessedAt).toLocaleString()}
+                        {feedToken.accessCount > 0 && (
+                          <> • Synced {feedToken.accessCount} time{feedToken.accessCount !== 1 ? 's' : ''}</>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Regenerate Button */}
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <span className="text-sm">
+                        If your calendar URL has been compromised, you can regenerate it.
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => regenerateMutation.mutate()}
+                        disabled={regenerateMutation.isPending}
+                        className="ml-4 shrink-0"
+                      >
+                        {regenerateMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Regenerate URL
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Unable to load calendar feed. Please try again later.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

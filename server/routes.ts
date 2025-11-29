@@ -8,6 +8,7 @@ import { provisionDemoEcosystem } from "./provision";
 import { seedWorkflowTemplates } from "./seed-workflows";
 import { AdditionalInfoService } from "./additionalInfoService";
 import { azureBlobStorage } from "./azureBlobStorage";
+import { workflowEngine } from "./workflowEngine";
 import { z } from "zod";
 import * as schema from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -102,6 +103,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error during logout:', error);
       res.status(500).json({ error: 'Failed to logout' });
+    }
+  });
+
+  // Switch current user role in session
+  app.post('/api/auth/switch-role', isAuthenticated, async (req: any, res) => {
+    try {
+      const { role } = req.body;
+
+      if (!role) {
+        return res.status(400).json({ error: 'Role is required' });
+      }
+
+      // Update the current role in the session
+      req.session.currentUserRole = role;
+
+      // Save session to ensure it's persisted
+      req.session.save((err: any) => {
+        if (err) {
+          console.error('Error saving session with new role:', err);
+          return res.status(500).json({ error: 'Failed to switch role' });
+        }
+
+        console.log('[switch-role] Updated session role to:', role);
+        res.json({ success: true, role });
+      });
+    } catch (error: any) {
+      console.error('Error switching role:', error);
+      res.status(500).json({ error: 'Failed to switch role' });
     }
   });
 
@@ -246,7 +275,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (tenant.type !== 'management_company') {
         return res.status(400).json({ error: "Tenant is not a management company" });
       }
-      
+
+      // Check if tenant has access to Custom Branding feature
+      const featureAccess = await storage.checkFeatureAccess(req.params.id, 'custom_branding');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Branding is not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
+
       // Validate settings schema
       const { managementCompanySettingsSchema } = await import("@shared/schema");
       const validatedSettings = managementCompanySettingsSchema.parse(settings || {});
@@ -267,6 +306,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.name === "ZodError") {
         return res.status(400).json({ error: fromZodError(error).message });
       }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Subscriptions - Protected routes
+  // Get all available plans (filtered by tenant type)
+  app.get("/api/subscription-plans", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantType } = req.query;
+      const plans = await storage.listSubscriptionPlans(
+        tenantType as 'management_company' | 'community' | undefined
+      );
+      res.json(plans);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get current subscription for a tenant
+  app.get("/api/tenants/:tenantId/subscription", isAuthenticated, async (req, res) => {
+    try {
+      const subscription = await storage.getTenantSubscription(req.params.tenantId);
+      if (!subscription) {
+        return res.status(404).json({ error: "No subscription found" });
+      }
+      res.json(subscription);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update tenant subscription (Account Admin only)
+  app.post("/api/tenants/:tenantId/subscription", isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId, changeReason } = req.body;
+
+      if (!planId) {
+        return res.status(400).json({ error: "planId is required" });
+      }
+
+      // TODO: Check if user is account admin for this tenant
+      // For now, we'll allow any authenticated user
+
+      const subscription = await storage.updateTenantSubscription(
+        req.params.tenantId,
+        planId,
+        req.user?.id,
+        changeReason
+      );
+
+      res.json(subscription);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check feature access
+  app.get("/api/tenants/:tenantId/feature-access/:feature", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantId, feature } = req.params;
+      const access = await storage.checkFeatureAccess(tenantId, feature);
+      res.json(access);
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
@@ -1550,7 +1652,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const tenant = await storage.getTenantBySubdomain(req.subdomain);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-      
+
+      // Check if tenant has access to Custom Workflows feature
+      const featureAccess = await storage.checkFeatureAccess(tenant.id, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
+
       const templates = await storage.listWorkflowTemplatesForTenant(tenant.id);
       res.json(templates);
     } catch (error: any) {
@@ -1564,9 +1676,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { applicationId } = req.params;
       const { workflowTemplateId } = req.body;
-      
+
       const app = await storage.getApplication(applicationId);
       if (!app) return res.status(404).json({ error: "Application not found" });
+
+      // Check if tenant has access to Custom Workflows feature
+      const featureAccess = await storage.checkFeatureAccess(app.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
 
       const existing = await storage.getApplicationWorkflow(applicationId);
       if (existing) return res.status(400).json({ error: "Workflow already exists" });
@@ -1575,7 +1697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         applicationId,
         workflowTemplateId,
       });
-      
+
       res.status(201).json(workflow);
     } catch (error: any) {
       console.error("Error creating workflow:", error);
@@ -1586,9 +1708,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get workflow for application
   app.get("/api/applications/:applicationId/workflow", isAuthenticated, async (req: any, res) => {
     try {
+      const application = await storage.getApplication(req.params.applicationId);
+      if (!application) return res.status(404).json({ error: "Application not found" });
+
+      // Check if tenant has access to Custom Workflows feature
+      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
+
       const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
       if (!workflow) return res.status(404).json({ error: "Workflow not found" });
-      
+
       const template = await storage.getWorkflowTemplate(workflow.workflowTemplateId);
       res.json({ ...workflow, template });
     } catch (error: any) {
@@ -1607,6 +1742,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get application to find tenant
       const application = await storage.getApplication(applicationId);
       if (!application) return res.status(404).json({ error: "Application not found" });
+
+      // Check if tenant has access to Custom Workflows feature
+      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
 
       // Get workflow and template to check role requirements
       const workflow = await storage.getApplicationWorkflow(applicationId);
@@ -1653,6 +1798,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get workflow action history
   app.get("/api/applications/:applicationId/workflow/history", isAuthenticated, async (req: any, res) => {
     try {
+      const application = await storage.getApplication(req.params.applicationId);
+      if (!application) return res.status(404).json({ error: "Application not found" });
+
+      // Check if tenant has access to Custom Workflows feature
+      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
+      }
+
       const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
       if (!workflow) return res.status(404).json({ error: "Workflow not found" });
 
@@ -1660,6 +1818,329 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(history);
     } catch (error: any) {
       console.error("Error fetching workflow history:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // WORKFLOW DESIGNER ENDPOINTS
+  // ============================================================
+
+  // Helper function to check if user is admin
+  const requireAdmin = (req: any, res: any): boolean => {
+    const userRole = req.session?.currentUserRole || req.user?.role;
+    console.log('[requireAdmin] currentUserRole:', req.session?.currentUserRole, 'userRole:', userRole);
+    if (userRole !== 'account_admin' && userRole !== 'super_admin') {
+      res.status(403).json({ error: "Admin access required" });
+      return false;
+    }
+    return true;
+  };
+
+  // List all workflow templates (blueprints + custom)
+  app.get("/api/workflow-designer/templates", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      // Get user's admin tenants
+      const adminTenants = await storage.getManagedProperties(userId);
+      if (!adminTenants || adminTenants.length === 0) {
+        return res.status(404).json({ error: "No admin tenants found for user" });
+      }
+
+      // Use the first admin tenant (in production, this would come from user's current context)
+      const tenant = adminTenants[0];
+
+      // NOTE: Viewing blueprints is available for all admin users.
+      // Only cloning/editing requires the custom_workflows feature.
+      const templates = await storage.listWorkflowTemplatesForTenant(tenant.id);
+
+      // Include feature access info in response so frontend can show/hide premium features
+      let hasCustomWorkflows = true;
+      if (process.env.NODE_ENV !== 'development') {
+        const featureAccess = await storage.checkFeatureAccess(tenant.id, 'custom_workflows');
+        hasCustomWorkflows = featureAccess.hasAccess;
+      }
+
+      res.json({ templates, hasCustomWorkflows });
+    } catch (error: any) {
+      console.error("Error fetching workflow templates:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single template for viewing
+  app.get("/api/workflow-designer/templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const template = await storage.getWorkflowTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // NOTE: Viewing blueprints is available for all admin users.
+      // Include feature access info so frontend knows if user can edit
+      let hasCustomWorkflows = true;
+      if (process.env.NODE_ENV !== 'development') {
+        const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
+        hasCustomWorkflows = featureAccess.hasAccess;
+      }
+
+      res.json({ ...template, hasCustomWorkflows });
+    } catch (error: any) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Clone a template
+  app.post("/api/workflow-designer/templates/:id/clone", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const { name, description } = req.body;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const sourceTemplate = await storage.getWorkflowTemplate(req.params.id);
+      if (!sourceTemplate) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // Check feature access
+      const featureAccess = await storage.checkFeatureAccess(sourceTemplate.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan"
+        });
+      }
+
+      // Create cloned template
+      const clonedTemplate = await storage.cloneWorkflowTemplate(
+        req.params.id,
+        name,
+        description,
+        userId
+      );
+
+      res.status(201).json(clonedTemplate);
+    } catch (error: any) {
+      console.error("Error cloning template:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update template
+  app.put("/api/workflow-designer/templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const { name, description, steps } = req.body;
+
+      const template = await storage.getWorkflowTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // Cannot edit blueprint templates
+      if (template.isBlueprint) {
+        return res.status(403).json({ error: "Cannot edit blueprint templates. Clone it first." });
+      }
+
+      // Check feature access
+      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan"
+        });
+      }
+
+      // Validate workflow structure
+      if (steps) {
+        const validation = workflowEngine.validateWorkflow(steps);
+        if (!validation.isValid) {
+          return res.status(400).json({
+            error: "Invalid workflow structure",
+            validationErrors: validation.errors
+          });
+        }
+      }
+
+      const updated = await storage.updateWorkflowTemplate(req.params.id, {
+        name,
+        description,
+        steps
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Save template as new version
+  app.post("/api/workflow-designer/templates/:id/version", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const { name, description, steps } = req.body;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const template = await storage.getWorkflowTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // Check feature access
+      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan"
+        });
+      }
+
+      // Validate workflow structure
+      if (steps) {
+        const validation = workflowEngine.validateWorkflow(steps);
+        if (!validation.isValid) {
+          return res.status(400).json({
+            error: "Invalid workflow structure",
+            validationErrors: validation.errors
+          });
+        }
+      }
+
+      const newVersion = await storage.createWorkflowTemplateVersion(
+        req.params.id,
+        name,
+        description,
+        steps,
+        userId
+      );
+
+      res.status(201).json(newVersion);
+    } catch (error: any) {
+      console.error("Error creating version:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete custom template
+  app.delete("/api/workflow-designer/templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const template = await storage.getWorkflowTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // Cannot delete blueprint templates
+      if (template.isBlueprint) {
+        return res.status(403).json({ error: "Cannot delete blueprint templates" });
+      }
+
+      // Check feature access
+      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "Custom Workflows are not available in your subscription plan"
+        });
+      }
+
+      await storage.deleteWorkflowTemplate(req.params.id);
+      res.json({ message: "Template deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Test a condition with sample data
+  app.post("/api/workflow-designer/test-condition", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const { condition, formData, action } = req.body;
+
+      if (!condition) {
+        return res.status(400).json({ error: "Condition is required" });
+      }
+
+      const result = workflowEngine.evaluateCondition(condition, {
+        formData: formData || {},
+        action
+      });
+
+      res.json({
+        result,
+        evaluation: {
+          condition,
+          evaluatedAs: result,
+          details: `Condition ${result ? 'passed' : 'failed'}`
+        }
+      });
+    } catch (error: any) {
+      console.error("Error testing condition:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Test complete workflow with sample data
+  app.post("/api/workflow-designer/test-workflow", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const { templateId, formData, actions } = req.body;
+
+      const template = await storage.getWorkflowTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      // Simulate workflow execution
+      const path: any[] = [];
+      let currentStepIndex = 0;
+      let completed = false;
+
+      for (const actionData of actions) {
+        if (currentStepIndex >= template.steps.length) break;
+
+        const currentStep = template.steps[currentStepIndex];
+        const nextStepId = workflowEngine.getNextStep(currentStep, {
+          formData,
+          action: actionData.action
+        });
+
+        path.push({
+          stepId: currentStep.id,
+          stepTitle: currentStep.title,
+          action: actionData.action,
+          nextStepId
+        });
+
+        if (!nextStepId) {
+          completed = true;
+          break;
+        }
+
+        currentStepIndex = template.steps.findIndex(s => s.id === nextStepId);
+        if (currentStepIndex === -1) break;
+      }
+
+      res.json({
+        path,
+        completed,
+        finalStepIndex: currentStepIndex
+      });
+    } catch (error: any) {
+      console.error("Error testing workflow:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -1753,6 +2234,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
+      }
+
+      // Check if tenant has access to AI Form Generation feature
+      const featureAccess = await storage.checkFeatureAccess(tenantId, 'ai_form_generation');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "AI Form Generation is not available in your subscription plan",
+          requiredPlan: featureAccess.requiredPlan,
+          currentPlan: featureAccess.currentPlan
+        });
       }
 
       if (!tenant.designGuidelinesUrl) {
@@ -2242,6 +2733,948 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error serving signature image:', error);
       res.status(500).json({ error: error.message || 'Failed to serve signature image' });
+    }
+  });
+
+  // ============================================
+  // COMPLIANCE ROUTES
+  // ============================================
+
+  // Middleware to check compliance access
+  const requireComplianceAccess = async (req: any, res: any, next: any) => {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Get user's roles across all tenants
+    const userTenants = await storage.getUserTenants(userId);
+    const userRoles = userTenants.map(ut => ut.role);
+
+    const allowedRoles = ['management_manager', 'super_admin'];
+    const readOnlyRoles = ['management_rep'];
+
+    if (allowedRoles.some(r => userRoles.includes(r))) {
+      req.complianceAccess = 'full';
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    if (req.method === 'GET' && readOnlyRoles.some(r => userRoles.includes(r))) {
+      req.complianceAccess = 'read';
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Insufficient permissions for compliance module' });
+  };
+
+  // List compliance categories
+  app.get('/api/compliance/categories', requireComplianceAccess, async (req: any, res) => {
+    try {
+      const tenantId = req.query.tenantId as string | undefined;
+      const categories = await storage.listComplianceCategories(tenantId);
+      res.json(categories);
+    } catch (error: any) {
+      console.error('Error listing compliance categories:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create compliance category
+  app.post('/api/compliance/categories', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+      const category = await storage.createComplianceCategory(req.body);
+      res.status(201).json(category);
+    } catch (error: any) {
+      console.error('Error creating compliance category:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get compliance dashboard
+  app.get('/api/compliance/dashboard', requireComplianceAccess, async (req: any, res) => {
+    try {
+      // Get tenant IDs this user has access to
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      const dashboard = await storage.getComplianceDashboard(tenantIds);
+      res.json(dashboard);
+    } catch (error: any) {
+      console.error('Error getting compliance dashboard:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List compliance items
+  app.get('/api/compliance/items', requireComplianceAccess, async (req: any, res) => {
+    try {
+      const filters = {
+        scope: req.query.scope as string | undefined,
+        propertyId: req.query.propertyId as string | undefined,
+        managementCompanyId: req.query.managementCompanyId as string | undefined,
+        categoryId: req.query.categoryId as string | undefined,
+        status: req.query.status as string | undefined,
+        dueBefore: req.query.dueBefore ? new Date(req.query.dueBefore as string) : undefined,
+        dueAfter: req.query.dueAfter ? new Date(req.query.dueAfter as string) : undefined,
+      };
+
+      // Filter to only tenants user has access to
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+
+      // Get all items and filter to accessible ones
+      const items = await storage.listComplianceItems(filters);
+      const accessibleItems = items.filter(item =>
+        tenantIds.includes(item.propertyId) || tenantIds.includes(item.managementCompanyId)
+      );
+
+      res.json(accessibleItems);
+    } catch (error: any) {
+      console.error('Error listing compliance items:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single compliance item
+  app.get('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+    try {
+      const item = await storage.getComplianceItem(req.params.id);
+      if (!item) {
+        return res.status(404).json({ error: 'Compliance item not found' });
+      }
+
+      // Check access
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      if (!tenantIds.includes(item.propertyId) && !tenantIds.includes(item.managementCompanyId)) {
+        return res.status(403).json({ error: 'Access denied to this compliance item' });
+      }
+
+      res.json(item);
+    } catch (error: any) {
+      console.error('Error getting compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create compliance item
+  app.post('/api/compliance/items', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const item = await storage.createComplianceItem({
+        ...req.body,
+        createdByUserId: req.userId,
+      });
+      res.status(201).json(item);
+    } catch (error: any) {
+      console.error('Error creating compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update compliance item
+  app.patch('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const item = await storage.updateComplianceItem(req.params.id, req.body);
+      res.json(item);
+    } catch (error: any) {
+      console.error('Error updating compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete compliance item
+  app.delete('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      await storage.deleteComplianceItem(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Complete compliance item
+  app.post('/api/compliance/items/:id/complete', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const item = await storage.completeComplianceItem(
+        req.params.id,
+        req.userId,
+        req.body.notes
+      );
+      res.json(item);
+    } catch (error: any) {
+      console.error('Error completing compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reopen compliance item
+  app.post('/api/compliance/items/:id/reopen', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const item = await storage.reopenComplianceItem(req.params.id);
+      res.json(item);
+    } catch (error: any) {
+      console.error('Error reopening compliance item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload compliance document
+  app.post('/api/compliance/items/:itemId/documents', requireComplianceAccess, upload.single('file'), async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const itemId = req.params.itemId;
+      const item = await storage.getComplianceItem(itemId);
+      if (!item) {
+        return res.status(404).json({ error: 'Compliance item not found' });
+      }
+
+      // Upload to blob storage
+      const blobPath = `compliance/${itemId}/${Date.now()}-${req.file.originalname}`;
+      await azureBlobStorage.uploadDocument(
+        req.file.buffer,
+        'compliance-documents',
+        blobPath,
+        req.file.mimetype
+      );
+
+      // Create document record
+      const doc = await storage.createComplianceDocument({
+        complianceItemId: itemId,
+        documentType: req.body.documentType || 'other',
+        fileName: req.file.originalname,
+        blobPath,
+        containerName: 'compliance-documents',
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        uploadedByUserId: req.userId,
+        validFrom: req.body.validFrom ? new Date(req.body.validFrom) : undefined,
+        validUntil: req.body.validUntil ? new Date(req.body.validUntil) : undefined,
+      });
+
+      res.status(201).json(doc);
+    } catch (error: any) {
+      console.error('Error uploading compliance document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List compliance documents for an item
+  app.get('/api/compliance/items/:itemId/documents', requireComplianceAccess, async (req: any, res) => {
+    try {
+      const documents = await storage.listComplianceDocuments(req.params.itemId);
+      res.json(documents);
+    } catch (error: any) {
+      console.error('Error listing compliance documents:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download compliance document
+  app.get('/api/compliance/documents/:id/download', requireComplianceAccess, async (req: any, res) => {
+    try {
+      const doc = await storage.getComplianceDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const fileBuffer = await azureBlobStorage.downloadDocument(
+        doc.containerName,
+        doc.blobPath
+      );
+
+      res.set({
+        'Content-Type': doc.mimeType,
+        'Content-Disposition': `attachment; filename="${doc.fileName}"`,
+        'Content-Length': doc.fileSize,
+      });
+      res.send(fileBuffer);
+    } catch (error: any) {
+      console.error('Error downloading compliance document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete compliance document
+  app.delete('/api/compliance/documents/:id', requireComplianceAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const doc = await storage.getComplianceDocument(req.params.id);
+      if (doc) {
+        // Delete from blob storage
+        await azureBlobStorage.deleteDocument(doc.containerName, doc.blobPath);
+      }
+
+      await storage.deleteComplianceDocument(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting compliance document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // EVENTS / CALENDAR ROUTES
+  // ============================================
+
+  // Reuse the compliance access middleware for events (same role requirements)
+  const requireEventsAccess = requireComplianceAccess;
+
+  // List event types
+  app.get('/api/events/types', requireEventsAccess, async (req: any, res) => {
+    try {
+      const types = await storage.listEventTypes();
+      res.json(types);
+    } catch (error: any) {
+      console.error('Error listing event types:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get event type by ID
+  app.get('/api/events/types/:id', requireEventsAccess, async (req: any, res) => {
+    try {
+      const eventType = await storage.getEventType(req.params.id);
+      if (!eventType) {
+        return res.status(404).json({ error: 'Event type not found' });
+      }
+      res.json(eventType);
+    } catch (error: any) {
+      console.error('Error getting event type:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List events with filters
+  app.get('/api/events', requireEventsAccess, async (req: any, res) => {
+    try {
+      const filters = {
+        tenantId: req.query.tenantId as string | undefined,
+        eventTypeId: req.query.eventTypeId as string | undefined,
+        status: req.query.status as string | undefined,
+        startAfter: req.query.startAfter ? new Date(req.query.startAfter as string) : undefined,
+        startBefore: req.query.startBefore ? new Date(req.query.startBefore as string) : undefined,
+      };
+
+      // Filter to only tenants user has access to
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+
+      const events = await storage.listEvents(filters);
+      // Filter to accessible events
+      const accessibleEvents = events.filter(event => tenantIds.includes(event.tenantId));
+
+      res.json(accessibleEvents);
+    } catch (error: any) {
+      console.error('Error listing events:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get calendar events (for month/range view)
+  app.get('/api/events/calendar', requireEventsAccess, async (req: any, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'startDate and endDate are required' });
+      }
+
+      // Get tenant IDs user has access to
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+
+      const events = await storage.getCalendarEvents(
+        tenantIds,
+        new Date(startDate as string),
+        new Date(endDate as string)
+      );
+
+      res.json(events);
+    } catch (error: any) {
+      console.error('Error getting calendar events:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single event with attendees, documents, and applications
+  app.get('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+    try {
+      const event = await storage.getEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+
+      // Check access
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      if (!tenantIds.includes(event.tenantId)) {
+        return res.status(403).json({ error: 'Access denied to this event' });
+      }
+
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error getting event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create event
+  app.post('/api/events', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      // Verify user has access to the tenant
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      if (!tenantIds.includes(req.body.tenantId)) {
+        return res.status(403).json({ error: 'No access to this tenant' });
+      }
+
+      const event = await storage.createEvent({
+        ...req.body,
+        createdByUserId: req.userId,
+      });
+      res.status(201).json(event);
+    } catch (error: any) {
+      console.error('Error creating event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update event
+  app.patch('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const event = await storage.updateEvent(req.params.id, req.body);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error updating event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete event
+  app.delete('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      await storage.deleteEvent(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Complete event
+  app.post('/api/events/:id/complete', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const event = await storage.completeEvent(req.params.id);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error completing event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cancel event
+  app.post('/api/events/:id/cancel', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const event = await storage.cancelEvent(req.params.id);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error cancelling event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // EVENT ATTENDEES ROUTES
+  // ============================================
+
+  // List attendees for an event
+  app.get('/api/events/:eventId/attendees', requireEventsAccess, async (req: any, res) => {
+    try {
+      const attendees = await storage.listEventAttendees(req.params.eventId);
+      res.json(attendees);
+    } catch (error: any) {
+      console.error('Error listing event attendees:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Add attendee to event
+  app.post('/api/events/:eventId/attendees', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const attendee = await storage.addEventAttendee({
+        ...req.body,
+        eventId: req.params.eventId,
+      });
+      res.status(201).json(attendee);
+    } catch (error: any) {
+      console.error('Error adding event attendee:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update attendee (RSVP, attendance)
+  app.patch('/api/events/:eventId/attendees/:attendeeId', requireEventsAccess, async (req: any, res) => {
+    try {
+      // Allow users to update their own RSVP even with read-only access
+      const attendee = await storage.getEventAttendee(req.params.attendeeId);
+      if (!attendee) {
+        return res.status(404).json({ error: 'Attendee not found' });
+      }
+
+      // Only allow self-update for RSVPs (responseStatus, respondedAt)
+      const isSelfUpdate = attendee.userId === req.userId;
+      const isRsvpOnlyUpdate = Object.keys(req.body).every(k =>
+        ['responseStatus', 'respondedAt'].includes(k)
+      );
+
+      if (req.complianceAccess !== 'full' && !(isSelfUpdate && isRsvpOnlyUpdate)) {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const updated = await storage.updateEventAttendee(req.params.attendeeId, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating event attendee:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove attendee from event
+  app.delete('/api/events/:eventId/attendees/:attendeeId', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      await storage.removeEventAttendee(req.params.attendeeId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error removing event attendee:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // EVENT DOCUMENTS ROUTES
+  // ============================================
+
+  // List documents for an event
+  app.get('/api/events/:eventId/documents', requireEventsAccess, async (req: any, res) => {
+    try {
+      const documents = await storage.listEventDocuments(req.params.eventId);
+      res.json(documents);
+    } catch (error: any) {
+      console.error('Error listing event documents:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload document to event
+  app.post('/api/events/:eventId/documents', requireEventsAccess, upload.single('file'), async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const eventId = req.params.eventId;
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+
+      // Upload to blob storage
+      const blobPath = `events/${eventId}/${Date.now()}-${req.file.originalname}`;
+      await azureBlobStorage.uploadDocument(
+        req.file.buffer,
+        'event-documents',
+        blobPath,
+        req.file.mimetype
+      );
+
+      // Create document record
+      const doc = await storage.createEventDocument({
+        eventId,
+        documentType: req.body.documentType || 'other',
+        fileName: req.file.originalname,
+        blobPath,
+        containerName: 'event-documents',
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        uploadedByUserId: req.userId,
+      });
+
+      res.status(201).json(doc);
+    } catch (error: any) {
+      console.error('Error uploading event document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download event document
+  app.get('/api/events/documents/:id/download', requireEventsAccess, async (req: any, res) => {
+    try {
+      const doc = await storage.getEventDocument(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const fileBuffer = await azureBlobStorage.downloadDocument(
+        doc.containerName,
+        doc.blobPath
+      );
+
+      res.set({
+        'Content-Type': doc.mimeType,
+        'Content-Disposition': `attachment; filename="${doc.fileName}"`,
+        'Content-Length': doc.fileSize,
+      });
+      res.send(fileBuffer);
+    } catch (error: any) {
+      console.error('Error downloading event document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete event document
+  app.delete('/api/events/documents/:id', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const doc = await storage.getEventDocument(req.params.id);
+      if (doc) {
+        await azureBlobStorage.deleteDocument(doc.containerName, doc.blobPath);
+      }
+
+      await storage.deleteEventDocument(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting event document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // EVENT APPLICATIONS ROUTES (Review Packets)
+  // ============================================
+
+  // List applications linked to an event
+  app.get('/api/events/:eventId/applications', requireEventsAccess, async (req: any, res) => {
+    try {
+      const applications = await storage.listEventApplications(req.params.eventId);
+      res.json(applications);
+    } catch (error: any) {
+      console.error('Error listing event applications:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Link application to event
+  app.post('/api/events/:eventId/applications', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const link = await storage.addEventApplication({
+        eventId: req.params.eventId,
+        applicationId: req.body.applicationId,
+        addedByUserId: req.userId,
+        orderIndex: req.body.orderIndex,
+        notes: req.body.notes,
+      });
+      res.status(201).json(link);
+    } catch (error: any) {
+      console.error('Error linking application to event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update application link (order, notes, decision)
+  app.patch('/api/events/:eventId/applications/:linkId', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const link = await storage.updateEventApplication(req.params.linkId, req.body);
+      res.json(link);
+    } catch (error: any) {
+      console.error('Error updating event application link:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unlink application from event
+  app.delete('/api/events/:eventId/applications/:linkId', requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.complianceAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      await storage.removeEventApplication(req.params.linkId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error unlinking application from event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // CALENDAR FEED (iCal) ROUTES
+  // ============================================
+
+  // Generate iCal content from events
+  function generateICalContent(events: any[], calendarName: string): string {
+    const icalLines: string[] = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//POA Association//Calendar//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      `X-WR-CALNAME:${calendarName}`,
+      'X-WR-TIMEZONE:UTC',
+    ];
+
+    for (const event of events) {
+      const startDate = new Date(event.startDatetime);
+      const endDate = new Date(event.endDatetime);
+
+      // Format dates for iCal (YYYYMMDDTHHmmssZ for UTC)
+      const formatDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+      // Escape special characters in text
+      const escapeText = (text: string) => {
+        if (!text) return '';
+        return text
+          .replace(/\\/g, '\\\\')
+          .replace(/;/g, '\\;')
+          .replace(/,/g, '\\,')
+          .replace(/\n/g, '\\n');
+      };
+
+      icalLines.push('BEGIN:VEVENT');
+      icalLines.push(`UID:${event.id}@poassociation.com`);
+      icalLines.push(`DTSTAMP:${formatDate(new Date())}`);
+
+      if (event.allDay) {
+        // All-day events use DATE format (YYYYMMDD)
+        const startDateOnly = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+        const endDateOnly = new Date(endDate.getTime() + 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+        icalLines.push(`DTSTART;VALUE=DATE:${startDateOnly}`);
+        icalLines.push(`DTEND;VALUE=DATE:${endDateOnly}`);
+      } else {
+        icalLines.push(`DTSTART:${formatDate(startDate)}`);
+        icalLines.push(`DTEND:${formatDate(endDate)}`);
+      }
+
+      icalLines.push(`SUMMARY:${escapeText(event.title)}`);
+
+      if (event.description) {
+        icalLines.push(`DESCRIPTION:${escapeText(event.description)}`);
+      }
+
+      if (event.location) {
+        icalLines.push(`LOCATION:${escapeText(event.location)}`);
+      }
+
+      if (event.meetingUrl) {
+        // Add URL field for virtual meetings
+        icalLines.push(`URL:${event.meetingUrl}`);
+      }
+
+      // Add categories based on event type
+      if (event.eventType?.name) {
+        icalLines.push(`CATEGORIES:${escapeText(event.eventType.name)}`);
+      }
+
+      // Add organizer/tenant info
+      if (event.tenant?.name) {
+        icalLines.push(`X-TENANT:${escapeText(event.tenant.name)}`);
+      }
+
+      icalLines.push('END:VEVENT');
+    }
+
+    icalLines.push('END:VCALENDAR');
+    return icalLines.join('\r\n');
+  }
+
+  // Get or create calendar feed token for authenticated user
+  app.get('/api/calendar-feed/token', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.userId;
+
+      // Check if user already has a token
+      let feedToken = await storage.getCalendarFeedTokenByUserId(userId);
+
+      if (!feedToken) {
+        // Generate a new secure token (64 character hex string)
+        const token = crypto.randomBytes(32).toString('hex');
+
+        feedToken = await storage.createCalendarFeedToken({
+          userId,
+          token,
+          isActive: true,
+        });
+      }
+
+      // Build the feed URL
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const feedUrl = `${protocol}://${host}/api/calendar-feed/${feedToken.token}.ics`;
+
+      res.json({
+        token: feedToken.token,
+        feedUrl,
+        createdAt: feedToken.createdAt,
+        lastAccessedAt: feedToken.lastAccessedAt,
+        accessCount: feedToken.accessCount,
+      });
+    } catch (error: any) {
+      console.error('Error getting calendar feed token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Regenerate calendar feed token
+  app.post('/api/calendar-feed/regenerate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.userId;
+
+      // Revoke existing token
+      const existingToken = await storage.getCalendarFeedTokenByUserId(userId);
+      if (existingToken) {
+        await storage.revokeCalendarFeedToken(existingToken.id);
+      }
+
+      // Generate new token
+      const token = crypto.randomBytes(32).toString('hex');
+      const feedToken = await storage.createCalendarFeedToken({
+        userId,
+        token,
+        isActive: true,
+      });
+
+      // Build the feed URL
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const feedUrl = `${protocol}://${host}/api/calendar-feed/${feedToken.token}.ics`;
+
+      res.json({
+        token: feedToken.token,
+        feedUrl,
+        createdAt: feedToken.createdAt,
+        message: 'Calendar feed URL regenerated. Your old URL will no longer work.',
+      });
+    } catch (error: any) {
+      console.error('Error regenerating calendar feed token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // iCal feed endpoint - NO AUTHENTICATION (uses token in URL)
+  app.get('/api/calendar-feed/:token.ics', async (req: any, res) => {
+    try {
+      const { token } = req.params;
+
+      // Look up the token
+      const feedToken = await storage.getCalendarFeedTokenByToken(token);
+      if (!feedToken) {
+        res.status(404).send('Calendar feed not found');
+        return;
+      }
+
+      // Check if expired
+      if (feedToken.expiresAt && new Date(feedToken.expiresAt) < new Date()) {
+        res.status(410).send('Calendar feed has expired');
+        return;
+      }
+
+      // Update access stats
+      await storage.updateCalendarFeedTokenAccess(feedToken.id);
+
+      // Get events for this user
+      const events = await storage.getEventsForFeed(
+        feedToken.userId,
+        feedToken.tenantId || undefined,
+        feedToken.eventTypeFilter || undefined
+      );
+
+      // Get user info for calendar name
+      const user = await storage.getUser(feedToken.userId);
+      const calendarName = user ? `${user.firstName || 'POA'}'s Calendar` : 'POA Calendar';
+
+      // Generate iCal content
+      const icalContent = generateICalContent(events, calendarName);
+
+      // Set appropriate headers
+      res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
+      res.send(icalContent);
+    } catch (error: any) {
+      console.error('Error serving calendar feed:', error);
+      res.status(500).send('Error generating calendar feed');
     }
   });
 

@@ -43,3 +43,9 @@ Thumbs.db
 .cache
 .temp
 .tmp
+
+# Playwright / E2E Tests
+/test-results/
+/playwright-report/
+/playwright/.cache/
+*.trace.zip

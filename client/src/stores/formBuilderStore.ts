@@ -59,6 +59,7 @@ interface FormBuilderState {
   loadSchema: (schema: AdditionalInfoConfig) => void;
   reset: () => void;
   discardChanges: () => void;
+  markAsSaved: () => void;
 }
 
 export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
@@ -308,11 +309,32 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   setSaving: (isSaving: boolean) => set({ isSaving }),
 
   // Persistence actions
-  loadSchema: (schema: AdditionalInfoConfig) => set({
-    schema,
-    originalSchema: JSON.parse(JSON.stringify(schema)), // Deep clone
-    hasUnsavedChanges: false,
-  }),
+  loadSchema: (schema: AdditionalInfoConfig) => {
+    // Migrate deprecated required_documents to documents array
+    let migratedSchema = { ...schema };
+
+    if (schema.required_documents && schema.required_documents.length > 0) {
+      // Convert old string array to DocumentRequirement array
+      const migratedDocuments = schema.required_documents.map(docName => ({
+        name: docName,
+        required: true,
+        description: undefined,
+      }));
+
+      // Merge with existing documents (if any)
+      const existingDocuments = schema.documents || [];
+      migratedSchema.documents = [...migratedDocuments, ...existingDocuments];
+
+      // Remove the deprecated field
+      delete migratedSchema.required_documents;
+    }
+
+    set({
+      schema: migratedSchema,
+      originalSchema: JSON.parse(JSON.stringify(migratedSchema)), // Deep clone
+      hasUnsavedChanges: false,
+    });
+  },
 
   reset: () => set({
     schema: null,
@@ -326,6 +348,11 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
 
   discardChanges: () => set((state) => ({
     schema: state.originalSchema ? JSON.parse(JSON.stringify(state.originalSchema)) : null,
+    hasUnsavedChanges: false,
+  })),
+
+  markAsSaved: () => set((state) => ({
+    originalSchema: state.schema ? JSON.parse(JSON.stringify(state.schema)) : null,
     hasUnsavedChanges: false,
   })),
 }));

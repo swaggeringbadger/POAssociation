@@ -25,8 +25,10 @@ export interface FormTemplate {
   tenantId: string;
   name: string;
   description: string | null;
+  projectType: string;
   schema: any;
   isActive: boolean;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -138,6 +140,42 @@ class ApiClient {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("Failed to delete form template");
+  }
+
+  async createFormTemplate(data: {
+    tenantId: string;
+    name: string;
+    description: string;
+    projectType: string;
+    schema: any;
+  }): Promise<FormTemplate> {
+    const response = await fetch(`${this.baseUrl}/tenants/${data.tenantId}/forms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to create form template" }));
+      throw new Error(error.error || "Failed to create form template");
+    }
+    return response.json();
+  }
+
+  async updateFormTemplate(id: string, data: {
+    name?: string;
+    description?: string;
+    schema?: any;
+  }): Promise<FormTemplate> {
+    const response = await fetch(`${this.baseUrl}/forms/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to update form template" }));
+      throw new Error(error.error || "Failed to update form template");
+    }
+    return response.json();
   }
 
   async submitApplication(application: {
@@ -336,6 +374,46 @@ class ApiClient {
   }
 
   // ============================================================
+  // SUBSCRIPTION API METHODS
+  // ============================================================
+
+  async listSubscriptionPlans(tenantType?: 'management_company' | 'community'): Promise<any[]> {
+    const url = tenantType
+      ? `${this.baseUrl}/subscription-plans?tenantType=${tenantType}`
+      : `${this.baseUrl}/subscription-plans`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch subscription plans");
+    return response.json();
+  }
+
+  async getTenantSubscription(tenantId: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/subscription`);
+    if (!response.ok) throw new Error("Failed to fetch tenant subscription");
+    return response.json();
+  }
+
+  async updateTenantSubscription(tenantId: string, planId: string, changeReason?: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/subscription`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planId, changeReason }),
+    });
+    if (!response.ok) throw new Error("Failed to update subscription");
+    return response.json();
+  }
+
+  async checkFeatureAccess(tenantId: string, feature: string): Promise<{
+    hasAccess: boolean;
+    limit: number | null;
+    current: number;
+    reason?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/feature-access/${feature}`);
+    if (!response.ok) throw new Error("Failed to check feature access");
+    return response.json();
+  }
+
+  // ============================================================
   // AI FORM GENERATION API METHODS
   // ============================================================
 
@@ -491,6 +569,7 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const options: RequestInit = {
     method,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -612,4 +691,570 @@ export async function getApplicationSignature(applicationId: string): Promise<Si
 // Get all signatures for an application
 export async function listApplicationSignatures(applicationId: string): Promise<Signature[]> {
   return apiRequest('GET', `/api/applications/${applicationId}/signatures`);
+}
+
+// ============================================================
+// COMPLIANCE API METHODS
+// ============================================================
+
+export interface ComplianceCategory {
+  id: string;
+  tenantId: string | null;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  isSystem: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface ComplianceItem {
+  id: string;
+  scope: 'property' | 'management_company';
+  propertyId: string | null;
+  managementCompanyId: string | null;
+  categoryId: string;
+  title: string;
+  description: string | null;
+  dueDate: string;
+  completedDate: string | null;
+  status: 'pending' | 'upcoming' | 'overdue' | 'completed' | 'na';
+  recurrencePattern: 'none' | 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+  recurrenceDay: number | null;
+  recurrenceMonth: number | null;
+  nextDueDate: string | null;
+  priority: 'low' | 'normal' | 'high' | 'critical';
+  reminderDays: number[] | null;
+  notes: string | null;
+  externalReference: string | null;
+  createdByUserId: string | null;
+  completedByUserId: string | null;
+  demoCodeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Joined fields
+  category?: ComplianceCategory;
+  property?: { id: string; name: string };
+  managementCompany?: { id: string; name: string };
+}
+
+export interface ComplianceDocument {
+  id: string;
+  complianceItemId: string;
+  documentType: string;
+  fileName: string;
+  blobPath: string;
+  containerName: string;
+  fileSize: number;
+  mimeType: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  uploadedByUserId: string | null;
+  uploadedAt: string;
+  demoCodeId: string | null;
+}
+
+export interface ComplianceDashboard {
+  upcomingCount: number;
+  overdueCount: number;
+  completedThisMonthCount: number;
+  upcomingItems: ComplianceItem[];
+  overdueItems: ComplianceItem[];
+}
+
+export interface ComplianceItemFilters {
+  scope?: 'property' | 'management_company';
+  propertyId?: string;
+  managementCompanyId?: string;
+  categoryId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// List all compliance categories
+export async function listComplianceCategories(): Promise<ComplianceCategory[]> {
+  return apiRequest('GET', '/api/compliance/categories');
+}
+
+// Create a compliance category
+export async function createComplianceCategory(data: {
+  name: string;
+  slug?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+}): Promise<ComplianceCategory> {
+  return apiRequest('POST', '/api/compliance/categories', data);
+}
+
+// Get compliance dashboard
+export async function getComplianceDashboard(
+  managementCompanyId?: string,
+  propertyId?: string
+): Promise<ComplianceDashboard> {
+  const params = new URLSearchParams();
+  if (managementCompanyId) params.append('managementCompanyId', managementCompanyId);
+  if (propertyId) params.append('propertyId', propertyId);
+  const queryString = params.toString();
+  return apiRequest('GET', `/api/compliance/dashboard${queryString ? `?${queryString}` : ''}`);
+}
+
+// List compliance items with filters
+export async function listComplianceItems(filters: ComplianceItemFilters = {}): Promise<ComplianceItem[]> {
+  const params = new URLSearchParams();
+  if (filters.scope) params.append('scope', filters.scope);
+  if (filters.propertyId) params.append('propertyId', filters.propertyId);
+  if (filters.managementCompanyId) params.append('managementCompanyId', filters.managementCompanyId);
+  if (filters.categoryId) params.append('categoryId', filters.categoryId);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+  if (filters.dateTo) params.append('dateTo', filters.dateTo);
+  const queryString = params.toString();
+  return apiRequest('GET', `/api/compliance/items${queryString ? `?${queryString}` : ''}`);
+}
+
+// Get single compliance item
+export async function getComplianceItem(id: string): Promise<ComplianceItem & { documents: ComplianceDocument[] }> {
+  return apiRequest('GET', `/api/compliance/items/${id}`);
+}
+
+// Create a compliance item
+export async function createComplianceItem(data: {
+  scope: 'property' | 'management_company';
+  propertyId?: string;
+  managementCompanyId?: string;
+  categoryId: string;
+  title: string;
+  description?: string;
+  dueDate: string;
+  recurrencePattern?: 'none' | 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+  recurrenceDay?: number;
+  recurrenceMonth?: number;
+  priority?: 'low' | 'normal' | 'high' | 'critical';
+  reminderDays?: number[];
+  notes?: string;
+  externalReference?: string;
+}): Promise<ComplianceItem> {
+  return apiRequest('POST', '/api/compliance/items', data);
+}
+
+// Update a compliance item
+export async function updateComplianceItem(
+  id: string,
+  data: Partial<{
+    categoryId: string;
+    title: string;
+    description: string;
+    dueDate: string;
+    status: 'pending' | 'upcoming' | 'overdue' | 'completed' | 'na';
+    recurrencePattern: 'none' | 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+    recurrenceDay: number;
+    recurrenceMonth: number;
+    priority: 'low' | 'normal' | 'high' | 'critical';
+    reminderDays: number[];
+    notes: string;
+    externalReference: string;
+  }>
+): Promise<ComplianceItem> {
+  return apiRequest('PATCH', `/api/compliance/items/${id}`, data);
+}
+
+// Delete a compliance item
+export async function deleteComplianceItem(id: string): Promise<void> {
+  return apiRequest('DELETE', `/api/compliance/items/${id}`);
+}
+
+// Complete a compliance item
+export async function completeComplianceItem(id: string, notes?: string): Promise<ComplianceItem> {
+  return apiRequest('POST', `/api/compliance/items/${id}/complete`, { notes });
+}
+
+// Reopen a compliance item
+export async function reopenComplianceItem(id: string): Promise<ComplianceItem> {
+  return apiRequest('POST', `/api/compliance/items/${id}/reopen`);
+}
+
+// Upload a compliance document
+export async function uploadComplianceDocument(
+  itemId: string,
+  file: File,
+  documentType: string,
+  validFrom?: string,
+  validUntil?: string
+): Promise<ComplianceDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentType', documentType);
+  if (validFrom) formData.append('validFrom', validFrom);
+  if (validUntil) formData.append('validUntil', validUntil);
+
+  const response = await fetch(`/api/compliance/items/${itemId}/documents`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `Upload failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// List compliance documents for an item
+export async function listComplianceDocuments(itemId: string): Promise<ComplianceDocument[]> {
+  return apiRequest('GET', `/api/compliance/items/${itemId}/documents`);
+}
+
+// Get compliance document download URL
+export function getComplianceDocumentDownloadUrl(documentId: string): string {
+  return `/api/compliance/documents/${documentId}/download`;
+}
+
+// Delete a compliance document
+export async function deleteComplianceDocument(documentId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/compliance/documents/${documentId}`);
+}
+
+// ============================================================
+// EVENTS / CALENDAR API METHODS
+// ============================================================
+
+export interface EventType {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  defaultDuration: number | null;
+  requiresAttendance: boolean;
+  isSystem: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  tenantId: string;
+  eventTypeId: string;
+  title: string;
+  description: string | null;
+  startDatetime: string;
+  endDatetime: string;
+  allDay: boolean;
+  location: string | null;
+  meetingUrl: string | null;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  recurrenceRule: string | null;
+  recurrenceEndDate: string | null;
+  parentEventId: string | null;
+  reminderDays: number[] | null;
+  noticeRequiredDays: number | null;
+  noticeSentAt: string | null;
+  createdByUserId: string | null;
+  demoCodeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Joined data
+  eventType?: EventType;
+  tenant?: { id: string; name: string };
+}
+
+export interface EventWithDetails extends CalendarEvent {
+  attendees: EventAttendee[];
+  documents: EventDocument[];
+  applications: EventApplication[];
+}
+
+export interface EventAttendee {
+  id: string;
+  eventId: string;
+  userId: string | null;
+  email: string;
+  name: string | null;
+  role: 'organizer' | 'required' | 'optional' | 'presenter';
+  responseStatus: 'pending' | 'accepted' | 'declined' | 'tentative';
+  respondedAt: string | null;
+  attended: boolean | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventDocument {
+  id: string;
+  eventId: string;
+  documentType: 'agenda' | 'minutes' | 'recording' | 'presentation' | 'attendance_sheet' | 'packet' | 'other';
+  fileName: string;
+  blobPath: string;
+  containerName: string;
+  fileSize: number;
+  mimeType: string | null;
+  uploadedByUserId: string | null;
+  uploadedAt: string;
+  demoCodeId: string | null;
+}
+
+export interface EventApplication {
+  id: string;
+  eventId: string;
+  applicationId: string;
+  addedByUserId: string | null;
+  addedAt: string;
+  orderIndex: number | null;
+  notes: string | null;
+  decision: string | null;
+  decisionNotes: string | null;
+  // Joined application data
+  application?: {
+    id: string;
+    formData: any;
+    status: string;
+    submittedAt: string;
+  };
+}
+
+export interface EventFilters {
+  tenantId?: string;
+  eventTypeId?: string;
+  status?: string;
+  startAfter?: string;
+  startBefore?: string;
+}
+
+// List all event types
+export async function listEventTypes(): Promise<EventType[]> {
+  return apiRequest('GET', '/api/events/types');
+}
+
+// Get event type by ID
+export async function getEventType(id: string): Promise<EventType> {
+  return apiRequest('GET', `/api/events/types/${id}`);
+}
+
+// List events with filters
+export async function listEvents(filters: EventFilters = {}): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams();
+  if (filters.tenantId) params.append('tenantId', filters.tenantId);
+  if (filters.eventTypeId) params.append('eventTypeId', filters.eventTypeId);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.startAfter) params.append('startAfter', filters.startAfter);
+  if (filters.startBefore) params.append('startBefore', filters.startBefore);
+  const queryString = params.toString();
+  return apiRequest('GET', `/api/events${queryString ? `?${queryString}` : ''}`);
+}
+
+// Get calendar events for a date range
+export async function getCalendarEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams({ startDate, endDate });
+  return apiRequest('GET', `/api/events/calendar?${params.toString()}`);
+}
+
+// Get single event with all details
+export async function getEvent(id: string): Promise<EventWithDetails> {
+  return apiRequest('GET', `/api/events/${id}`);
+}
+
+// Create an event
+export async function createEvent(data: {
+  tenantId: string;
+  eventTypeId: string;
+  title: string;
+  description?: string;
+  startDatetime: string;
+  endDatetime: string;
+  allDay?: boolean;
+  location?: string;
+  meetingUrl?: string;
+  status?: 'draft' | 'scheduled';
+  recurrenceRule?: string;
+  recurrenceEndDate?: string;
+  reminderDays?: number[];
+  noticeRequiredDays?: number;
+}): Promise<CalendarEvent> {
+  return apiRequest('POST', '/api/events', data);
+}
+
+// Update an event
+export async function updateEvent(
+  id: string,
+  data: Partial<{
+    eventTypeId: string;
+    title: string;
+    description: string;
+    startDatetime: string;
+    endDatetime: string;
+    allDay: boolean;
+    location: string;
+    meetingUrl: string;
+    status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+    recurrenceRule: string;
+    recurrenceEndDate: string;
+    reminderDays: number[];
+    noticeRequiredDays: number;
+  }>
+): Promise<CalendarEvent> {
+  return apiRequest('PATCH', `/api/events/${id}`, data);
+}
+
+// Delete an event
+export async function deleteEvent(id: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${id}`);
+}
+
+// Complete an event
+export async function completeEvent(id: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${id}/complete`);
+}
+
+// Cancel an event
+export async function cancelEvent(id: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${id}/cancel`);
+}
+
+// ============================================================
+// EVENT ATTENDEES API METHODS
+// ============================================================
+
+// List attendees for an event
+export async function listEventAttendees(eventId: string): Promise<EventAttendee[]> {
+  return apiRequest('GET', `/api/events/${eventId}/attendees`);
+}
+
+// Add attendee to event
+export async function createEventAttendee(eventId: string, data: {
+  userId?: string;
+  email: string;
+  name?: string;
+  role?: 'organizer' | 'required' | 'optional' | 'presenter';
+}): Promise<EventAttendee> {
+  return apiRequest('POST', `/api/events/${eventId}/attendees`, data);
+}
+
+// Update attendee (RSVP, attendance)
+export async function updateEventAttendee(
+  eventId: string,
+  attendeeId: string,
+  data: Partial<{
+    role: 'organizer' | 'required' | 'optional' | 'presenter';
+    responseStatus: 'pending' | 'accepted' | 'declined' | 'tentative';
+    attended: boolean;
+    notes: string;
+  }>
+): Promise<EventAttendee> {
+  return apiRequest('PATCH', `/api/events/${eventId}/attendees/${attendeeId}`, data);
+}
+
+// Remove attendee from event
+export async function deleteEventAttendee(eventId: string, attendeeId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${eventId}/attendees/${attendeeId}`);
+}
+
+// ============================================================
+// EVENT DOCUMENTS API METHODS
+// ============================================================
+
+// List documents for an event
+export async function listEventDocuments(eventId: string): Promise<EventDocument[]> {
+  return apiRequest('GET', `/api/events/${eventId}/documents`);
+}
+
+// Upload document to event
+export async function uploadEventDocument(
+  eventId: string,
+  file: File,
+  documentType: 'agenda' | 'minutes' | 'recording' | 'presentation' | 'attendance_sheet' | 'packet' | 'other'
+): Promise<EventDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('documentType', documentType);
+
+  const response = await fetch(`/api/events/${eventId}/documents`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `Upload failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// Get event document download URL
+export function getEventDocumentDownloadUrl(documentId: string): string {
+  return `/api/events/documents/${documentId}/download`;
+}
+
+// Delete an event document
+export async function deleteEventDocument(documentId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/documents/${documentId}`);
+}
+
+// ============================================================
+// EVENT APPLICATIONS (REVIEW PACKETS) API METHODS
+// ============================================================
+
+// List applications linked to an event
+export async function listEventApplications(eventId: string): Promise<EventApplication[]> {
+  return apiRequest('GET', `/api/events/${eventId}/applications`);
+}
+
+// Link application to event
+export async function linkApplicationToEvent(eventId: string, data: {
+  applicationId: string;
+  orderIndex?: number;
+  notes?: string;
+}): Promise<EventApplication> {
+  return apiRequest('POST', `/api/events/${eventId}/applications`, data);
+}
+
+// Update application link (order, notes, decision)
+export async function updateEventApplication(
+  eventId: string,
+  linkId: string,
+  data: Partial<{
+    orderIndex: number;
+    notes: string;
+    decision: string;
+    decisionNotes: string;
+  }>
+): Promise<EventApplication> {
+  return apiRequest('PATCH', `/api/events/${eventId}/applications/${linkId}`, data);
+}
+
+// Unlink application from event
+export async function unlinkApplicationFromEvent(eventId: string, linkId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${eventId}/applications/${linkId}`);
+}
+
+// ============================================================
+// CALENDAR FEED (iCal) API METHODS
+// ============================================================
+
+export interface CalendarFeedToken {
+  token: string;
+  feedUrl: string;
+  createdAt: string;
+  lastAccessedAt: string | null;
+  accessCount: number;
+  message?: string;
+}
+
+// Get or create calendar feed token for the current user
+export async function getCalendarFeedToken(): Promise<CalendarFeedToken> {
+  return apiRequest('GET', '/api/calendar-feed/token');
+}
+
+// Regenerate calendar feed token (invalidates old URL)
+export async function regenerateCalendarFeedToken(): Promise<CalendarFeedToken> {
+  return apiRequest('POST', '/api/calendar-feed/regenerate');
 }

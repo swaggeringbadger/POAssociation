@@ -29,6 +29,7 @@ import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
+import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { api, queryClient } from "@/lib/api";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings } from "lucide-react";
 import logoImage from "@assets/generated_images/POAssociationLogo.png";
@@ -101,12 +102,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ? `${user.firstName} ${user.lastName}`
     : user?.email || "User";
 
-  // Format role display name
+  // Get the legal entity label for the current tenant (POA or HOA)
+  const legalEntityLabel = useLegalEntityLabel();
+
+  // Format role display name - replaces "Poa" with the correct entity label
   const formatRole = (role: string) => {
-    return role
+    const formatted = role
       .split('_')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+    // Replace "Poa" or "Hoa" with the correct label based on current tenant
+    return formatted.replace(/\bPoa\b/g, legalEntityLabel).replace(/\bHoa\b/g, legalEntityLabel);
   };
 
   // Get role icon/emoji
@@ -340,7 +346,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {availableRolesForCurrentTenant.map(role => (
                       <DropdownMenuItem
                         key={role}
-                        onClick={() => {
+                        onClick={async () => {
+                          // Update session on backend
+                          try {
+                            await fetch('/api/auth/switch-role', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              credentials: 'include',
+                              body: JSON.stringify({ role }),
+                            });
+                          } catch (error) {
+                            console.error('Failed to switch role on backend:', error);
+                          }
+
+                          // Update client-side store
                           setCurrentUserRole(role);
                           window.location.href = '/dashboard';
                         }}
@@ -385,7 +404,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <DropdownMenuLabel>Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => window.location.href = "/settings"}
+                  onClick={() => window.location.href = "/profile"}
                   data-testid="button-profile-settings"
                 >
                   <UserIcon className="mr-2 h-4 w-4" />

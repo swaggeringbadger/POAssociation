@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -64,21 +64,23 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
+// Legal entity type - distinguishes between POA and HOA communities
+export const legalEntityTypeSchema = z.enum(['poa', 'hoa']);
+export type LegalEntityType = z.infer<typeof legalEntityTypeSchema>;
+
+// Address schema (reusable)
+export const addressSchema = z.object({
+  street: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+});
+
 // Management company settings type
 export const managementCompanySettingsSchema = z.object({
   description: z.string().optional(),
-  address: z.object({
-    street: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    zip: z.string().optional(),
-  }).optional(),
-  mailingAddress: z.object({
-    street: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    zip: z.string().optional(),
-  }).optional(),
+  address: addressSchema.optional(),
+  mailingAddress: addressSchema.optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
   website: z.string().optional(),
@@ -87,6 +89,33 @@ export const managementCompanySettingsSchema = z.object({
 });
 
 export type ManagementCompanySettings = z.infer<typeof managementCompanySettingsSchema>;
+
+// Community settings type (for community-specific settings like legal entity, contact info, etc.)
+export const communitySettingsSchema = z.object({
+  // Legal Entity
+  legalEntityType: legalEntityTypeSchema.optional(), // 'poa' or 'hoa' - defaults to 'poa' if not set
+  legalEntityName: z.string().optional(), // Official legal name (e.g., "Markland Property Owners Association, Inc.")
+  stateOfIncorporation: z.string().optional(),
+  taxId: z.string().optional(), // EIN/Tax ID (stored securely, displayed masked)
+
+  // Contact Information
+  contactEmail: z.string().optional(),
+  contactPhone: z.string().optional(),
+  officeHours: z.string().optional(),
+  emergencyPhone: z.string().optional(),
+
+  // Addresses
+  physicalAddress: addressSchema.optional(),
+  mailingAddress: addressSchema.optional(),
+
+  // General
+  description: z.string().optional(),
+  website: z.string().optional(),
+  yearEstablished: z.number().optional(),
+  numberOfLots: z.number().optional(),
+});
+
+export type CommunitySettings = z.infer<typeof communitySettingsSchema>;
 
 // Tenants table (Communities and Management Companies)
 export const tenants = pgTable("tenants", {
@@ -98,6 +127,7 @@ export const tenants = pgTable("tenants", {
   workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
   designGuidelinesUrl: text("design_guidelines_url"), // URL to property's design guidelines/covenants
   settings: jsonb("settings").$type<ManagementCompanySettings>(), // Management company settings (address, payment instructions, etc.)
+  communitySettings: jsonb("community_settings").$type<CommunitySettings>(), // Community-specific settings (legal entity, contact info, etc.)
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -278,6 +308,8 @@ export const workflowTemplates = pgTable("workflow_templates", {
   name: text("name").notNull(), // e.g., "Standard 3-Step Review", "Management + Board"
   description: text("description"),
   steps: jsonb("steps").notNull(), // [{title, role, allowEdit, actions}]
+  isBlueprint: boolean("is_blueprint").default(false).notNull(),
+  version: integer("version").default(1).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -436,3 +468,419 @@ export type Signature = typeof signatures.$inferSelect;
 export const updateTenantWorkflowTemplateId = () => {
   // This is a marker - actual migration handled by npm run db:push
 };
+
+// ============================================
+// COMPLIANCE MODULE TABLES
+// ============================================
+
+// Compliance status enum
+export const complianceStatusSchema = z.enum([
+  'pending',      // Not yet due
+  'upcoming',     // Due within reminder period
+  'overdue',      // Past due date
+  'completed',    // Completed for current period
+  'na'            // Not applicable
+]);
+export type ComplianceStatus = z.infer<typeof complianceStatusSchema>;
+
+// Recurrence pattern enum
+export const recurrencePatternSchema = z.enum([
+  'none',         // One-time item
+  'annual',       // Yearly
+  'semi_annual',  // Twice a year
+  'quarterly',    // Four times a year
+  'monthly',      // Monthly
+]);
+export type RecurrencePattern = z.infer<typeof recurrencePatternSchema>;
+
+// Scope enum - determines if item is per-property or company-wide
+export const complianceScopeSchema = z.enum([
+  'property',           // Per-property (community) item
+  'management_company'  // Management company level item
+]);
+export type ComplianceScope = z.infer<typeof complianceScopeSchema>;
+
+// Priority enum
+export const compliancePrioritySchema = z.enum([
+  'low',
+  'normal',
+  'high',
+  'critical'
+]);
+export type CompliancePriority = z.infer<typeof compliancePrioritySchema>;
+
+// Compliance Categories - predefined types of compliance items
+export const complianceCategories = pgTable("compliance_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+  // null tenantId = system-wide default categories
+  name: text("name").notNull(), // e.g., "State Filings", "Meeting Requirements", "Insurance & Bonds"
+  slug: text("slug").notNull(), // e.g., "state-filings", "meetings", "insurance"
+  description: text("description"),
+  icon: text("icon"), // Icon identifier for UI (lucide icon name)
+  color: text("color"), // Color code for UI badges
+  isSystem: boolean("is_system").default(false).notNull(), // True for default categories
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("compliance_categories_tenant_idx").on(table.tenantId),
+  slugIdx: index("compliance_categories_slug_idx").on(table.slug),
+}));
+
+export const insertComplianceCategorySchema = createInsertSchema(complianceCategories).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertComplianceCategory = z.infer<typeof insertComplianceCategorySchema>;
+export type ComplianceCategory = typeof complianceCategories.$inferSelect;
+
+// Compliance Items - individual tracked items with deadlines
+export const complianceItems = pgTable("compliance_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Scope - either propertyId OR managementCompanyId, but not both
+  scope: text("scope").notNull(), // 'property' or 'management_company'
+  propertyId: varchar("property_id").references(() => tenants.id, { onDelete: "cascade" }),
+  managementCompanyId: varchar("management_company_id").references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Category reference
+  categoryId: varchar("category_id").notNull().references(() => complianceCategories.id),
+
+  // Item details
+  title: text("title").notNull(),
+  description: text("description"),
+
+  // Dates
+  dueDate: timestamp("due_date").notNull(),
+  completedDate: timestamp("completed_date"),
+
+  // Recurrence
+  recurrencePattern: text("recurrence_pattern").notNull().default('none'),
+  recurrenceDay: integer("recurrence_day"), // Day of month for recurring items
+  recurrenceMonth: integer("recurrence_month"), // Month for annual items (1-12)
+  nextDueDate: timestamp("next_due_date"), // Pre-calculated next due date for recurring items
+
+  // Status and tracking
+  status: text("status").notNull().default('pending'),
+  priority: text("priority").default('normal'), // 'low', 'normal', 'high', 'critical'
+
+  // Reminders - days before due date to remind
+  reminderDays: jsonb("reminder_days").$type<number[]>().default(sql`'[30, 14, 7, 1]'`),
+  lastReminderSentAt: timestamp("last_reminder_sent_at"),
+
+  // Metadata
+  notes: text("notes"),
+  externalReference: text("external_reference"), // Filing number, policy number, etc.
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  completedByUserId: varchar("completed_by_user_id").references(() => users.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  propertyIdx: index("compliance_items_property_idx").on(table.propertyId),
+  managementCompanyIdx: index("compliance_items_mgmt_company_idx").on(table.managementCompanyId),
+  categoryIdx: index("compliance_items_category_idx").on(table.categoryId),
+  dueDateIdx: index("compliance_items_due_date_idx").on(table.dueDate),
+  statusIdx: index("compliance_items_status_idx").on(table.status),
+}));
+
+export const insertComplianceItemSchema = createInsertSchema(complianceItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertComplianceItem = z.infer<typeof insertComplianceItemSchema>;
+export type ComplianceItem = typeof complianceItems.$inferSelect;
+
+// Compliance Documents - attachments linked to compliance items
+export const complianceDocuments = pgTable("compliance_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  complianceItemId: varchar("compliance_item_id").notNull().references(() => complianceItems.id, { onDelete: "cascade" }),
+
+  // Document details
+  documentType: text("document_type").notNull(), // 'filing_receipt', 'certificate', 'policy', 'minutes', etc.
+  fileName: text("file_name").notNull(),
+  blobPath: text("blob_path").notNull(),
+  containerName: text("container_name").notNull().default("compliance-documents"),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+
+  // Validity period for documents like insurance policies
+  validFrom: timestamp("valid_from"),
+  validUntil: timestamp("valid_until"),
+
+  // Audit
+  uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+}, (table) => ({
+  complianceItemIdx: index("compliance_docs_item_idx").on(table.complianceItemId),
+}));
+
+export const insertComplianceDocumentSchema = createInsertSchema(complianceDocuments).omit({
+  id: true,
+  uploadedAt: true,
+});
+export type InsertComplianceDocument = z.infer<typeof insertComplianceDocumentSchema>;
+export type ComplianceDocument = typeof complianceDocuments.$inferSelect;
+
+// ============================================
+// EVENTS & MEETINGS MODULE
+// ============================================
+
+// Event status enum
+export const eventStatusSchema = z.enum([
+  'draft',
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled'
+]);
+export type EventStatus = z.infer<typeof eventStatusSchema>;
+
+// Event attendee role enum
+export const eventAttendeeRoleSchema = z.enum([
+  'organizer',
+  'required',
+  'optional',
+  'presenter'
+]);
+export type EventAttendeeRole = z.infer<typeof eventAttendeeRoleSchema>;
+
+// Event attendee response status enum
+export const eventResponseStatusSchema = z.enum([
+  'pending',
+  'accepted',
+  'declined',
+  'tentative'
+]);
+export type EventResponseStatus = z.infer<typeof eventResponseStatusSchema>;
+
+// Event document type enum
+export const eventDocumentTypeSchema = z.enum([
+  'agenda',
+  'minutes',
+  'recording',
+  'presentation',
+  'attendance_sheet',
+  'packet',
+  'other'
+]);
+export type EventDocumentType = z.infer<typeof eventDocumentTypeSchema>;
+
+// Event Types - predefined categories of events
+export const eventTypes = pgTable("event_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(), // e.g., "board_meeting", "arc_meeting"
+  name: text("name").notNull(), // e.g., "Board Meeting", "ARC Review Meeting"
+  description: text("description"),
+  icon: text("icon"), // lucide icon name
+  color: text("color"), // Color for UI display
+  defaultDuration: integer("default_duration").default(60), // Default duration in minutes
+  requiresAttendance: boolean("requires_attendance").default(true).notNull(),
+  isSystem: boolean("is_system").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  slugIdx: index("event_types_slug_idx").on(table.slug),
+}));
+
+export const insertEventTypeSchema = createInsertSchema(eventTypes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertEventType = z.infer<typeof insertEventTypeSchema>;
+export type EventType = typeof eventTypes.$inferSelect;
+
+// Events - core event/meeting records
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Required tenant reference (property or management company)
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Event type
+  eventTypeId: varchar("event_type_id").notNull().references(() => eventTypes.id),
+
+  // Event details
+  title: text("title").notNull(),
+  description: text("description"),
+
+  // Timing
+  startDatetime: timestamp("start_datetime").notNull(),
+  endDatetime: timestamp("end_datetime").notNull(),
+  allDay: boolean("all_day").default(false).notNull(),
+
+  // Location
+  location: text("location"), // Physical address or "Virtual"
+  meetingUrl: text("meeting_url"), // Zoom/Teams link
+
+  // Status
+  status: text("status").notNull().default('scheduled'),
+
+  // Recurrence (iCal RRULE format for flexibility)
+  recurrenceRule: text("recurrence_rule"), // e.g., "FREQ=MONTHLY;BYDAY=1TU"
+  recurrenceEndDate: timestamp("recurrence_end_date"),
+  parentEventId: varchar("parent_event_id").references((): AnyPgColumn => events.id, { onDelete: "cascade" }),
+
+  // Reminders & Notices
+  reminderDays: jsonb("reminder_days").$type<number[]>().default(sql`'[7, 1]'`),
+  noticeRequiredDays: integer("notice_required_days"), // For compliance tracking (e.g., 14 days notice)
+  noticeSentAt: timestamp("notice_sent_at"),
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("events_tenant_idx").on(table.tenantId),
+  eventTypeIdx: index("events_type_idx").on(table.eventTypeId),
+  startDatetimeIdx: index("events_start_datetime_idx").on(table.startDatetime),
+  statusIdx: index("events_status_idx").on(table.status),
+  parentEventIdx: index("events_parent_idx").on(table.parentEventId),
+}));
+
+export const insertEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type Event = typeof events.$inferSelect;
+
+// Event Attendees - track who should attend and their responses
+export const eventAttendees = pgTable("event_attendees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+
+  // User reference (nullable for external attendees)
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+
+  // For display or external attendees
+  email: text("email"),
+  name: text("name"),
+
+  // Attendance details
+  role: text("role").notNull().default('required'), // 'organizer', 'required', 'optional', 'presenter'
+  responseStatus: text("response_status").notNull().default('pending'), // 'pending', 'accepted', 'declined', 'tentative'
+  respondedAt: timestamp("responded_at"),
+
+  // Actual attendance (filled after meeting)
+  attended: boolean("attended"),
+
+  // Notes
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("event_attendees_event_idx").on(table.eventId),
+  userIdx: index("event_attendees_user_idx").on(table.userId),
+}));
+
+export const insertEventAttendeeSchema = createInsertSchema(eventAttendees).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertEventAttendee = z.infer<typeof insertEventAttendeeSchema>;
+export type EventAttendee = typeof eventAttendees.$inferSelect;
+
+// Event Documents - agendas, minutes, recordings, etc.
+export const eventDocuments = pgTable("event_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+
+  // Document details
+  documentType: text("document_type").notNull(), // 'agenda', 'minutes', 'recording', etc.
+  fileName: text("file_name").notNull(),
+  blobPath: text("blob_path").notNull(),
+  containerName: text("container_name").notNull().default("event-documents"),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+
+  // Audit
+  uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+}, (table) => ({
+  eventIdx: index("event_docs_event_idx").on(table.eventId),
+  typeIdx: index("event_docs_type_idx").on(table.documentType),
+}));
+
+export const insertEventDocumentSchema = createInsertSchema(eventDocuments).omit({
+  id: true,
+  uploadedAt: true,
+});
+export type InsertEventDocument = z.infer<typeof insertEventDocumentSchema>;
+export type EventDocument = typeof eventDocuments.$inferSelect;
+
+// Event Applications - links applications to review meetings (for review packets)
+export const eventApplications = pgTable("event_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+
+  // Ordering for agenda
+  orderIndex: integer("order_index").default(0).notNull(),
+
+  // Pre-meeting notes about this application
+  notes: text("notes"),
+
+  // Post-meeting decision (filled during/after meeting)
+  decision: text("decision"), // 'approved', 'rejected', 'tabled', 'conditional', etc.
+  decisionNotes: text("decision_notes"),
+
+  // Audit
+  addedByUserId: varchar("added_by_user_id").references(() => users.id),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("event_applications_event_idx").on(table.eventId),
+  applicationIdx: index("event_applications_app_idx").on(table.applicationId),
+  // Unique constraint to prevent duplicate links
+  uniqueEventApp: index("event_applications_unique_idx").on(table.eventId, table.applicationId),
+}));
+
+export const insertEventApplicationSchema = createInsertSchema(eventApplications).omit({
+  id: true,
+  addedAt: true,
+});
+export type InsertEventApplication = z.infer<typeof insertEventApplicationSchema>;
+export type EventApplication = typeof eventApplications.$inferSelect;
+
+// Calendar Feed Tokens - for iCal subscription URLs
+export const calendarFeedTokens = pgTable("calendar_feed_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // Unique token for the feed URL (long random string for security)
+  token: text("token").notNull().unique(),
+
+  // Optional: restrict to specific tenant
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Optional: filter by event types (null = all types)
+  eventTypeFilter: jsonb("event_type_filter").$type<string[]>(),
+
+  // Token management
+  isActive: boolean("is_active").default(true).notNull(),
+  lastAccessedAt: timestamp("last_accessed_at"),
+  accessCount: integer("access_count").default(0).notNull(),
+
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"), // null = never expires
+}, (table) => ({
+  userIdx: index("calendar_feed_tokens_user_idx").on(table.userId),
+  tokenIdx: index("calendar_feed_tokens_token_idx").on(table.token),
+}));
+
+export const insertCalendarFeedTokenSchema = createInsertSchema(calendarFeedTokens).omit({
+  id: true,
+  createdAt: true,
+  lastAccessedAt: true,
+  accessCount: true,
+});
+export type InsertCalendarFeedToken = z.infer<typeof insertCalendarFeedTokenSchema>;
+export type CalendarFeedToken = typeof calendarFeedTokens.$inferSelect;

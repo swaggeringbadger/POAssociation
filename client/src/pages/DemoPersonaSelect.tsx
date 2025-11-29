@@ -22,7 +22,7 @@ const PERSONA_INFO = {
     gradient: 'from-blue-500 to-blue-600',
   },
   'Sarah': {
-    title: 'POA Board Member',
+    title: 'Board Member',
     icon: ShieldCheck,
     description: 'Review applications, approve modifications, and maintain community standards',
     features: [

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
+import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Loader2, Filter, ChevronDown, Eye, MoreVertical, Trash2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
@@ -35,6 +36,7 @@ export default function Applications() {
   const { user } = useAuth();
   const { currentUserRole, currentTenant } = useAppStore();
   const queryClient = useQueryClient();
+  const legalEntityLabel = useLegalEntityLabel();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [propertyFilter, setPropertyFilter] = useState<string | null>(null);
@@ -114,6 +116,7 @@ export default function Applications() {
       "Management Only": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
       "Initial Screening": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
       "POA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      "HOA Board Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Board Review & Vote": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Committee Review": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
       "Board Approval": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
@@ -124,8 +127,10 @@ export default function Applications() {
     };
 
     const variantClass = stageVariants[workflowStage] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
+    // Replace POA/HOA with the correct label based on tenant settings
+    const displayStage = workflowStage.replace(/\bPOA\b/g, legalEntityLabel).replace(/\bHOA\b/g, legalEntityLabel);
     return (
-      <Badge className={variantClass}>{workflowStage}</Badge>
+      <Badge className={variantClass}>{displayStage}</Badge>
     );
   };
 

@@ -28,14 +28,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -45,16 +37,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { Search, Plus, MoreVertical, Edit, Trash2, TreePine, Building, Ticket } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import EditPropertyModal from "@/components/EditPropertyModal";
+import { getLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 
 export default function Properties() {
   const queryClient = useQueryClient();
@@ -63,15 +49,7 @@ export default function Properties() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-  const [isEditing, setIsEditing] = useState(false);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    subdomain: "",
-    managementCompanyId: "",
-    designGuidelinesUrl: "",
-  });
+  const [isCreating, setIsCreating] = useState(false);
 
   // Fetch properties managed by current user
   const { data: properties = [], isLoading } = useQuery({
@@ -80,31 +58,7 @@ export default function Properties() {
   });
 
   // Fetch all management companies for dropdown (get from properties that are management_company type)
-  const managementCompanies = properties.filter(p => p.type === 'management_company');
-
-  // Mutation for creating/updating
-  const saveMutation = useMutation({
-    mutationFn: (data: typeof formData) =>
-      isEditing && selectedProperty
-        ? api.updateTenant(selectedProperty.id, { ...data, type: 'community' })
-        : api.createTenant({ ...data, type: 'community', isActive: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
-      setDialogOpen(false);
-      resetForm();
-      toast({
-        title: isEditing ? "Property updated" : "Property created",
-        description: `Property has been successfully ${isEditing ? 'updated' : 'created'}.`,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const managementCompanies = properties.filter((p: any) => p.type === 'management_company');
 
   // Mutation for deleting
   const deleteMutation = useMutation({
@@ -128,10 +82,10 @@ export default function Properties() {
   });
 
   // Filter properties based on search - only show communities
-  const communities = properties.filter(p => p.type === 'community');
-  const filteredProperties = communities.filter((property) => {
+  const communities = properties.filter((p: any) => p.type === 'community');
+  const filteredProperties = communities.filter((property: any) => {
     const searchLower = searchQuery.toLowerCase();
-    const parentCompany = properties.find(mc => mc.id === property.managementCompanyId);
+    const parentCompany = properties.find((mc: any) => mc.id === property.managementCompanyId);
     return (
       property.name.toLowerCase().includes(searchLower) ||
       property.subdomain.toLowerCase().includes(searchLower) ||
@@ -140,21 +94,14 @@ export default function Properties() {
   });
 
   const handleCreate = () => {
-    setIsEditing(false);
+    setIsCreating(true);
     setSelectedProperty(null);
-    resetForm();
     setDialogOpen(true);
   };
 
   const handleEdit = (property: any) => {
-    setIsEditing(true);
+    setIsCreating(false);
     setSelectedProperty(property);
-    setFormData({
-      name: property.name,
-      subdomain: property.subdomain,
-      managementCompanyId: property.managementCompanyId || "none",
-      designGuidelinesUrl: property.designGuidelinesUrl || "",
-    });
     setDialogOpen(true);
   };
 
@@ -163,31 +110,9 @@ export default function Properties() {
     setDeleteDialogOpen(true);
   };
 
-  const handleSubmit = () => {
-    if (!formData.name || !formData.subdomain) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
-      return;
-    }
-    saveMutation.mutate({
-      ...formData,
-      managementCompanyId: formData.managementCompanyId === 'none' ? null : formData.managementCompanyId,
-      designGuidelinesUrl: formData.designGuidelinesUrl || null,
-    });
-  };
-
-  const resetForm = () => {
-    setFormData({ name: "", subdomain: "", managementCompanyId: "none", designGuidelinesUrl: "" });
-    setSelectedProperty(null);
-    setIsEditing(false);
-  };
-
   const getManagementCompanyName = (id: string | null) => {
     if (!id) return "None";
-    return managementCompanies.find(mc => mc.id === id)?.name || "Unknown";
+    return managementCompanies.find((mc: any) => mc.id === id)?.name || "Unknown";
   };
 
   return (
@@ -232,6 +157,7 @@ export default function Properties() {
                 <TableHead>Name</TableHead>
                 <TableHead>Subdomain</TableHead>
                 <TableHead>Management Company</TableHead>
+                <TableHead>Entity</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
@@ -241,13 +167,13 @@ export default function Properties() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredProperties.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     {searchQuery ? "No properties found matching your search" : "No properties assigned to you yet"}
                   </TableCell>
                 </TableRow>
@@ -270,6 +196,11 @@ export default function Properties() {
                         <Building className="h-3 w-3 text-muted-foreground" />
                         {getManagementCompanyName(property.managementCompanyId)}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {getLegalEntityLabel(property)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {property.demoCodeId ? (
@@ -303,6 +234,10 @@ export default function Properties() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
+                            <Ticket className="mr-2 h-4 w-4" />
+                            Subscription & Feature Settings
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleDelete(property)}
@@ -322,80 +257,14 @@ export default function Properties() {
         </CardContent>
       </Card>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? "Edit" : "Create"} Property</DialogTitle>
-            <DialogDescription>
-              {isEditing ? "Update the property details." : "Add a new property to your portfolio."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Property Name</Label>
-              <Input
-                id="name"
-                placeholder="Whispering Pines HOA"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="subdomain">Subdomain</Label>
-              <Input
-                id="subdomain"
-                placeholder="whispering-pines"
-                value={formData.subdomain}
-                onChange={(e) => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-              />
-              <p className="text-xs text-muted-foreground">
-                This will be used for subdomain routing (e.g., {formData.subdomain || 'subdomain'}.poassociation.com)
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="managementCompany">Management Company (Optional)</Label>
-              <Select
-                value={formData.managementCompanyId}
-                onValueChange={(value) => setFormData({ ...formData, managementCompanyId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a management company" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {managementCompanies.map((company) => (
-                    <SelectItem key={company.id} value={company.id}>
-                      {company.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="designGuidelines">Design Guidelines URL (Optional)</Label>
-              <Input
-                id="designGuidelines"
-                placeholder="https://your-property.com/design-guidelines"
-                type="url"
-                value={formData.designGuidelinesUrl}
-                onChange={(e) => setFormData({ ...formData, designGuidelinesUrl: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                URL to your publicly posted design guidelines/covenants. Used for AI form generation.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving..." : isEditing ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Create/Edit Modal */}
+      <EditPropertyModal
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        property={selectedProperty}
+        managementCompanies={managementCompanies}
+        isCreating={isCreating}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
