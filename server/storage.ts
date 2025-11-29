@@ -223,6 +223,34 @@ export interface IStorage {
 
   // Calendar View
   getCalendarEvents(tenantIds: string[], startDate: Date, endDate: Date): Promise<(schema.Event & { eventType: schema.EventType })[]>;
+
+  // AI Analysis Credits
+  getAiAnalysisCredits(tenantId: string): Promise<schema.AiAnalysisCredits | undefined>;
+  createAiAnalysisCredits(credits: schema.InsertAiAnalysisCredits): Promise<schema.AiAnalysisCredits>;
+  updateAiAnalysisCredits(tenantId: string, updates: Partial<schema.InsertAiAnalysisCredits>): Promise<schema.AiAnalysisCredits>;
+  incrementAiCreditsUsed(tenantId: string): Promise<schema.AiAnalysisCredits>;
+  resetAiCreditsForBillingCycle(tenantId: string): Promise<schema.AiAnalysisCredits>;
+  setAiCreditsOverride(tenantId: string, override: { monthlyCredits?: number; overageCost?: string; reason: string; setByUserId: string }): Promise<schema.AiAnalysisCredits>;
+  removeAiCreditsOverride(tenantId: string): Promise<schema.AiAnalysisCredits>;
+
+  // AI Analyses
+  createAiAnalysis(analysis: schema.InsertAiAnalysis): Promise<schema.AiAnalysis>;
+  getAiAnalysis(id: string): Promise<schema.AiAnalysis | undefined>;
+  getAiAnalysisForApplication(applicationId: string): Promise<schema.AiAnalysis[]>;
+  listAiAnalysesForTenant(tenantId: string): Promise<schema.AiAnalysis[]>;
+  getNextQueuedAiAnalysis(): Promise<schema.AiAnalysis | undefined>;
+  updateAiAnalysis(id: string, updates: Partial<schema.AiAnalysis>): Promise<schema.AiAnalysis>;
+  updateAiAnalysisStatus(id: string, status: string, errorMessage?: string): Promise<schema.AiAnalysis>;
+  submitAiAnalysisFeedback(id: string, rating: number, feedback?: string): Promise<schema.AiAnalysis>;
+  getAiAnalysisStats(tenantIds?: string[]): Promise<{
+    totalAnalyses: number;
+    pendingAnalyses: number;
+    averageProcessingTimeMs: number;
+    averageComplianceScore: number;
+    successRate: number;
+    totalCostUsd: string;
+    averageRating: number | null;
+  }>;
 }
 
 export class DbStorage implements IStorage {
@@ -2035,6 +2063,236 @@ export class DbStorage implements IStorage {
       eventType: row.eventType!,
       tenant: row.tenant!,
     }));
+  }
+
+  // ============================================
+  // AI ANALYSIS CREDITS
+  // ============================================
+
+  async getAiAnalysisCredits(tenantId: string): Promise<schema.AiAnalysisCredits | undefined> {
+    const [credits] = await db
+      .select()
+      .from(schema.aiAnalysisCredits)
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId));
+    return credits;
+  }
+
+  async createAiAnalysisCredits(credits: schema.InsertAiAnalysisCredits): Promise<schema.AiAnalysisCredits> {
+    const [created] = await db
+      .insert(schema.aiAnalysisCredits)
+      .values(credits)
+      .returning();
+    return created;
+  }
+
+  async updateAiAnalysisCredits(tenantId: string, updates: Partial<schema.InsertAiAnalysisCredits>): Promise<schema.AiAnalysisCredits> {
+    const [updated] = await db
+      .update(schema.aiAnalysisCredits)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  async incrementAiCreditsUsed(tenantId: string): Promise<schema.AiAnalysisCredits> {
+    const [updated] = await db
+      .update(schema.aiAnalysisCredits)
+      .set({
+        creditsUsedThisMonth: sql`${schema.aiAnalysisCredits.creditsUsedThisMonth} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  async resetAiCreditsForBillingCycle(tenantId: string): Promise<schema.AiAnalysisCredits> {
+    const [updated] = await db
+      .update(schema.aiAnalysisCredits)
+      .set({
+        creditsUsedThisMonth: 0,
+        billingCycleStart: new Date(),
+        lastResetAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  async setAiCreditsOverride(
+    tenantId: string,
+    override: { monthlyCredits?: number; overageCost?: string; reason: string; setByUserId: string }
+  ): Promise<schema.AiAnalysisCredits> {
+    const [updated] = await db
+      .update(schema.aiAnalysisCredits)
+      .set({
+        overrideMonthlyCredits: override.monthlyCredits,
+        overrideOverageCost: override.overageCost,
+        overrideReason: override.reason,
+        overrideSetByUserId: override.setByUserId,
+        overrideSetAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  async removeAiCreditsOverride(tenantId: string): Promise<schema.AiAnalysisCredits> {
+    const [updated] = await db
+      .update(schema.aiAnalysisCredits)
+      .set({
+        overrideMonthlyCredits: null,
+        overrideOverageCost: null,
+        overrideReason: null,
+        overrideSetByUserId: null,
+        overrideSetAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalysisCredits.tenantId, tenantId))
+      .returning();
+    return updated;
+  }
+
+  // ============================================
+  // AI ANALYSES
+  // ============================================
+
+  async createAiAnalysis(analysis: schema.InsertAiAnalysis): Promise<schema.AiAnalysis> {
+    const [created] = await db
+      .insert(schema.aiAnalyses)
+      .values(analysis)
+      .returning();
+    return created;
+  }
+
+  async getAiAnalysis(id: string): Promise<schema.AiAnalysis | undefined> {
+    const [analysis] = await db
+      .select()
+      .from(schema.aiAnalyses)
+      .where(eq(schema.aiAnalyses.id, id));
+    return analysis;
+  }
+
+  async getAiAnalysisForApplication(applicationId: string): Promise<schema.AiAnalysis[]> {
+    return db
+      .select()
+      .from(schema.aiAnalyses)
+      .where(eq(schema.aiAnalyses.applicationId, applicationId))
+      .orderBy(desc(schema.aiAnalyses.queuedAt));
+  }
+
+  async listAiAnalysesForTenant(tenantId: string): Promise<schema.AiAnalysis[]> {
+    return db
+      .select()
+      .from(schema.aiAnalyses)
+      .where(eq(schema.aiAnalyses.tenantId, tenantId))
+      .orderBy(desc(schema.aiAnalyses.queuedAt));
+  }
+
+  async getNextQueuedAiAnalysis(): Promise<schema.AiAnalysis | undefined> {
+    // Get next queued analysis, ordered by priority (desc) then queued time (asc)
+    const [analysis] = await db
+      .select()
+      .from(schema.aiAnalyses)
+      .where(eq(schema.aiAnalyses.status, 'queued'))
+      .orderBy(desc(schema.aiAnalyses.priority), schema.aiAnalyses.queuedAt)
+      .limit(1);
+    return analysis;
+  }
+
+  async updateAiAnalysis(id: string, updates: Partial<schema.AiAnalysis>): Promise<schema.AiAnalysis> {
+    const [updated] = await db
+      .update(schema.aiAnalyses)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalyses.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateAiAnalysisStatus(id: string, status: string, errorMessage?: string): Promise<schema.AiAnalysis> {
+    const updates: Partial<schema.AiAnalysis> = {
+      status,
+      updatedAt: new Date(),
+    };
+
+    if (status === 'processing') {
+      updates.startedAt = new Date();
+    } else if (status === 'completed') {
+      updates.completedAt = new Date();
+    } else if (status === 'failed') {
+      updates.errorMessage = errorMessage;
+    }
+
+    const [updated] = await db
+      .update(schema.aiAnalyses)
+      .set(updates)
+      .where(eq(schema.aiAnalyses.id, id))
+      .returning();
+    return updated;
+  }
+
+  async submitAiAnalysisFeedback(id: string, rating: number, feedback?: string): Promise<schema.AiAnalysis> {
+    const [updated] = await db
+      .update(schema.aiAnalyses)
+      .set({
+        userRating: rating,
+        userFeedback: feedback,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalyses.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getAiAnalysisStats(tenantIds?: string[]): Promise<{
+    totalAnalyses: number;
+    pendingAnalyses: number;
+    averageProcessingTimeMs: number;
+    averageComplianceScore: number;
+    successRate: number;
+    totalCostUsd: string;
+    averageRating: number | null;
+  }> {
+    const conditions = tenantIds && tenantIds.length > 0
+      ? [inArray(schema.aiAnalyses.tenantId, tenantIds)]
+      : [];
+
+    // Get basic counts
+    const [stats] = await db
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        pending: sql<number>`COUNT(*) FILTER (WHERE ${schema.aiAnalyses.status} IN ('queued', 'processing'))::int`,
+        completed: sql<number>`COUNT(*) FILTER (WHERE ${schema.aiAnalyses.status} = 'completed')::int`,
+        failed: sql<number>`COUNT(*) FILTER (WHERE ${schema.aiAnalyses.status} = 'failed')::int`,
+        avgProcessingTime: sql<number>`COALESCE(AVG(${schema.aiAnalyses.processingDurationMs}) FILTER (WHERE ${schema.aiAnalyses.status} = 'completed'), 0)::int`,
+        avgComplianceScore: sql<number>`COALESCE(AVG(${schema.aiAnalyses.complianceScore}) FILTER (WHERE ${schema.aiAnalyses.status} = 'completed'), 0)::int`,
+        totalCost: sql<string>`COALESCE(SUM(${schema.aiAnalyses.totalCostUsd}::numeric), 0)::text`,
+        avgRating: sql<number | null>`AVG(${schema.aiAnalyses.userRating})`,
+      })
+      .from(schema.aiAnalyses)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    const successRate = stats.total > 0
+      ? (stats.completed / (stats.completed + stats.failed)) * 100
+      : 0;
+
+    return {
+      totalAnalyses: stats.total,
+      pendingAnalyses: stats.pending,
+      averageProcessingTimeMs: stats.avgProcessingTime,
+      averageComplianceScore: stats.avgComplianceScore,
+      successRate: Math.round(successRate * 100) / 100,
+      totalCostUsd: stats.totalCost,
+      averageRating: stats.avgRating ? Math.round(stats.avgRating * 10) / 10 : null,
+    };
   }
 }
 

@@ -884,3 +884,135 @@ export const insertCalendarFeedTokenSchema = createInsertSchema(calendarFeedToke
 });
 export type InsertCalendarFeedToken = z.infer<typeof insertCalendarFeedTokenSchema>;
 export type CalendarFeedToken = typeof calendarFeedTokens.$inferSelect;
+
+// ============================================
+// AI ANALYSIS MODULE TABLES
+// ============================================
+
+// AI Analysis Credits - Per-tenant credit tracking for AI analysis feature
+export const aiAnalysisCredits = pgTable("ai_analysis_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Default from subscription tier (set based on plan)
+  monthlyIncludedCredits: integer("monthly_included_credits").notNull().default(0),
+  overageCostPerAnalysis: text("overage_cost_per_analysis").notNull().default("3.99"), // Stored as string for precision
+
+  // Super admin overrides (NULL = use tier default)
+  overrideMonthlyCredits: integer("override_monthly_credits"),
+  overrideOverageCost: text("override_overage_cost"),
+  overrideReason: text("override_reason"),
+  overrideSetByUserId: varchar("override_set_by_user_id").references(() => users.id),
+  overrideSetAt: timestamp("override_set_at"),
+
+  // Usage tracking
+  creditsUsedThisMonth: integer("credits_used_this_month").notNull().default(0),
+  billingCycleStart: timestamp("billing_cycle_start").notNull().defaultNow(),
+  lastResetAt: timestamp("last_reset_at"),
+
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantUniqueIdx: uniqueIndex("ai_analysis_credits_tenant_unique_idx").on(table.tenantId),
+}));
+
+export const insertAiAnalysisCreditsSchema = createInsertSchema(aiAnalysisCredits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAiAnalysisCredits = z.infer<typeof insertAiAnalysisCreditsSchema>;
+export type AiAnalysisCredits = typeof aiAnalysisCredits.$inferSelect;
+
+// AI Analysis Status enum
+export const aiAnalysisStatusSchema = z.enum([
+  'queued',      // Job is in queue waiting to be processed
+  'processing',  // Worker is actively processing
+  'completed',   // Analysis finished successfully
+  'failed'       // Analysis failed (see errorMessage)
+]);
+export type AiAnalysisStatus = z.infer<typeof aiAnalysisStatusSchema>;
+
+// AI Analysis Risk Level enum
+export const aiAnalysisRiskLevelSchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical'
+]);
+export type AiAnalysisRiskLevel = z.infer<typeof aiAnalysisRiskLevelSchema>;
+
+// AI Analyses - Analysis results storage
+export const aiAnalyses = pgTable("ai_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  requestedByUserId: varchar("requested_by_user_id").notNull().references(() => users.id),
+
+  // Status tracking
+  status: text("status").notNull().default("queued"), // queued, processing, completed, failed
+  priority: integer("priority").notNull().default(0), // Higher = more priority
+
+  // Timing
+  queuedAt: timestamp("queued_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  processingDurationMs: integer("processing_duration_ms"),
+
+  // Analysis Results
+  complianceScore: integer("compliance_score"), // 0-100
+  riskLevel: text("risk_level"), // low, medium, high, critical
+  overallSummary: text("overall_summary"),
+
+  // Detailed Analysis (JSONB)
+  bylawCompliance: jsonb("bylaw_compliance"), // Array of bylaw assessments
+  riskAssessment: jsonb("risk_assessment"), // Array of identified risks
+  questionsConcerns: jsonb("questions_concerns"), // Questions for board
+  recommendations: jsonb("recommendations"), // Action recommendations
+
+  // Geospatial
+  propertyCoordinates: jsonb("property_coordinates"), // {lat: number, lng: number}
+  satelliteImageUrl: text("satellite_image_url"),
+
+  // AI Generated Images
+  aiMockupUrls: jsonb("ai_mockup_urls"), // Array of URLs
+  blueprintUrls: jsonb("blueprint_urls"), // Array of URLs
+
+  // PDF Report
+  pdfReportUrl: text("pdf_report_url"),
+
+  // Cost tracking
+  anthropicTokensUsed: integer("anthropic_tokens_used"),
+  anthropicCostUsd: text("anthropic_cost_usd"), // Stored as string for precision
+  googleMapsCostUsd: text("google_maps_cost_usd"),
+  imageGenCostUsd: text("image_gen_cost_usd"),
+  totalCostUsd: text("total_cost_usd"),
+
+  // Error handling
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0),
+
+  // Quality feedback
+  userRating: integer("user_rating"), // 1-5 stars
+  userFeedback: text("user_feedback"),
+
+  // Audit
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  applicationIdx: index("ai_analyses_application_idx").on(table.applicationId),
+  tenantIdx: index("ai_analyses_tenant_idx").on(table.tenantId),
+  statusIdx: index("ai_analyses_status_idx").on(table.status),
+  queuedAtIdx: index("ai_analyses_queued_at_idx").on(table.queuedAt),
+}));
+
+export const insertAiAnalysisSchema = createInsertSchema(aiAnalyses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  queuedAt: true,
+});
+export type InsertAiAnalysis = z.infer<typeof insertAiAnalysisSchema>;
+export type AiAnalysis = typeof aiAnalyses.$inferSelect;

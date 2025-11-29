@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { analysisWorker } from "./services/analysisWorker";
 
 const app = express();
 
@@ -77,5 +78,32 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // Start the AI analysis background worker
+    if (process.env.ANTHROPIC_API_KEY) {
+      analysisWorker.start();
+      log('AI Analysis worker started');
+    } else {
+      log('AI Analysis worker not started (ANTHROPIC_API_KEY not set)');
+    }
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    log('SIGTERM received, shutting down gracefully...');
+    analysisWorker.stop();
+    server.close(() => {
+      log('Server closed');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    log('SIGINT received, shutting down gracefully...');
+    analysisWorker.stop();
+    server.close(() => {
+      log('Server closed');
+      process.exit(0);
+    });
   });
 })();

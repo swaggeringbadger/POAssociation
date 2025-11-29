@@ -7,11 +7,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
 
 export default function Dashboard() {
   const { currentUserRole, currentTenant } = useAppStore();
 
   // Render different dashboard views based on role
+  if (currentUserRole === 'account_admin') {
+    return <AccountAdminDashboard />;
+  }
+
   if (currentUserRole === 'management_manager' || currentUserRole === 'management_rep') {
     return <ManagementDashboard />;
   }

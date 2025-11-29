@@ -3678,6 +3678,308 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // AI ANALYSIS ENDPOINTS
+  // ============================================
+
+  // Helper to check if user has management role (can trigger analysis)
+  const canTriggerAnalysis = (role: string): boolean => {
+    const allowedRoles = ['management_manager', 'management_rep', 'account_admin', 'super_admin'];
+    return allowedRoles.includes(role);
+  };
+
+  // Get AI credits status for current tenant
+  app.get('/api/ai/credits', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+      const { aiCreditService } = await import('./services/aiCreditService');
+      const status = await aiCreditService.getCreditStatus(tenant.id);
+
+      res.json(status);
+    } catch (error: any) {
+      console.error('Error getting AI credits:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check AI credits (quick check for UI)
+  app.get('/api/ai/credits/check', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+      const { aiCreditService } = await import('./services/aiCreditService');
+      const check = await aiCreditService.checkCredits(tenant.id);
+
+      res.json(check);
+    } catch (error: any) {
+      console.error('Error checking AI credits:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Super admin: Set credit override for a tenant
+  app.post('/api/admin/tenants/:tenantId/ai-credits/override', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { monthlyCredits, overageCost, reason } = req.body;
+
+      if (!reason) {
+        return res.status(400).json({ error: 'Reason is required for credit override' });
+      }
+
+      const { aiCreditService } = await import('./services/aiCreditService');
+      const credits = await aiCreditService.setOverride(
+        tenantId,
+        { monthlyCredits, overageCost, reason },
+        req.userId
+      );
+
+      res.json({ success: true, credits });
+    } catch (error: any) {
+      console.error('Error setting AI credit override:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Super admin: Remove credit override
+  app.delete('/api/admin/tenants/:tenantId/ai-credits/override', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+
+      const { aiCreditService } = await import('./services/aiCreditService');
+      const credits = await aiCreditService.removeOverride(tenantId);
+
+      res.json({ success: true, credits });
+    } catch (error: any) {
+      console.error('Error removing AI credit override:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger AI analysis for an application (management roles only)
+  app.post('/api/applications/:applicationId/analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      // Check role
+      const userRole = req.session?.currentUserRole;
+      if (!canTriggerAnalysis(userRole)) {
+        return res.status(403).json({
+          error: 'AI Analysis can only be triggered by management roles',
+          requiredRoles: ['management_manager', 'management_rep', 'account_admin'],
+        });
+      }
+
+      const { applicationId } = req.params;
+      const { includeSatellite = true, includeMockups = true, mockupQuality = 'standard' } = req.body;
+
+      // Get application to verify tenant
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Verify user has access to this application's tenant
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== application.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { analysisQueueService } = await import('./services/analysisQueueService');
+      const result = await analysisQueueService.queueAnalysis({
+        applicationId,
+        tenantId: tenant.id,
+        requestedByUserId: req.userId,
+        includeSatellite,
+        includeMockups,
+        mockupQuality,
+        demoCodeId: application.demoCodeId ?? undefined,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error triggering AI analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get analysis status
+  app.get('/api/ai/analysis/:analysisId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify user has access to this analysis's tenant
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== analysis.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      res.json(analysis);
+    } catch (error: any) {
+      console.error('Error getting AI analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get analysis status (polling endpoint)
+  app.get('/api/ai/analysis/:analysisId/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify access
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== analysis.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { analysisQueueService } = await import('./services/analysisQueueService');
+      const status = await analysisQueueService.getStatus(analysisId);
+
+      res.json(status);
+    } catch (error: any) {
+      console.error('Error getting AI analysis status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all analyses for an application
+  app.get('/api/applications/:applicationId/analyses', isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+
+      // Get application to verify tenant
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Verify user has access
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== application.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const analyses = await storage.getAiAnalysisForApplication(applicationId);
+      res.json(analyses);
+    } catch (error: any) {
+      console.error('Error getting AI analyses for application:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Submit feedback for an analysis
+  app.post('/api/ai/analysis/:analysisId/feedback', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+      const { rating, feedback } = req.body;
+
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+      }
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify access
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== analysis.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const updated = await storage.submitAiAnalysisFeedback(analysisId, rating, feedback);
+      res.json({ success: true, analysis: updated });
+    } catch (error: any) {
+      console.error('Error submitting AI analysis feedback:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cancel a queued analysis
+  app.post('/api/ai/analysis/:analysisId/cancel', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify access
+      if (!req.subdomain) {
+        return res.status(400).json({ error: 'No tenant context' });
+      }
+      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+      if (!tenant || tenant.id !== analysis.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { analysisQueueService } = await import('./services/analysisQueueService');
+      await analysisQueueService.cancelAnalysis(analysisId, req.userId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error cancelling AI analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Super admin: Get AI analysis statistics
+  app.get('/api/admin/ai-analysis/stats', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const stats = await storage.getAiAnalysisStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error getting AI analysis stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Super admin: Get AI analysis statistics for specific tenant
+  app.get('/api/admin/tenants/:tenantId/ai-analysis/stats', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const stats = await storage.getAiAnalysisStats([tenantId]);
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error getting tenant AI analysis stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
