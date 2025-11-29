@@ -74,3 +74,45 @@ export function useReplacePOALabel(): (text: string) => string {
   const { currentTenant } = useAppStore();
   return (text: string) => replacePOALabel(text, currentTenant);
 }
+
+/**
+ * Role display name mapping.
+ * Keys with {entity} will have it replaced with POA/HOA based on tenant settings.
+ */
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  homeowner: "Homeowner",
+  delegated_rep: "Delegated Representative",
+  poa_board_member: "{entity} Board Member",
+  poa_board_contributor: "{entity} Board Contributor",
+  hoa_board_member: "{entity} Board Member",
+  management_rep: "Management Representative",
+  management_manager: "Management Manager",
+  management_employee: "Management Employee",
+  account_admin: "Account Administrator",
+  super_admin: "Super Administrator",
+};
+
+/**
+ * Formats a role key into a human-readable display name.
+ * Respects POA/HOA tenant setting for board roles.
+ */
+export function formatRoleLabel(role: string, tenant: any | null | undefined): string {
+  const template = ROLE_DISPLAY_NAMES[role];
+  if (template) {
+    const entityLabel = getLegalEntityLabel(tenant);
+    return template.replace("{entity}", entityLabel);
+  }
+  // Fallback: Convert snake_case to Title Case
+  return role
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Hook that returns a function to format role labels.
+ * Use this in components to display user-friendly role names.
+ */
+export function useFormatRoleLabel(): (role: string) => string {
+  const { currentTenant } = useAppStore();
+  return (role: string) => formatRoleLabel(role, currentTenant);
+}

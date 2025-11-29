@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useFormatRoleLabel } from '@/hooks/useLegalEntityLabel';
 import type { WorkflowStep } from '@shared/workflowTypes';
 
 const AVAILABLE_ROLES = [
@@ -41,6 +42,7 @@ const AVAILABLE_ACTIONS = [
 
 export function StepPropertiesPanel() {
   const { template, selectedStepId, updateStep } = useWorkflowDesignerStore();
+  const formatRoleLabel = useFormatRoleLabel();
 
   const selectedStep = template?.steps?.find((step: WorkflowStep) => step.id === selectedStepId);
 
@@ -139,7 +141,7 @@ export function StepPropertiesPanel() {
             <SelectContent>
               {AVAILABLE_ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
-                  {r.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  {formatRoleLabel(r)}
                 </SelectItem>
               ))}
             </SelectContent>

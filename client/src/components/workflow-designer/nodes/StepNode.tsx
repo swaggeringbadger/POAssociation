@@ -5,6 +5,7 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { Badge } from '@/components/ui/badge';
+import { useFormatRoleLabel } from '@/hooks/useLegalEntityLabel';
 import type { WorkflowStep } from '@shared/workflowTypes';
 
 interface StepNodeData {
@@ -15,6 +16,7 @@ interface StepNodeData {
 
 export const StepNode = memo(({ data, selected }: NodeProps<StepNodeData>) => {
   const { step, isValid = true, validationErrors = [] } = data;
+  const formatRoleLabel = useFormatRoleLabel();
 
   return (
     <div
@@ -37,7 +39,7 @@ export const StepNode = memo(({ data, selected }: NodeProps<StepNodeData>) => {
         {/* Role */}
         {step.role && (
           <div className="text-xs text-gray-600">
-            <span className="font-medium">Role:</span> {step.role}
+            <span className="font-medium">Role:</span> {formatRoleLabel(step.role)}
           </div>
         )}
 

@@ -9,14 +9,16 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ConditionBuilder } from './ConditionBuilder';
+import { Trash2 } from 'lucide-react';
 import type { WorkflowStep, WorkflowTransition, WorkflowCondition } from '@shared/workflowTypes';
 
 export function TransitionPropertiesPanel() {
-  const { template, selectedTransitionId, updateTransition } = useWorkflowDesignerStore();
+  const { template, selectedTransitionId, updateTransition, deleteTransition } = useWorkflowDesignerStore();
 
   const [showConditionBuilder, setShowConditionBuilder] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingCondition, setEditingCondition] = useState<WorkflowCondition | undefined>();
 
   // Find the selected transition
@@ -77,6 +79,12 @@ export function TransitionPropertiesPanel() {
   const handleCancelCondition = () => {
     setShowConditionBuilder(false);
     setEditingCondition(undefined);
+  };
+
+  const handleDeleteTransition = () => {
+    if (!selectedTransitionId) return;
+    deleteTransition(selectedTransitionId);
+    setShowDeleteConfirm(false);
   };
 
   const hasChanges =
@@ -170,9 +178,17 @@ export function TransitionPropertiesPanel() {
       </div>
 
       {/* Save Button */}
-      <div className="pt-4 border-t">
+      <div className="pt-4 border-t space-y-2">
         <Button onClick={handleSave} disabled={!hasChanges} className="w-full">
           Save Changes
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete Transition
         </Button>
       </div>
 
@@ -190,6 +206,27 @@ export function TransitionPropertiesPanel() {
             onSave={handleSaveCondition}
             onCancel={handleCancelCondition}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Transition</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this transition from "{sourceStep?.title}" to "{targetStep?.title}"?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteTransition}>
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
