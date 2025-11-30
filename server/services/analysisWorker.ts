@@ -62,20 +62,34 @@ export class AnalysisWorker {
       let propertyCoordinates: Coordinates | undefined;
       let googleMapsCost = 0;
 
-      if (options.includeSatellite && propertyAddress && googleMapsService.isConfigured()) {
+      if (options.includeSatellite && googleMapsService.isConfigured()) {
         console.log(`[AnalysisWorker] Fetching satellite imagery for ${analysis.id}`);
 
-        const geocodeResult = await googleMapsService.geocodeAddress(propertyAddress);
+        // Use pre-validated coordinates from Radar if available, otherwise geocode with Google
+        const storedCoords = application.propertyCoordinates as { lat: number; lng: number } | null;
 
-        if (geocodeResult) {
-          propertyCoordinates = geocodeResult.coordinates;
-          satelliteImageUrl = googleMapsService.getSatelliteImageUrl(geocodeResult.coordinates, {
+        if (storedCoords?.lat && storedCoords?.lng) {
+          // Use coordinates from Radar validation (saves a Google Geocoding API call!)
+          console.log(`[AnalysisWorker] Using pre-validated coordinates from Radar`);
+          propertyCoordinates = { lat: storedCoords.lat, lng: storedCoords.lng };
+          googleMapsCost = 0.002; // Only Static Map cost
+        } else if (propertyAddress) {
+          // Fall back to Google Geocoding
+          console.log(`[AnalysisWorker] Geocoding address with Google Maps`);
+          const geocodeResult = await googleMapsService.geocodeAddress(propertyAddress);
+          if (geocodeResult) {
+            propertyCoordinates = geocodeResult.coordinates;
+            googleMapsCost = 0.007; // Geocode ($0.005) + Static Map ($0.002)
+          }
+        }
+
+        if (propertyCoordinates) {
+          satelliteImageUrl = googleMapsService.getSatelliteImageUrl(propertyCoordinates, {
             zoom: 19,
             width: 640,
             height: 640,
             mapType: 'hybrid',
           });
-          googleMapsCost = 0.007; // Geocode ($0.005) + Static Map ($0.002)
         }
       }
 

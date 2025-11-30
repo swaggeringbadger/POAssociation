@@ -3980,6 +3980,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // Address Validation (Radar.io)
+  // ============================================
+
+  // Autocomplete address as user types
+  app.get('/api/address/autocomplete', isAuthenticated, async (req: any, res) => {
+    try {
+      const { radarService } = await import('./services/radarService');
+
+      const { query, lat, lng, country } = req.query;
+
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'Query parameter is required' });
+      }
+
+      const result = await radarService.autocomplete(query, {
+        near: lat && lng ? { latitude: parseFloat(lat), longitude: parseFloat(lng) } : undefined,
+        countryCode: country as string || 'US',
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error in address autocomplete:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Validate a complete address
+  app.post('/api/address/validate', isAuthenticated, async (req: any, res) => {
+    try {
+      const { radarService } = await import('./services/radarService');
+
+      const { address } = req.body;
+
+      if (!address || typeof address !== 'string') {
+        return res.status(400).json({ error: 'Address is required' });
+      }
+
+      const result = await radarService.validateAddress(address);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error validating address:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if Radar API is configured
+  app.get('/api/address/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { radarService } = await import('./services/radarService');
+      res.json({
+        configured: radarService.isConfigured(),
+        provider: 'radar.io'
+      });
+    } catch (error: any) {
+      console.error('Error checking address service status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

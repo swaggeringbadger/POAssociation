@@ -48,7 +48,8 @@
       "Bash(npx vitest:*)",
       "Bash(npm test)",
       "Bash(timeout 60 npm run db:push:*)",
-      "Bash(timeout 15 npm run dev:*)"
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

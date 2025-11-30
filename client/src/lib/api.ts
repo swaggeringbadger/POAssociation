@@ -1258,3 +1258,141 @@ export async function getCalendarFeedToken(): Promise<CalendarFeedToken> {
 export async function regenerateCalendarFeedToken(): Promise<CalendarFeedToken> {
   return apiRequest('POST', '/api/calendar-feed/regenerate');
 }
+
+// ============================================================
+// AI ANALYSIS API METHODS
+// ============================================================
+
+export interface AiCreditStatus {
+  tenantId: string;
+  creditsRemaining: number;
+  creditsUsedThisCycle: number;
+  monthlyAllowance: number;
+  overageCostPerCredit: string;
+  billingCycleStart: string;
+  billingCycleEnd: string;
+  hasOverride: boolean;
+  overrideReason?: string;
+}
+
+export interface AiCreditCheck {
+  hasCredits: boolean;
+  creditsRemaining: number;
+  isOverage: boolean;
+  overageCost?: string;
+}
+
+export interface AiAnalysis {
+  id: string;
+  applicationId: string;
+  tenantId: string;
+  requestedByUserId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  result?: {
+    complianceScore: number;
+    riskLevel: 'low' | 'medium' | 'high' | 'critical';
+    overallSummary: string;
+    bylawCompliance: Array<{
+      bylawId: string;
+      sectionReference: string;
+      bylawText?: string;
+      compliant: boolean;
+      explanation: string;
+      concerns: string[];
+    }>;
+    riskAssessment: Array<{
+      category: string;
+      severity: 'low' | 'medium' | 'high' | 'critical';
+      description: string;
+      mitigation: string;
+    }>;
+    questionsConcerns: Array<{
+      question: string;
+      category: string;
+      priority: 'low' | 'medium' | 'high';
+    }>;
+    recommendations: Array<{
+      type: 'approve' | 'approve_with_conditions' | 'deny' | 'request_changes' | 'table';
+      explanation: string;
+      conditions?: string[];
+    }>;
+  };
+  satelliteImageUrl?: string;
+  mockupImageUrls?: string[];
+  pdfReportUrl?: string;
+  processingTimeMs?: number;
+  totalCostUsd?: string;
+  errorMessage?: string;
+  userRating?: number;
+  userFeedback?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface AiAnalysisStatus {
+  id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  queuePosition?: number;
+  estimatedTimeSeconds?: number;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+export interface TriggerAnalysisResponse {
+  analysisId: string;
+  status: 'queued';
+  estimatedTimeSeconds: number;
+  creditsRemaining: number;
+  isOverage: boolean;
+}
+
+// Get AI credit status for current tenant
+export async function getAiCreditStatus(): Promise<AiCreditStatus> {
+  return apiRequest('GET', '/api/ai/credits');
+}
+
+// Quick check for AI credits availability
+export async function checkAiCredits(): Promise<AiCreditCheck> {
+  return apiRequest('GET', '/api/ai/credits/check');
+}
+
+// Trigger AI analysis for an application
+export async function triggerAiAnalysis(
+  applicationId: string,
+  options?: {
+    includeSatellite?: boolean;
+    includeMockups?: boolean;
+    mockupQuality?: 'standard' | 'high';
+  }
+): Promise<TriggerAnalysisResponse> {
+  return apiRequest('POST', `/api/applications/${applicationId}/analyze`, options || {});
+}
+
+// Get full analysis result
+export async function getAiAnalysis(analysisId: string): Promise<AiAnalysis> {
+  return apiRequest('GET', `/api/ai/analysis/${analysisId}`);
+}
+
+// Get analysis status (for polling)
+export async function getAiAnalysisStatus(analysisId: string): Promise<AiAnalysisStatus> {
+  return apiRequest('GET', `/api/ai/analysis/${analysisId}/status`);
+}
+
+// List analyses for an application
+export async function listApplicationAnalyses(applicationId: string): Promise<AiAnalysis[]> {
+  return apiRequest('GET', `/api/applications/${applicationId}/analyses`);
+}
+
+// Submit feedback for an analysis
+export async function submitAnalysisFeedback(
+  analysisId: string,
+  rating: number,
+  feedback?: string
+): Promise<{ success: boolean }> {
+  return apiRequest('POST', `/api/ai/analysis/${analysisId}/feedback`, { rating, feedback });
+}
+
+// Cancel a queued analysis
+export async function cancelAiAnalysis(analysisId: string): Promise<{ success: boolean }> {
+  return apiRequest('POST', `/api/ai/analysis/${analysisId}/cancel`);
+}

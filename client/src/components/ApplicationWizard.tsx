@@ -21,6 +21,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { DynamicAdditionalInfoForm } from './DynamicAdditionalInfoForm';
 import { DocumentUpload } from './DocumentUpload';
 import { SignatureCanvas } from './SignatureCanvas';
+import { AddressInput } from './AddressInput';
 import { apiRequest, createSignature } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,13 @@ interface ProjectDetails {
   propertyAddress: string;
 }
 
+interface AddressValidation {
+  isValid: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  verificationStatus: 'verified' | 'unverified' | 'ambiguous';
+}
+
 export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -53,6 +61,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     description: '',
     propertyAddress: '',
   });
+  const [addressValidation, setAddressValidation] = useState<AddressValidation | null>(null);
   const [additionalInfoData, setAdditionalInfoData] = useState<FormData>({});
   const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
   const [signatureId, setSignatureId] = useState<string | null>(null);
@@ -218,6 +227,10 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         title: projectDetails.title,
         description: projectDetails.description,
         propertyAddress: projectDetails.propertyAddress,
+        // Include validated coordinates if available (for Google Maps satellite imagery)
+        propertyCoordinates: addressValidation?.latitude && addressValidation?.longitude
+          ? { lat: addressValidation.latitude, lng: addressValidation.longitude }
+          : null,
         formData: additionalInfoData,
         completenessScore,
         applicationNumber,
@@ -352,18 +365,30 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
             </div>
 
             <div>
-              <Label htmlFor="propertyAddress">
-                Property Address <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="propertyAddress"
-                {...register('propertyAddress', { required: true })}
-                placeholder="e.g., 123 Oak Street"
-                className="mt-2"
+              <AddressInput
+                value={form.watch('propertyAddress')}
+                onChange={(value) => {
+                  form.setValue('propertyAddress', value, { shouldValidate: true });
+                }}
+                onValidated={(result) => {
+                  setAddressValidation({
+                    isValid: result.isValid,
+                    latitude: result.latitude,
+                    longitude: result.longitude,
+                    verificationStatus: result.verificationStatus,
+                  });
+                  // Update the form with the formatted address if valid
+                  if (result.isValid && result.formattedAddress) {
+                    form.setValue('propertyAddress', result.formattedAddress, { shouldValidate: true });
+                  }
+                }}
+                required
+                error={errors.propertyAddress ? 'Property address is required' : undefined}
               />
-              {errors.propertyAddress && (
-                <p className="text-sm text-destructive mt-1">Property address is required</p>
-              )}
+              <input
+                type="hidden"
+                {...register('propertyAddress', { required: true })}
+              />
             </div>
 
             <div>

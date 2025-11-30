@@ -2,12 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
-import { listApplicationSignatures } from "@/lib/api";
+import { listApplicationSignatures, listApplicationAnalyses, type AiAnalysis } from "@/lib/api";
 import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool, Sparkles } from "lucide-react";
+import { AIAnalysisButton, AIAnalysisStatusCard, AIAnalysisResults } from "@/components/ai-analysis";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
@@ -63,7 +64,7 @@ export default function ApplicationDetail() {
   const params = useParams();
   const applicationId = params.id as string;
   const { user } = useAuth();
-  const { setCurrentPageTitle } = useAppStore();
+  const { setCurrentPageTitle, currentUserRole } = useAppStore();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -79,6 +80,7 @@ export default function ApplicationDetail() {
   const [editWarningOpen, setEditWarningOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -146,6 +148,30 @@ export default function ApplicationDetail() {
     queryFn: () => listApplicationSignatures(applicationId),
     enabled: !!applicationId,
   });
+
+  // Fetch AI analyses for this application
+  const { data: analyses = [] } = useQuery<AiAnalysis[]>({
+    queryKey: ['application-analyses', applicationId],
+    queryFn: () => listApplicationAnalyses(applicationId),
+    enabled: !!applicationId,
+  });
+
+  // Get the most recent analysis (or active one)
+  const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
+  const hasActiveAnalysis = latestAnalysis && (latestAnalysis.status === 'queued' || latestAnalysis.status === 'processing');
+  const hasCompletedAnalysis = latestAnalysis && latestAnalysis.status === 'completed';
+
+  // Handle when analysis starts
+  const handleAnalysisStarted = (analysisId: string) => {
+    setActiveAnalysisId(analysisId);
+    queryClient.invalidateQueries({ queryKey: ['application-analyses', applicationId] });
+  };
+
+  // Handle when analysis completes
+  const handleAnalysisComplete = () => {
+    setActiveAnalysisId(null);
+    queryClient.invalidateQueries({ queryKey: ['application-analyses', applicationId] });
+  };
 
   // Upload document mutation
   const uploadDocMutation = useMutation({
@@ -439,9 +465,16 @@ export default function ApplicationDetail() {
           <p className="text-muted-foreground mt-1">Application #{application.applicationNumber}</p>
         </div>
         <div className="flex gap-2">
+          {/* AI Analysis Button - only for management roles */}
+          <AIAnalysisButton
+            applicationId={applicationId}
+            userRole={currentUserRole}
+            onAnalysisStarted={handleAnalysisStarted}
+            disabled={!!hasActiveAnalysis}
+          />
           {(canEdit || canEditWithWarning) && (
-            <Button 
-              variant="default" 
+            <Button
+              variant="default"
               className="gap-2"
               onClick={handleEditClick}
               data-testid="button-edit-application"
@@ -1017,6 +1050,30 @@ export default function ApplicationDetail() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* AI Analysis Section - Show if there's an active or completed analysis */}
+      {(hasActiveAnalysis || hasCompletedAnalysis || activeAnalysisId) && (
+        <div>
+          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-500" />
+            AI Analysis
+          </h2>
+
+          {/* Show status card if analysis is in progress */}
+          {(hasActiveAnalysis || activeAnalysisId) && latestAnalysis && (
+            <AIAnalysisStatusCard
+              analysisId={activeAnalysisId || latestAnalysis.id}
+              onComplete={handleAnalysisComplete}
+              onCancel={handleAnalysisComplete}
+            />
+          )}
+
+          {/* Show full results if analysis is complete */}
+          {hasCompletedAnalysis && !hasActiveAnalysis && latestAnalysis && (
+            <AIAnalysisResults analysisId={latestAnalysis.id} />
+          )}
+        </div>
       )}
 
       {/* Workflow Section */}
