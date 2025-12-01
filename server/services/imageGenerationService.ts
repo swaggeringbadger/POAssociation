@@ -138,18 +138,33 @@ export class ImageGenerationService {
     // Different prompt based on whether we have satellite imagery
     if (satelliteImageBase64) {
       // Satellite image is provided - create property-specific presentation
-      return `IMPORTANT: Use the attached satellite image as your PRIMARY REFERENCE. This is the ACTUAL property - analyze it carefully and base your output on this SPECIFIC property.
+      return `CRITICAL INSTRUCTION: The attached satellite image shows the ACTUAL PROPERTY. You MUST use this satellite image as your sole reference. Do NOT create a generic or imaginary house.
 
-Create a presentation board for THIS EXACT PROPERTY shown in the satellite image:
+TASK: Create a presentation board with TWO sections:
 
-1. BLUEPRINT SECTION: Create an accurate blueprint/site plan of THIS property as seen in the satellite image. Trace the actual building footprint, driveway, walkways, and property boundaries visible in the satellite view. Add measurements and distances based on what you can estimate from the image. Label streets if visible and add cardinal directions.
+SECTION 1 - SITE PLAN/BLUEPRINT (Top half of image):
+- Trace the EXACT roof outline/building footprint you see in the satellite image
+- Trace the EXACT driveway shape and location from the satellite image
+- Trace any walkways, patios, pools, or hardscape visible in the satellite image
+- Show the neighboring houses' roof outlines as they appear in the satellite image
+- Mark property boundaries (estimate based on lawn edges/fences visible)
+- Add cardinal directions (N/S/E/W) and estimated dimensions
+- Style: Clean architectural line drawing, blue lines on white background
 
-2. DRONE VIEW SECTION: Create 4 hyper-realistic drone photos of THIS SAME HOUSE from the satellite image, showing what it would look like from 10 feet off the ground, positioned 75 feet from center. Show all 4 sides (North, South, East, West). Include the actual landscaping, sidewalks, driveways, and paths visible in the satellite image. Keep the architectural style consistent with what's visible from above.
+SECTION 2 - DRONE PERSPECTIVE VIEWS (Bottom half of image, 4 panels):
+- Create 4 ground-level perspective views of THIS EXACT HOUSE from the satellite image
+- Camera position: 10 feet high, 75 feet from the center of the house
+- Views: Front, Back, Left Side, Right Side
+- IMPORTANT: The house shape, roof style, and overall form MUST match what you see from above in the satellite image
+- Include the ACTUAL neighboring houses visible in the satellite image in the background
+- Include the ACTUAL landscaping, trees, driveway, and yard layout from the satellite image
+- Make it photorealistic but based on interpreting the satellite view into ground-level perspectives
+- The neighborhood context (adjacent houses, streets, trees) should match the satellite image
 
-Make the presentation board cohesive and professional. The blueprint and drone views must represent THIS SPECIFIC property from the satellite image, not a generic house.
+DO NOT invent or imagine features. Only render what is actually visible or can be reasonably inferred from the satellite image.
 
-Project type: ${projectType}. ${projectContext}
-Project description: ${projectDescription}
+Project context: ${projectType}. ${projectContext}
+${projectDescription}
 ${detailsStr}`;
     } else {
       // No satellite image - generic presentation board
@@ -436,25 +451,32 @@ ${detailsStr}`;
 
     if (satelliteImageBase64) {
       // Satellite image provided - trace the actual property
-      return `IMPORTANT: Use the attached satellite image as your PRIMARY REFERENCE. Create a blueprint of THIS EXACT PROPERTY.
+      return `CRITICAL: The attached satellite image shows the ACTUAL PROPERTY. Create a blueprint by TRACING what you see.
 
-Create a professional architectural blueprint/site plan by TRACING the actual property shown in the satellite image:
+Create a professional site plan/blueprint of THIS EXACT PROPERTY by carefully analyzing the satellite image:
 
-1. Carefully trace the EXACT building footprint visible in the satellite image
-2. Trace the actual driveway, walkways, and paths visible from above
-3. Mark the property boundaries as they appear in the image
-4. Show all landscape features visible in the satellite view (trees, lawn areas, garden beds)
-5. Add a compass rose indicating north orientation
-6. Estimate and add dimension lines and measurements based on typical residential scales
-7. Include a scale bar
+REQUIRED - Trace these elements EXACTLY as they appear in the satellite image:
+1. The EXACT roof/building outline - trace the actual shape you see from above
+2. The EXACT driveway - trace its actual shape, curves, and position
+3. Any visible walkways, patios, decks, or concrete areas
+4. The pool if visible (trace its exact shape)
+5. Fences or property line indicators
+6. Trees and major landscape features (show as circles where you see tree canopies)
+7. The neighboring houses' outlines (trace them too for context)
+
+ADD these elements:
+- Compass rose showing North (estimate based on shadow direction if visible)
+- Dimension lines with estimated measurements
+- Scale bar
+- Property boundary lines (estimate from lawn edges, fences, or driveways)
 
 ${projectSpecific}
 ${projectDescription}
 ${measurementsStr}
 ${landscapeStr}
 
-Style: Clean blue and white technical drawing, architectural blueprint aesthetic, clear line work, professional CAD-style presentation.
-The blueprint must accurately represent THIS SPECIFIC property from the satellite image, not a generic layout.`;
+Style: Clean architectural blueprint - blue/dark lines on white background, professional CAD-style.
+This must be a traced representation of the ACTUAL property in the satellite image, NOT a generic house plan.`;
     } else {
       return `Professional architectural blueprint style site plan drawing. Clean technical drawing with precise property layout.
 ${projectSpecific}
