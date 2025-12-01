@@ -49,7 +49,7 @@ const NANO_BANANA_MODEL = 'gemini-2.0-flash-exp-image-generation';
 const NANO_BANANA_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${NANO_BANANA_MODEL}:generateContent`;
 
 export class ImageGenerationService {
-  private defaultProvider: ImageProvider = 'stability_ai';
+  private defaultProvider: ImageProvider = 'nano_banana';
 
   /**
    * Check if a provider is configured
