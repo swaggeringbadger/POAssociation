@@ -61,11 +61,15 @@ export function PropertyTile({ property, isExpanded, onToggle }: PropertyTilePro
   const overallStatus = subscription ? getPropertyOverallStatus(subscription) : 'normal';
 
   return (
-    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+    <Collapsible
+      open={isExpanded}
+      onOpenChange={onToggle}
+      className={cn(isExpanded && "md:col-span-2 xl:col-span-3")}
+    >
       <Card
         className={cn(
           "transition-all duration-200",
-          isExpanded && "ring-2 ring-primary shadow-lg col-span-full",
+          isExpanded && "ring-2 ring-primary shadow-lg",
           !isExpanded && overallStatus === 'warning' && "border-l-4 border-l-yellow-500",
           !isExpanded && overallStatus === 'critical' && "border-l-4 border-l-red-500"
         )}
@@ -121,7 +125,7 @@ export function PropertyTile({ property, isExpanded, onToggle }: PropertyTilePro
         {/* Expanded Content */}
         <CollapsibleContent>
           <CardContent className="pt-0">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+            <div className="grid gap-6 pt-4 border-t grid-cols-1 lg:grid-cols-3">
               {/* Usage Metrics */}
               <PropertyMetricsCard subscription={subscription} isLoading={subLoading} />
 

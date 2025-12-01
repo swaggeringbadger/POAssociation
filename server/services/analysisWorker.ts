@@ -101,7 +101,27 @@ export class AnalysisWorker {
         }
       }
 
-      // Step 4: Generate AI mockups and blueprint if enabled
+      // Step 4: Get satellite image base64 for AI image generation
+      let satelliteImageBase64: string | undefined;
+
+      if (options.includeSatellite && propertyCoordinates && googleMapsService.isConfigured()) {
+        console.log(`[AnalysisWorker] Fetching satellite image for AI mockup generation`);
+        try {
+          const satelliteData = await googleMapsService.getSatelliteImageBase64(propertyCoordinates, {
+            zoom: 19,
+            width: 640,
+            height: 640,
+          });
+          if (satelliteData) {
+            satelliteImageBase64 = satelliteData.base64;
+            console.log(`[AnalysisWorker] Satellite image fetched for AI mockup context (${satelliteImageBase64.length} bytes base64)`);
+          }
+        } catch (error) {
+          console.warn('[AnalysisWorker] Failed to fetch satellite image for mockups:', error);
+        }
+      }
+
+      // Step 5: Generate AI mockups and blueprint if enabled
       const mockupUrls: string[] = [];
       let blueprintUrl: string | undefined;
       let imageGenCost = 0;
@@ -114,7 +134,14 @@ export class AnalysisWorker {
           projectDescription: application.description || '',
           propertyAddress,
           formData: (application.formData as Record<string, unknown>) || {},
+          satelliteImageBase64, // Pass satellite image to AI for context
         };
+
+        if (satelliteImageBase64) {
+          console.log(`[AnalysisWorker] Including satellite image in AI mockup context for property-specific generation`);
+        } else {
+          console.log(`[AnalysisWorker] No satellite image available - AI will generate generic mockups`);
+        }
 
         // Generate mockups
         const mockups = await imageGenerationService.generateMockupVariations(

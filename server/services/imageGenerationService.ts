@@ -4,7 +4,7 @@
  * Provider-agnostic AI image generation for architectural mockups.
  * Currently supports:
  * - Stability AI
- * - Nano Banana Pro (Gemini 2.0 Flash Image generation)
+ * - Nano Banana Pro Preview (Gemini 3 Pro Image Preview)
  *
  * Generates AI mockups showing proposed improvements on properties
  * based on application details and satellite imagery.
@@ -40,13 +40,20 @@ export interface MockupContext {
 }
 
 // Stability AI configuration
-const STABILITY_API_KEY = process.env.STABILITY_API_KEY || '';
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/sd3';
 
-// Nano Banana Pro (Gemini) configuration
-const NANO_BANANA_API_KEY = process.env.GEMINI_API_KEY || process.env.NANO_BANANA_API_KEY || '';
-const NANO_BANANA_MODEL = 'gemini-2.0-flash-exp-image-generation';
+// Nano Banana Pro Preview (Gemini 3 Pro Image) configuration
+const NANO_BANANA_MODEL = 'gemini-3-pro-image-preview';
 const NANO_BANANA_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${NANO_BANANA_MODEL}:generateContent`;
+
+// Helper to get API keys dynamically (allows hot-reload of env vars)
+function getStabilityApiKey(): string {
+  return process.env.STABILITY_API_KEY || '';
+}
+
+function getGeminiApiKey(): string {
+  return process.env.GEMINI_API_KEY || process.env.NANO_BANANA_API_KEY || '';
+}
 
 export class ImageGenerationService {
   private defaultProvider: ImageProvider = 'nano_banana';
@@ -57,10 +64,14 @@ export class ImageGenerationService {
   isProviderConfigured(provider: ImageProvider = this.defaultProvider): boolean {
     switch (provider) {
       case 'stability_ai':
-        return !!STABILITY_API_KEY;
+        return !!getStabilityApiKey();
       case 'nano_banana':
         // Nano Banana Pro uses Gemini API - just needs the API key
-        return !!NANO_BANANA_API_KEY;
+        const hasKey = !!getGeminiApiKey();
+        if (!hasKey) {
+          console.log('[ImageGen] Gemini API key check: GEMINI_API_KEY not found in environment');
+        }
+        return hasKey;
       default:
         return false;
     }
@@ -96,44 +107,58 @@ export class ImageGenerationService {
 
   /**
    * Build a descriptive prompt for mockup generation
+   * Creates a comprehensive presentation board with blueprint and drone views
+   * When satellite image is provided, it should be used as the primary reference
    */
   private buildMockupPrompt(context: MockupContext): string {
-    const { projectType, projectDescription, formData } = context;
+    const { projectType, projectDescription, formData, satelliteImageBase64 } = context;
 
-    // Base architectural style prompt
-    const basePrompt = 'Professional architectural rendering, photorealistic, clear daylight, suburban neighborhood setting';
-
-    // Extract relevant details from form data
+    // Extract relevant details from form data for context
     const details: string[] = [];
-
-    // Common fields to look for
     const colorFields = ['color', 'colors', 'paint_color', 'exterior_color', 'material_color'];
     const materialFields = ['material', 'materials', 'roofing_material', 'siding_material'];
     const dimensionFields = ['height', 'width', 'length', 'size', 'dimensions', 'square_feet'];
-    const styleFields = ['style', 'design_style', 'architectural_style'];
 
     for (const [key, value] of Object.entries(formData)) {
       const keyLower = key.toLowerCase();
-
       if (colorFields.some(f => keyLower.includes(f)) && value) {
         details.push(`${value} color`);
       }
       if (materialFields.some(f => keyLower.includes(f)) && value) {
         details.push(`${value} material`);
       }
-      if (styleFields.some(f => keyLower.includes(f)) && value) {
-        details.push(`${value} style`);
-      }
       if (dimensionFields.some(f => keyLower.includes(f)) && value) {
         details.push(`${key}: ${value}`);
       }
     }
 
-    // Compose the full prompt
-    const projectPrompt = this.getProjectTypePrompt(projectType);
-    const detailsStr = details.length > 0 ? `, ${details.join(', ')}` : '';
+    const projectContext = this.getProjectTypePrompt(projectType);
+    const detailsStr = details.length > 0 ? `Project details: ${details.join(', ')}. ` : '';
 
-    return `${basePrompt}. ${projectPrompt} ${projectDescription}${detailsStr}. High quality architectural visualization, professional photography style.`;
+    // Different prompt based on whether we have satellite imagery
+    if (satelliteImageBase64) {
+      // Satellite image is provided - create property-specific presentation
+      return `IMPORTANT: Use the attached satellite image as your PRIMARY REFERENCE. This is the ACTUAL property - analyze it carefully and base your output on this SPECIFIC property.
+
+Create a presentation board for THIS EXACT PROPERTY shown in the satellite image:
+
+1. BLUEPRINT SECTION: Create an accurate blueprint/site plan of THIS property as seen in the satellite image. Trace the actual building footprint, driveway, walkways, and property boundaries visible in the satellite view. Add measurements and distances based on what you can estimate from the image. Label streets if visible and add cardinal directions.
+
+2. DRONE VIEW SECTION: Create 4 hyper-realistic drone photos of THIS SAME HOUSE from the satellite image, showing what it would look like from 10 feet off the ground, positioned 75 feet from center. Show all 4 sides (North, South, East, West). Include the actual landscaping, sidewalks, driveways, and paths visible in the satellite image. Keep the architectural style consistent with what's visible from above.
+
+Make the presentation board cohesive and professional. The blueprint and drone views must represent THIS SPECIFIC property from the satellite image, not a generic house.
+
+Project type: ${projectType}. ${projectContext}
+Project description: ${projectDescription}
+${detailsStr}`;
+    } else {
+      // No satellite image - generic presentation board
+      return `Create presentation board using this building design. Create a stunning blueprint of the property. Add measurements and distances of which you're highly confident. Label only streets that you're highly confident of and relevant cardinal directions. Provide 4 different drone views for each of the 4 sides of the house. The drones should all be 10 feet off the ground and positioned 75 feet from the center of the house. Avoid putting any window or door details on the sides of the house but do illustrate any landscaping, sidewalks, driveways, paths, etc. that you have a high confidence of. The drone photos should be hyper realistic. Make the presentation board cohesive and appealing with proper composition.
+
+Project type: ${projectType}. ${projectContext}
+Project description: ${projectDescription}
+${detailsStr}`;
+    }
   }
 
   /**
@@ -191,7 +216,7 @@ export class ImageGenerationService {
       const response = await fetch(STABILITY_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${STABILITY_API_KEY}`,
+          'Authorization': `Bearer ${getStabilityApiKey()}`,
           'Accept': 'image/*',
         },
         body: formData,
@@ -232,12 +257,13 @@ export class ImageGenerationService {
     context: MockupContext,
     options: ImageGenerationOptions
   ): Promise<GeneratedImage | null> {
-    if (!NANO_BANANA_API_KEY) {
-      console.error('[ImageGen] Nano Banana Pro (Gemini) API key not configured');
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      console.error('[ImageGen] Nano Banana Pro (Gemini) API key not configured. Set GEMINI_API_KEY environment variable.');
       return null;
     }
 
-    console.log(`[ImageGen] Generating with Nano Banana Pro (Gemini): ${prompt.substring(0, 100)}...`);
+    console.log(`[ImageGen] Generating with Nano Banana Pro (Gemini ${NANO_BANANA_MODEL}): ${prompt.substring(0, 100)}...`);
 
     try {
       // Build the request parts
@@ -273,7 +299,7 @@ export class ImageGenerationService {
         },
       };
 
-      const response = await fetch(`${NANO_BANANA_API_URL}?key=${NANO_BANANA_API_KEY}`, {
+      const response = await fetch(`${NANO_BANANA_API_URL}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -373,9 +399,10 @@ export class ImageGenerationService {
 
   /**
    * Build a blueprint-style prompt for property layout generation
+   * When satellite image is provided, trace the actual property layout
    */
   private buildBlueprintPrompt(context: MockupContext): string {
-    const { projectType, projectDescription, formData } = context;
+    const { projectType, projectDescription, formData, satelliteImageBase64 } = context;
 
     // Extract dimensions and measurements from form data
     const measurements: string[] = [];
@@ -407,7 +434,29 @@ export class ImageGenerationService {
 
     const projectSpecific = this.getBlueprintProjectPrompt(projectType);
 
-    return `Professional architectural blueprint style site plan drawing. Clean technical drawing with precise property layout.
+    if (satelliteImageBase64) {
+      // Satellite image provided - trace the actual property
+      return `IMPORTANT: Use the attached satellite image as your PRIMARY REFERENCE. Create a blueprint of THIS EXACT PROPERTY.
+
+Create a professional architectural blueprint/site plan by TRACING the actual property shown in the satellite image:
+
+1. Carefully trace the EXACT building footprint visible in the satellite image
+2. Trace the actual driveway, walkways, and paths visible from above
+3. Mark the property boundaries as they appear in the image
+4. Show all landscape features visible in the satellite view (trees, lawn areas, garden beds)
+5. Add a compass rose indicating north orientation
+6. Estimate and add dimension lines and measurements based on typical residential scales
+7. Include a scale bar
+
+${projectSpecific}
+${projectDescription}
+${measurementsStr}
+${landscapeStr}
+
+Style: Clean blue and white technical drawing, architectural blueprint aesthetic, clear line work, professional CAD-style presentation.
+The blueprint must accurately represent THIS SPECIFIC property from the satellite image, not a generic layout.`;
+    } else {
+      return `Professional architectural blueprint style site plan drawing. Clean technical drawing with precise property layout.
 ${projectSpecific}
 ${projectDescription}
 ${measurementsStr}
@@ -415,6 +464,7 @@ ${landscapeStr}
 Include: property boundaries, building footprint, existing structures, compass rose indicating north, scale bar.
 Style: Clean blue and white technical drawing, architectural blueprint aesthetic, clear line work, professional CAD-style presentation.
 Must include measurement annotations and dimension lines.`;
+    }
   }
 
   /**

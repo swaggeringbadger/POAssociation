@@ -14,6 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -39,7 +45,13 @@ import {
   Scale,
   MessageCircleQuestion,
   Lightbulb,
+  X,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Move,
 } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { useToast } from '@/hooks/use-toast';
 import { getAiAnalysis, submitAnalysisFeedback, type AiAnalysis } from '@/lib/api';
 
@@ -72,10 +84,18 @@ const recommendationLabels: Record<string, string> = {
   table: 'Table for Later',
 };
 
+// Lightbox image type
+interface LightboxImage {
+  url: string;
+  title: string;
+  description?: string;
+}
+
 export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [expandedBylaws, setExpandedBylaws] = useState<Set<string>>(new Set());
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -494,6 +514,7 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
               <Image className="h-5 w-5" />
               Visual Analysis
             </CardTitle>
+            <CardDescription>Click any image to view in full size</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -503,24 +524,48 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
                     <MapPin className="h-4 w-4" />
                     Satellite View
                   </h4>
-                  <img
-                    src={analysis.satelliteImageUrl}
-                    alt="Satellite view of property"
-                    className="w-full rounded-lg border"
-                  />
+                  <div
+                    className="relative group cursor-pointer"
+                    onClick={() => setLightboxImage({
+                      url: analysis.satelliteImageUrl!,
+                      title: 'Satellite View',
+                      description: 'Satellite imagery of the property location'
+                    })}
+                  >
+                    <img
+                      src={analysis.satelliteImageUrl}
+                      alt="Satellite view of property"
+                      className="w-full rounded-lg border transition-transform group-hover:scale-[1.02]"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                      <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                    </div>
+                  </div>
                 </div>
               )}
               {analysis.blueprintImageUrls && analysis.blueprintImageUrls.map((url, idx) => (
                 <div key={`blueprint-${idx}`} className="space-y-2">
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    Site Plan / Blueprint
+                    Site Plan / Blueprint {analysis.blueprintImageUrls!.length > 1 ? idx + 1 : ''}
                   </h4>
-                  <img
-                    src={url}
-                    alt="AI generated site plan blueprint"
-                    className="w-full rounded-lg border bg-white"
-                  />
+                  <div
+                    className="relative group cursor-pointer"
+                    onClick={() => setLightboxImage({
+                      url,
+                      title: `Site Plan / Blueprint${analysis.blueprintImageUrls!.length > 1 ? ` ${idx + 1}` : ''}`,
+                      description: 'AI-generated site plan showing property layout, measurements, and landscape elements'
+                    })}
+                  >
+                    <img
+                      src={url}
+                      alt="AI generated site plan blueprint"
+                      className="w-full rounded-lg border bg-white transition-transform group-hover:scale-[1.02]"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                      <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                    </div>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     AI-generated site plan showing property layout, measurements, and landscape elements
                   </p>
@@ -530,19 +575,117 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
                 <div key={`mockup-${idx}`} className="space-y-2">
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Image className="h-4 w-4" />
-                    AI Mockup {idx + 1}
+                    AI Presentation Board {analysis.mockupImageUrls!.length > 1 ? idx + 1 : ''}
                   </h4>
-                  <img
-                    src={url}
-                    alt={`AI generated mockup ${idx + 1}`}
-                    className="w-full rounded-lg border"
-                  />
+                  <div
+                    className="relative group cursor-pointer"
+                    onClick={() => setLightboxImage({
+                      url,
+                      title: `AI Presentation Board${analysis.mockupImageUrls!.length > 1 ? ` ${idx + 1}` : ''}`,
+                      description: 'AI-generated presentation board with blueprint and drone views'
+                    })}
+                  >
+                    <img
+                      src={url}
+                      alt={`AI generated mockup ${idx + 1}`}
+                      className="w-full rounded-lg border transition-transform group-hover:scale-[1.02]"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                      <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Image Lightbox Modal with Pan/Zoom */}
+      <Dialog open={!!lightboxImage} onOpenChange={(open) => !open && setLightboxImage(null)}>
+        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 overflow-hidden flex flex-col">
+          <DialogHeader className="p-4 pb-2 shrink-0">
+            <DialogTitle className="flex items-center justify-between">
+              <span>{lightboxImage?.title}</span>
+            </DialogTitle>
+            {lightboxImage?.description && (
+              <p className="text-sm text-muted-foreground">{lightboxImage.description}</p>
+            )}
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden relative">
+            {lightboxImage && (
+              <TransformWrapper
+                initialScale={1}
+                minScale={0.5}
+                maxScale={5}
+                centerOnInit
+                wheel={{ step: 0.1 }}
+                doubleClick={{ mode: 'zoomIn', step: 0.7 }}
+              >
+                {({ zoomIn, zoomOut, resetTransform }) => (
+                  <>
+                    {/* Zoom Controls */}
+                    <div className="absolute top-2 right-2 z-10 flex gap-1 bg-background/80 backdrop-blur-sm rounded-lg p-1 shadow-lg">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => zoomIn()}
+                        title="Zoom in"
+                      >
+                        <ZoomIn className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => zoomOut()}
+                        title="Zoom out"
+                      >
+                        <ZoomOut className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => resetTransform()}
+                        title="Reset view"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {/* Help text */}
+                    <div className="absolute bottom-2 left-2 z-10 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm rounded px-2 py-1">
+                      <Move className="h-3 w-3 inline mr-1" />
+                      Drag to pan • Scroll or pinch to zoom • Double-click to zoom in
+                    </div>
+                    <TransformComponent
+                      wrapperStyle={{
+                        width: '100%',
+                        height: '100%',
+                      }}
+                      contentStyle={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <img
+                        src={lightboxImage.url}
+                        alt={lightboxImage.title}
+                        className="max-w-full max-h-full object-contain rounded-lg"
+                        style={{ cursor: 'grab' }}
+                      />
+                    </TransformComponent>
+                  </>
+                )}
+              </TransformWrapper>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Feedback Section */}
       {!analysis.userRating && (
