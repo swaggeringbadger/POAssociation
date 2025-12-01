@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, or, sql, inArray, desc } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, lt } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { workflowEngine } from "./workflowEngine";
 import ws from "ws";
@@ -49,7 +49,11 @@ export interface IStorage {
   getApplicationCountForYear(tenantId: string, year: number): Promise<number>;
   listApplicationsForTenant(tenantId: string): Promise<schema.Application[]>;
   listApplicationsForUser(userId: string): Promise<schema.Application[]>;
-  listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<schema.Application[]>;
+  listApplicationsByRole(role: string, tenantId: string, userId: string): Promise<(schema.Application & {
+    workflowStage?: string;
+    tenantName?: string;
+    aiAnalysis?: { status: string; complianceScore?: number; riskLevel?: string } | null;
+  })[]>;
   createApplication(application: schema.InsertApplication): Promise<schema.Application>;
   updateApplication(
     id: string,
@@ -239,6 +243,7 @@ export interface IStorage {
   getAiAnalysisForApplication(applicationId: string): Promise<schema.AiAnalysis[]>;
   listAiAnalysesForTenant(tenantId: string): Promise<schema.AiAnalysis[]>;
   getNextQueuedAiAnalysis(): Promise<schema.AiAnalysis | undefined>;
+  getStaleProcessingAnalyses(maxAgeMs: number): Promise<schema.AiAnalysis[]>;
   updateAiAnalysis(id: string, updates: Partial<schema.AiAnalysis>): Promise<schema.AiAnalysis>;
   updateAiAnalysisStatus(id: string, status: string, errorMessage?: string): Promise<schema.AiAnalysis>;
   submitAiAnalysisFeedback(id: string, rating: number, feedback?: string): Promise<schema.AiAnalysis>;
@@ -598,12 +603,12 @@ export class DbStorage implements IStorage {
       applications = await db.select().from(schema.applications);
     }
 
-    // Enrich with workflow stage and tenant name info
+    // Enrich with workflow stage, tenant name, and AI analysis info
     const enriched = await Promise.all(
       applications.map(async (app) => {
         const workflow = await this.getApplicationWorkflow(app.id);
         const tenant = await this.getTenant(app.tenantId);
-        
+
         let workflowStage: string | undefined;
         if (workflow) {
           const template = await this.getWorkflowTemplate(workflow.workflowTemplateId);
@@ -611,11 +616,21 @@ export class DbStorage implements IStorage {
           const currentStep = steps[workflow.currentStepIndex];
           workflowStage = currentStep?.title || 'Unknown';
         }
-        
+
+        // Get latest AI analysis for this application
+        const aiAnalyses = await this.getAiAnalysisForApplication(app.id);
+        const latestAnalysis = aiAnalyses.length > 0 ? aiAnalyses[aiAnalyses.length - 1] : null;
+        const aiAnalysis = latestAnalysis ? {
+          status: latestAnalysis.status,
+          complianceScore: latestAnalysis.complianceScore ?? undefined,
+          riskLevel: latestAnalysis.riskLevel ?? undefined
+        } : null;
+
         return {
           ...app,
           workflowStage,
-          tenantName: tenant?.name
+          tenantName: tenant?.name,
+          aiAnalysis
         };
       })
     );
@@ -2194,6 +2209,14 @@ export class DbStorage implements IStorage {
       .orderBy(desc(schema.aiAnalyses.queuedAt));
   }
 
+  async listAllAiAnalyses(limit = 100): Promise<schema.AiAnalysis[]> {
+    return db
+      .select()
+      .from(schema.aiAnalyses)
+      .orderBy(desc(schema.aiAnalyses.queuedAt))
+      .limit(limit);
+  }
+
   async getNextQueuedAiAnalysis(): Promise<schema.AiAnalysis | undefined> {
     // Get next queued analysis, ordered by priority (desc) then queued time (asc)
     const [analysis] = await db
@@ -2203,6 +2226,20 @@ export class DbStorage implements IStorage {
       .orderBy(desc(schema.aiAnalyses.priority), schema.aiAnalyses.queuedAt)
       .limit(1);
     return analysis;
+  }
+
+  async getStaleProcessingAnalyses(maxAgeMs: number): Promise<schema.AiAnalysis[]> {
+    // Find analyses stuck in "processing" state for longer than maxAgeMs
+    const cutoffTime = new Date(Date.now() - maxAgeMs);
+    return db
+      .select()
+      .from(schema.aiAnalyses)
+      .where(
+        and(
+          eq(schema.aiAnalyses.status, 'processing'),
+          lt(schema.aiAnalyses.startedAt, cutoffTime)
+        )
+      );
   }
 
   async updateAiAnalysis(id: string, updates: Partial<schema.AiAnalysis>): Promise<schema.AiAnalysis> {
@@ -2250,6 +2287,24 @@ export class DbStorage implements IStorage {
       .where(eq(schema.aiAnalyses.id, id))
       .returning();
     return updated;
+  }
+
+  async resetStuckAnalyses(): Promise<number> {
+    // Reset ALL analyses that are in 'processing' status
+    // This is useful when the server restarts and loses track of in-progress jobs
+    const result = await db
+      .update(schema.aiAnalyses)
+      .set({
+        status: 'pending',
+        progress: 0,
+        errorMessage: null,
+        startedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.aiAnalyses.status, 'processing'))
+      .returning();
+
+    return result.length;
   }
 
   async getAiAnalysisStats(tenantIds?: string[]): Promise<{

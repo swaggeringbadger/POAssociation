@@ -1,10 +1,14 @@
-# AI Form Generation Prompts
+# AI Prompt Library
 
-This folder contains the prompt templates used for AI-powered form generation.
+This folder contains all prompt templates used for AI-powered features in the POA Association platform.
 
-## Files
+## Prompt Categories
 
-### system-prompt.md
+### 1. Form Generation Prompts
+
+Used when AI generates application forms from design guidelines.
+
+#### system-prompt.md
 The system prompt that defines Claude's role and the structure requirements for generated forms.
 
 **Placeholders:**
@@ -12,12 +16,73 @@ The system prompt that defines Claude's role and the structure requirements for 
 - `{REFERENCE_ARCHITECTURE}` - The complete reference architecture documentation
 - `{EXAMPLE_FORM}` - An example form JSON for reference
 
-### user-prompt.md
+#### user-prompt.md
 The user prompt that instructs Claude how to process the design guidelines and extract lot types.
 
 **Placeholders:**
 - `{APPLICATION_TYPE}` - The type of application
 - `{DESIGN_GUIDELINES_CONTENT}` - The actual design guidelines content (only used for HTML/text, not PDFs)
+
+---
+
+### 2. Application Analysis Prompts
+
+Used for quick compliance analysis of submitted applications.
+
+#### analysis-system-prompt.md
+Defines the compliance analyst role and JSON output structure for basic analysis.
+
+**Output includes:**
+- Compliance score (0-100)
+- Risk level assessment
+- Bylaw compliance details
+- Risk assessment by category
+- Questions/concerns for committee
+- Approval recommendations
+
+#### analysis-user-prompt.md
+Provides application context for analysis.
+
+**Placeholders:**
+- `{COMMUNITY_NAME}`, `{COMMUNITY_TYPE}`
+- `{APPLICATION_NUMBER}`, `{PROJECT_TYPE}`, `{PROJECT_TITLE}`
+- `{PROJECT_DESCRIPTION}`, `{PROPERTY_ADDRESS}`
+- `{SUBMITTED_DATE}`
+- `{FORM_DATA}`, `{FORM_SCHEMA}`, `{RELEVANT_BYLAWS}`
+- `{DESIGN_GUIDELINES_CONTENT}`
+
+---
+
+### 3. Breakdown Report Prompts (Comprehensive Analysis)
+
+Used for detailed application breakdown reports with issue categorization.
+
+#### breakdown-report-system-prompt.md
+Defines comprehensive analysis role with detailed scoring criteria.
+
+**Output includes:**
+- **Report Summary**: Overall scores for completeness, correctness, community compliance, regulatory compliance
+- **Completeness Analysis**: Required/optional items provided and missing
+- **Correctness Analysis**: Verified information and inconsistencies
+- **Community Compliance Analysis**: Compliant, non-compliant, and unclear areas
+- **Regulatory Compliance Analysis**: Applicable regulations, permits, inspections
+- **Issues**: Categorized as Critical, Moderate, or Low with resolution steps
+- **Questions for Homeowner**: Clarifications, elaborations, document requests
+- **Recommendations**: Primary recommendation with conditions and next steps
+
+#### breakdown-report-user-prompt.md
+Provides detailed application context for comprehensive analysis.
+
+**Placeholders:**
+- `{COMMUNITY_NAME}`, `{COMMUNITY_TYPE}`, `{COUNTY_JURISDICTION}`
+- `{APPLICATION_NUMBER}`, `{PROJECT_TYPE}`, `{PROJECT_TITLE}`
+- `{PROJECT_DESCRIPTION}`, `{PROPERTY_ADDRESS}`, `{LOT_TYPE}`
+- `{SUBMITTED_DATE}`, `{APPLICANT_NAME}`
+- `{FORM_DATA}`, `{FORM_SCHEMA}`, `{RELEVANT_BYLAWS}`
+- `{UPLOADED_DOCUMENTS}`
+- `{DESIGN_GUIDELINES_CONTENT}`
+
+---
 
 ## How PDF Support Works
 
@@ -32,25 +97,29 @@ When the design guidelines URL points to HTML/text:
 2. The text content is inserted into the `{DESIGN_GUIDELINES_CONTENT}` placeholder
 3. The complete prompt is sent to Claude as text
 
+---
+
 ## Editing Prompts
 
 You can edit these prompts directly without modifying code:
 1. Edit the `.md` files in this folder
 2. Save your changes
 3. Restart the server (or let it hot-reload if watching)
-4. New form generations will use the updated prompts
+4. New AI operations will use the updated prompts
 
 ## Testing Changes
 
 To test prompt changes:
 1. Edit the prompt files
-2. Go to the Form Wizard page
-3. Generate a new form for a test application type
-4. Review the generated form to see if your changes had the desired effect
+2. Trigger the relevant AI feature (form generation, analysis, breakdown report)
+3. Review the output to see if your changes had the desired effect
+4. Check server logs for any JSON parsing errors
 
 ## Important Notes
 
-- The prompts emphasize NOT inventing lot types - only extracting what's explicitly in the guidelines
-- Lot types are critical for communities like Markland POA where requirements vary significantly by lot type
+- All prompts should produce valid JSON output
+- The prompts emphasize NOT inventing information - only extracting what's explicitly provided
 - Always include specific section/page references when citing bylaws
-- The system is designed to handle both communities with defined lot types AND those without
+- Lot types are critical for communities where requirements vary by lot type
+- Issue severity levels (critical/moderate/low) have specific definitions - follow them
+- Critical issues should block approval; moderate and low should not

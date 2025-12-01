@@ -207,6 +207,7 @@ export const applications = pgTable("applications", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   propertyAddress: text("property_address").notNull(),
+  propertyCoordinates: jsonb("property_coordinates"), // {lat: number, lng: number} - from Radar validation
 
   // Additional Information (Step 2 - Project-Type-Specific)
   formData: jsonb("form_data").notNull(), // The actual submitted data from dynamic form
@@ -992,6 +993,13 @@ export const aiAnalyses = pgTable("ai_analyses", {
   // Error handling
   errorMessage: text("error_message"),
   retryCount: integer("retry_count").default(0),
+
+  // Job options (stored for worker to use)
+  jobOptions: jsonb("job_options"), // {includeSatellite, includeMockups, includeBreakdownReport, mockupQuality}
+
+  // Breakdown report (comprehensive analysis)
+  breakdownReport: jsonb("breakdown_report"), // Full BreakdownReportResult object
+  breakdownPdfReportUrl: text("breakdown_pdf_report_url"),
 
   // Quality feedback
   userRating: integer("user_rating"), // 1-5 stars

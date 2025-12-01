@@ -34,7 +34,6 @@ import {
   MapPin,
   Image,
   Clock,
-  DollarSign,
   Loader2,
   Shield,
   Scale,
@@ -273,12 +272,6 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
                 Processed in {(analysis.processingTimeMs / 1000).toFixed(1)}s
               </span>
             )}
-            {analysis.totalCostUsd && (
-              <span className="flex items-center gap-1">
-                <DollarSign className="h-3 w-3" />
-                Cost: ${parseFloat(analysis.totalCostUsd).toFixed(4)}
-              </span>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -494,7 +487,7 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
       </Card>
 
       {/* Imagery Section */}
-      {(analysis.satelliteImageUrl || (analysis.mockupImageUrls && analysis.mockupImageUrls.length > 0)) && (
+      {(analysis.satelliteImageUrl || (analysis.mockupImageUrls && analysis.mockupImageUrls.length > 0) || (analysis.blueprintImageUrls && analysis.blueprintImageUrls.length > 0)) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -517,8 +510,24 @@ export function AIAnalysisResults({ analysisId }: AIAnalysisResultsProps) {
                   />
                 </div>
               )}
+              {analysis.blueprintImageUrls && analysis.blueprintImageUrls.map((url, idx) => (
+                <div key={`blueprint-${idx}`} className="space-y-2">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Site Plan / Blueprint
+                  </h4>
+                  <img
+                    src={url}
+                    alt="AI generated site plan blueprint"
+                    className="w-full rounded-lg border bg-white"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    AI-generated site plan showing property layout, measurements, and landscape elements
+                  </p>
+                </div>
+              ))}
               {analysis.mockupImageUrls && analysis.mockupImageUrls.map((url, idx) => (
-                <div key={idx} className="space-y-2">
+                <div key={`mockup-${idx}`} className="space-y-2">
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Image className="h-4 w-4" />
                     AI Mockup {idx + 1}

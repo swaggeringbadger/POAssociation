@@ -48,7 +48,7 @@ export class AiCreditService {
     return {
       hasAccess,
       hasCredits,
-      remaining,
+      creditsRemaining: remaining,
       isOverage,
       overageCost: effectiveOverageCost,
       effectiveMonthlyCredits,
@@ -171,6 +171,14 @@ export class AiCreditService {
 
     if (subscription?.plan?.planType) {
       tierDefaults = getAiAnalysisTierDefaults(subscription.plan.planType as SubscriptionPlanType);
+    } else {
+      // Check if this is a demo tenant - give them premium credits for demo purposes
+      const tenant = await storage.getTenant(tenantId);
+      if (tenant?.demoCodeId) {
+        // Demo tenants get community_premium tier (25 credits) for testing
+        tierDefaults = getAiAnalysisTierDefaults('community_premium');
+        console.log('[AI Credits] Demo tenant detected, using community_premium tier:', tenantId);
+      }
     }
 
     // Create credit record with tier defaults

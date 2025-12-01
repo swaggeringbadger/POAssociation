@@ -471,6 +471,7 @@ export default function ApplicationDetail() {
             userRole={currentUserRole}
             onAnalysisStarted={handleAnalysisStarted}
             disabled={!!hasActiveAnalysis}
+            isAnalyzing={!!hasActiveAnalysis}
           />
           {(canEdit || canEditWithWarning) && (
             <Button
@@ -525,6 +526,42 @@ export default function ApplicationDetail() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AI Analysis Section - Prominent placement at top */}
+      {(hasActiveAnalysis || hasCompletedAnalysis || activeAnalysisId) && (
+        <Card className="border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50/50 to-indigo-50/50 dark:from-violet-950/20 dark:to-indigo-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+              <Sparkles className="h-5 w-5" />
+              AI Analysis Report
+              {hasCompletedAnalysis && !hasActiveAnalysis && (
+                <Badge variant="default" className="ml-2 bg-green-600">Complete</Badge>
+              )}
+              {hasActiveAnalysis && (
+                <Badge variant="secondary" className="ml-2 animate-pulse">In Progress</Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              AI-powered compliance check, risk assessment, and board recommendations
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Show status card if analysis is in progress */}
+            {(hasActiveAnalysis || activeAnalysisId) && latestAnalysis && (
+              <AIAnalysisStatusCard
+                analysisId={activeAnalysisId || latestAnalysis.id}
+                onComplete={handleAnalysisComplete}
+                onCancel={handleAnalysisComplete}
+              />
+            )}
+
+            {/* Show full results if analysis is complete */}
+            {hasCompletedAnalysis && !hasActiveAnalysis && latestAnalysis && (
+              <AIAnalysisResults analysisId={latestAnalysis.id} />
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-l-4 border-l-primary/50" data-testid={`card-application-${application.id}`}>
         <CardHeader>
@@ -1019,13 +1056,12 @@ export default function ApplicationDetail() {
                   </div>
 
                   {/* Display signature image */}
-                  {sig.id && (
+                  {(sig.signatureDataUrl || sig.signatureImageUrl) && (
                     <div className="border rounded bg-white p-3">
                       <img
-                        src={`/api/signatures/${sig.id}/image`}
+                        src={sig.signatureDataUrl || sig.signatureImageUrl}
                         alt={`${sig.type} by ${sig.signedByName}`}
                         className="max-h-24 mx-auto"
-                        crossOrigin="include"
                       />
                     </div>
                   )}
@@ -1050,30 +1086,6 @@ export default function ApplicationDetail() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* AI Analysis Section - Show if there's an active or completed analysis */}
-      {(hasActiveAnalysis || hasCompletedAnalysis || activeAnalysisId) && (
-        <div>
-          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-500" />
-            AI Analysis
-          </h2>
-
-          {/* Show status card if analysis is in progress */}
-          {(hasActiveAnalysis || activeAnalysisId) && latestAnalysis && (
-            <AIAnalysisStatusCard
-              analysisId={activeAnalysisId || latestAnalysis.id}
-              onComplete={handleAnalysisComplete}
-              onCancel={handleAnalysisComplete}
-            />
-          )}
-
-          {/* Show full results if analysis is complete */}
-          {hasCompletedAnalysis && !hasActiveAnalysis && latestAnalysis && (
-            <AIAnalysisResults analysisId={latestAnalysis.id} />
-          )}
-        </div>
       )}
 
       {/* Workflow Section */}

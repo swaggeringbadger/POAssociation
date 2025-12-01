@@ -25,6 +25,9 @@ const ESTIMATED_PROCESSING_TIME = 90;
 // Maximum retry attempts for failed jobs
 const MAX_RETRIES = 3;
 
+// Maximum time a job can be in processing state before considered stale (10 minutes)
+const MAX_PROCESSING_TIME_MS = 10 * 60 * 1000;
+
 export class AnalysisQueueService {
   private isProcessing = false;
   private pollInterval: NodeJS.Timeout | null = null;
@@ -39,6 +42,7 @@ export class AnalysisQueueService {
     requestedByUserId: string;
     includeSatellite?: boolean;
     includeMockups?: boolean;
+    includeBreakdownReport?: boolean;
     mockupQuality?: 'standard' | 'high';
     demoCodeId?: string;
     priority?: number;
@@ -49,6 +53,7 @@ export class AnalysisQueueService {
       requestedByUserId,
       includeSatellite = true,
       includeMockups = true,
+      includeBreakdownReport = false,
       mockupQuality = 'standard',
       demoCodeId,
       priority = 0,
@@ -83,13 +88,15 @@ export class AnalysisQueueService {
       status: 'queued',
       priority,
       demoCodeId,
+      jobOptions: {
+        includeSatellite,
+        includeMockups,
+        includeBreakdownReport,
+        mockupQuality,
+      },
     };
 
     const analysis = await storage.createAiAnalysis(analysisData);
-
-    // Store job data in a way the worker can access
-    // For now, we'll reconstruct from the analysis record
-    // In a full implementation, you'd use a separate job data store
 
     return {
       analysisId: analysis.id,
@@ -256,6 +263,9 @@ export class AnalysisQueueService {
       }
 
       try {
+        // First, check for stale jobs that got stuck in processing
+        await this.recoverStaleJobs();
+
         const job = await this.getNextJob();
 
         if (job) {
@@ -277,6 +287,23 @@ export class AnalysisQueueService {
         console.error('[AnalysisQueue] Error polling for jobs:', error);
       }
     }, 5000);
+  }
+
+  /**
+   * Recover jobs stuck in processing state for too long
+   */
+  private async recoverStaleJobs(): Promise<void> {
+    try {
+      // Find jobs that have been processing for too long
+      const staleJobs = await storage.getStaleProcessingAnalyses(MAX_PROCESSING_TIME_MS);
+
+      for (const job of staleJobs) {
+        console.warn(`[AnalysisQueue] Recovering stale job ${job.id} - was stuck in processing`);
+        await this.failJob(job.id, 'Job timed out - processing took too long');
+      }
+    } catch (error) {
+      console.error('[AnalysisQueue] Error recovering stale jobs:', error);
+    }
   }
 
   /**

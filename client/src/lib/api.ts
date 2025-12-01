@@ -81,6 +81,12 @@ class ApiClient {
     return response.json();
   }
 
+  async getAllAiAnalyses(limit = 100): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/admin/ai-analyses?limit=${limit}`);
+    if (!response.ok) throw new Error("Failed to fetch AI analyses");
+    return response.json();
+  }
+
   async createTenant(tenant: Partial<Tenant>): Promise<Tenant> {
     const response = await fetch(`${this.baseUrl}/tenants`, {
       method: "POST",
@@ -1319,6 +1325,7 @@ export interface AiAnalysis {
   };
   satelliteImageUrl?: string;
   mockupImageUrls?: string[];
+  blueprintImageUrls?: string[];
   pdfReportUrl?: string;
   processingTimeMs?: number;
   totalCostUsd?: string;
@@ -1362,6 +1369,7 @@ export async function triggerAiAnalysis(
   options?: {
     includeSatellite?: boolean;
     includeMockups?: boolean;
+    includeBreakdownReport?: boolean;
     mockupQuality?: 'standard' | 'high';
   }
 ): Promise<TriggerAnalysisResponse> {

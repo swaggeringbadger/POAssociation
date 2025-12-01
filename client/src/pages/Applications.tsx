@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
 import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
-import { Loader2, Filter, ChevronDown, Eye, MoreVertical, Trash2 } from "lucide-react";
+import { Loader2, Filter, ChevronDown, Eye, MoreVertical, Trash2, Brain, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,7 +30,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Application } from "@shared/schema";
 
-type ApplicationWithWorkflow = Application & { workflowStage?: string; tenantName?: string };
+type ApplicationWithWorkflow = Application & {
+  workflowStage?: string;
+  tenantName?: string;
+  aiAnalysis?: { status: string; complianceScore?: number; riskLevel?: string } | null;
+};
 
 export default function Applications() {
   const { user } = useAuth();
@@ -132,6 +136,51 @@ export default function Applications() {
     return (
       <Badge className={variantClass}>{displayStage}</Badge>
     );
+  };
+
+  const getAiAnalysisBadge = (aiAnalysis: ApplicationWithWorkflow['aiAnalysis']) => {
+    if (!aiAnalysis) return null;
+
+    if (aiAnalysis.status === 'queued' || aiAnalysis.status === 'processing') {
+      return (
+        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 gap-1">
+          <Brain className="h-3 w-3 animate-pulse" />
+          AI Analyzing...
+        </Badge>
+      );
+    }
+
+    if (aiAnalysis.status === 'failed') {
+      return (
+        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 gap-1">
+          <XCircle className="h-3 w-3" />
+          AI Failed
+        </Badge>
+      );
+    }
+
+    if (aiAnalysis.status === 'completed' && aiAnalysis.complianceScore !== undefined) {
+      const score = aiAnalysis.complianceScore;
+      let colorClass = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      let Icon = CheckCircle2;
+
+      if (score < 50) {
+        colorClass = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+        Icon = XCircle;
+      } else if (score < 75) {
+        colorClass = "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+        Icon = AlertTriangle;
+      }
+
+      return (
+        <Badge className={`${colorClass} gap-1`}>
+          <Icon className="h-3 w-3" />
+          AI Score: {score}%
+        </Badge>
+      );
+    }
+
+    return null;
   };
 
   if (isLoading) {
@@ -269,7 +318,10 @@ export default function Applications() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-3">
-                    {getWorkflowStageBadge(app.workflowStage)}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {getWorkflowStageBadge(app.workflowStage)}
+                      {getAiAnalysisBadge(app.aiAnalysis)}
+                    </div>
                     <div className="flex gap-2">
                       <Link href={`/applications/${app.id}`}>
                         <Button variant="outline" size="sm" className="gap-2" data-testid={`view-${app.id}`}>

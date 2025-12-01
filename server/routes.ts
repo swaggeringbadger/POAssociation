@@ -1463,6 +1463,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create session (same as regular auth)
       req.session.userId = user.id;
 
+      // Get user's role from tenant membership and set in session
+      const userTenants = await storage.getUserTenants(user.id);
+      if (userTenants.length > 0) {
+        // Use the first tenant's role (demo users typically have one tenant)
+        req.session.currentUserRole = userTenants[0].role;
+        console.log('Demo login - Setting session currentUserRole:', userTenants[0].role);
+      }
+
       console.log('Demo login - Setting session userId:', user.id);
       console.log('Demo login - Session ID:', req.sessionID);
 
@@ -1543,6 +1551,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenants = await storage.listAllTenants();
       res.json(tenants);
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List all AI analyses (super admin only)
+  app.get("/api/admin/ai-analyses", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const analyses = await storage.listAllAiAnalyses(limit);
+      res.json(analyses);
+    } catch (error: any) {
+      console.error('Error listing AI analyses:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reset stuck AI analyses (super admin only)
+  app.post("/api/admin/ai-analyses/reset-stuck", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const count = await storage.resetStuckAnalyses();
+      console.log(`[Admin] Reset ${count} stuck AI analyses`);
+      res.json({ message: `Reset ${count} stuck analyses`, count });
+    } catch (error: any) {
+      console.error('Error resetting stuck AI analyses:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -3691,11 +3723,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get AI credits status for current tenant
   app.get('/api/ai/credits', isAuthenticated, async (req: any, res) => {
     try {
-      if (!req.subdomain) {
+      let tenant = null;
+
+      // First try subdomain lookup
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
+      }
+
+      // Fallback for demo users: use their current tenant from session or first tenant assignment
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        if (userTenants.length > 0) {
+          // Use current tenant from session if set, otherwise first tenant
+          const currentTenantId = req.session?.currentTenantId;
+          const targetTenant = currentTenantId
+            ? userTenants.find(ut => ut.tenantId === currentTenantId)
+            : userTenants[0];
+          if (targetTenant) {
+            tenant = await storage.getTenant(targetTenant.tenantId);
+          }
+        }
+      }
+
+      if (!tenant) {
         return res.status(400).json({ error: 'No tenant context' });
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
-      if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
       const { aiCreditService } = await import('./services/aiCreditService');
       const status = await aiCreditService.getCreditStatus(tenant.id);
@@ -3710,11 +3763,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check AI credits (quick check for UI)
   app.get('/api/ai/credits/check', isAuthenticated, async (req: any, res) => {
     try {
-      if (!req.subdomain) {
+      let tenant = null;
+
+      // First try subdomain lookup
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
+      }
+
+      // Fallback for demo users: use their current tenant from session or first tenant assignment
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        if (userTenants.length > 0) {
+          // Use current tenant from session if set, otherwise first tenant
+          const currentTenantId = req.session?.currentTenantId;
+          const targetTenant = currentTenantId
+            ? userTenants.find(ut => ut.tenantId === currentTenantId)
+            : userTenants[0];
+          if (targetTenant) {
+            tenant = await storage.getTenant(targetTenant.tenantId);
+          }
+        }
+      }
+
+      if (!tenant) {
         return res.status(400).json({ error: 'No tenant context' });
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
-      if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
       const { aiCreditService } = await import('./services/aiCreditService');
       const check = await aiCreditService.checkCredits(tenant.id);
@@ -3768,17 +3842,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trigger AI analysis for an application (management roles only)
   app.post('/api/applications/:applicationId/analyze', isAuthenticated, async (req: any, res) => {
     try {
-      // Check role
-      const userRole = req.session?.currentUserRole;
-      if (!canTriggerAnalysis(userRole)) {
-        return res.status(403).json({
-          error: 'AI Analysis can only be triggered by management roles',
-          requiredRoles: ['management_manager', 'management_rep', 'account_admin'],
-        });
-      }
-
       const { applicationId } = req.params;
-      const { includeSatellite = true, includeMockups = true, mockupQuality = 'standard' } = req.body;
+      const { includeSatellite = true, includeMockups = true, includeBreakdownReport = false, mockupQuality = 'standard' } = req.body;
 
       // Get application to verify tenant
       const application = await storage.getApplication(applicationId);
@@ -3786,11 +3851,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Application not found' });
       }
 
-      // Verify user has access to this application's tenant
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Get userId for all lookups
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      // Get user's role - first from session, then fallback to user_tenants lookup
+      let userRole = req.session?.currentUserRole;
+
+      // For demo users or stale sessions, lookup role from user_tenants
+      if (!userRole && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === application.tenantId);
+        if (matchingTenant) {
+          userRole = matchingTenant.role;
+          // Update session for future requests
+          req.session.currentUserRole = userRole;
+          console.log('[AI Analysis] Set currentUserRole from user_tenants:', userRole);
+        }
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      if (!canTriggerAnalysis(userRole)) {
+        console.log('[AI Analysis] Access denied - userRole:', userRole, 'userId:', userId);
+        return res.status(403).json({
+          error: 'AI Analysis can only be triggered by management roles',
+          requiredRoles: ['management_manager', 'management_rep', 'account_admin'],
+        });
+      }
+
+      // Verify user has access to this application's tenant
+      // For demo users, check their tenant membership instead of subdomain
+      let tenant = null;
+
+      // First try subdomain lookup
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
+      }
+
+      // If no tenant from subdomain (common for demo users), check user's tenant access
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === application.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== application.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -3799,9 +3903,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await analysisQueueService.queueAnalysis({
         applicationId,
         tenantId: tenant.id,
-        requestedByUserId: req.userId,
+        requestedByUserId: userId || '',
         includeSatellite,
         includeMockups,
+        includeBreakdownReport,
         mockupQuality,
         demoCodeId: application.demoCodeId ?? undefined,
       });
@@ -3823,16 +3928,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Analysis not found' });
       }
 
-      // Verify user has access to this analysis's tenant
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === analysis.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== analysis.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      res.json(analysis);
+      // Transform flat DB structure to nested frontend format
+      const response = {
+        id: analysis.id,
+        applicationId: analysis.applicationId,
+        tenantId: analysis.tenantId,
+        requestedByUserId: analysis.requestedByUserId,
+        status: analysis.status,
+        result: analysis.complianceScore != null ? {
+          complianceScore: analysis.complianceScore,
+          riskLevel: analysis.riskLevel,
+          overallSummary: analysis.overallSummary,
+          bylawCompliance: analysis.bylawCompliance || [],
+          riskAssessment: analysis.riskAssessment || [],
+          questionsConcerns: analysis.questionsConcerns || [],
+          recommendations: analysis.recommendations || [],
+        } : undefined,
+        satelliteImageUrl: analysis.satelliteImageUrl,
+        mockupImageUrls: analysis.aiMockupUrls,
+        blueprintImageUrls: analysis.blueprintUrls,
+        pdfReportUrl: analysis.pdfReportUrl,
+        processingTimeMs: analysis.processingDurationMs,
+        totalCostUsd: analysis.totalCostUsd,
+        errorMessage: analysis.errorMessage,
+        userRating: analysis.userRating,
+        userFeedback: analysis.userFeedback,
+        createdAt: analysis.queuedAt,
+        completedAt: analysis.completedAt,
+      };
+
+      res.json(response);
     } catch (error: any) {
       console.error('Error getting AI analysis:', error);
       res.status(500).json({ error: error.message });
@@ -3849,11 +3995,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Analysis not found' });
       }
 
-      // Verify access
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === analysis.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== analysis.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -3879,11 +4037,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Application not found' });
       }
 
-      // Verify user has access
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === application.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== application.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -3911,11 +4081,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Analysis not found' });
       }
 
-      // Verify access
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === analysis.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== analysis.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -3938,21 +4120,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Analysis not found' });
       }
 
-      // Verify access
-      if (!req.subdomain) {
-        return res.status(400).json({ error: 'No tenant context' });
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
       }
-      const tenant = await storage.getTenantBySubdomain(req.subdomain);
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === analysis.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
       if (!tenant || tenant.id !== analysis.tenantId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
       const { analysisQueueService } = await import('./services/analysisQueueService');
-      await analysisQueueService.cancelAnalysis(analysisId, req.userId);
+      await analysisQueueService.cancelAnalysis(analysisId, userId || '');
 
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error cancelling AI analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download AI analysis PDF report from blob storage
+  app.get('/api/ai/analysis/:analysisId/report', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const hasAccess = userTenants.some(ut => ut.tenantId === analysis.tenantId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      } else {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Try to fetch from blob storage
+      const { azureBlobStorage } = await import('./azureBlobStorage');
+      if (azureBlobStorage.isAvailable()) {
+        const blobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-report.pdf`;
+        try {
+          const pdfBuffer = await azureBlobStorage.downloadFile('ai-analysis-reports', blobPath);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="analysis-report-${analysis.id}.pdf"`);
+          return res.send(pdfBuffer);
+        } catch (error) {
+          console.error('Failed to download PDF from blob storage:', error);
+          // Fall through to check if stored as data URL
+        }
+      }
+
+      // Fallback: check if stored as data URL in database
+      if (analysis.pdfReportUrl?.startsWith('data:application/pdf;base64,')) {
+        const base64Data = analysis.pdfReportUrl.replace('data:application/pdf;base64,', '');
+        const pdfBuffer = Buffer.from(base64Data, 'base64');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="analysis-report-${analysis.id}.pdf"`);
+        return res.send(pdfBuffer);
+      }
+
+      res.status(404).json({ error: 'PDF report not found' });
+    } catch (error: any) {
+      console.error('Error downloading AI analysis report:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download AI analysis satellite image from blob storage
+  app.get('/api/ai/analysis/:analysisId/satellite', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const hasAccess = userTenants.some(ut => ut.tenantId === analysis.tenantId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      } else {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Try to fetch from blob storage
+      const { azureBlobStorage } = await import('./azureBlobStorage');
+      if (azureBlobStorage.isAvailable()) {
+        const blobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-satellite.png`;
+        try {
+          const imageBuffer = await azureBlobStorage.downloadFile('ai-analysis-reports', blobPath);
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+          return res.send(imageBuffer);
+        } catch (error) {
+          console.error('Failed to download satellite image from blob storage:', error);
+        }
+      }
+
+      // Fallback: redirect to Google Maps URL if stored
+      if (analysis.satelliteImageUrl && analysis.satelliteImageUrl.startsWith('https://')) {
+        return res.redirect(analysis.satelliteImageUrl);
+      }
+
+      res.status(404).json({ error: 'Satellite image not found' });
+    } catch (error: any) {
+      console.error('Error downloading satellite image:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download AI analysis breakdown PDF report from blob storage
+  app.get('/api/ai/analysis/:analysisId/breakdown-report', isAuthenticated, async (req: any, res) => {
+    try {
+      const { analysisId } = req.params;
+
+      const analysis = await storage.getAiAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const hasAccess = userTenants.some(ut => ut.tenantId === analysis.tenantId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      } else {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Try to fetch from blob storage
+      const { azureBlobStorage } = await import('./azureBlobStorage');
+      if (azureBlobStorage.isAvailable()) {
+        const blobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-breakdown.pdf`;
+        try {
+          const pdfBuffer = await azureBlobStorage.downloadFile('ai-analysis-reports', blobPath);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="breakdown-report-${analysis.id}.pdf"`);
+          return res.send(pdfBuffer);
+        } catch (error) {
+          console.error('Failed to download breakdown PDF from blob storage:', error);
+        }
+      }
+
+      // Fallback: check if stored as data URL in database
+      if (analysis.breakdownPdfReportUrl?.startsWith('data:application/pdf;base64,')) {
+        const base64Data = analysis.breakdownPdfReportUrl.replace('data:application/pdf;base64,', '');
+        const pdfBuffer = Buffer.from(base64Data, 'base64');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="breakdown-report-${analysis.id}.pdf"`);
+        return res.send(pdfBuffer);
+      }
+
+      res.status(404).json({ error: 'Breakdown report not found' });
+    } catch (error: any) {
+      console.error('Error downloading AI breakdown report:', error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -21,7 +21,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, Image } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, Image, FileSearch, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   checkAiCredits,
@@ -35,6 +35,7 @@ interface AIAnalysisButtonProps {
   userRole?: string;
   onAnalysisStarted?: (analysisId: string) => void;
   disabled?: boolean;
+  isAnalyzing?: boolean;
 }
 
 // Roles that can trigger AI analysis
@@ -45,10 +46,12 @@ export function AIAnalysisButton({
   userRole,
   onAnalysisStarted,
   disabled = false,
+  isAnalyzing = false,
 }: AIAnalysisButtonProps) {
   const [open, setOpen] = useState(false);
   const [includeSatellite, setIncludeSatellite] = useState(true);
   const [includeMockups, setIncludeMockups] = useState(true);
+  const [includeBreakdownReport, setIncludeBreakdownReport] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -69,6 +72,7 @@ export function AIAnalysisButton({
       triggerAiAnalysis(applicationId, {
         includeSatellite,
         includeMockups,
+        includeBreakdownReport,
         mockupQuality: 'standard',
       }),
     onSuccess: (data: TriggerAnalysisResponse) => {
@@ -93,6 +97,37 @@ export function AIAnalysisButton({
   // Don't render if user doesn't have permission
   if (!canTriggerAnalysis) {
     return null;
+  }
+
+  // When analyzing, show animated button instead of dialog trigger
+  if (isAnalyzing) {
+    return (
+      <Button
+        variant="default"
+        className="gap-2 relative overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:via-purple-700 hover:to-indigo-700"
+        disabled
+        data-testid="button-ai-analysis-progress"
+      >
+        {/* Animated shimmer/paint effect */}
+        <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
+        <style>{`
+          @keyframes shimmer {
+            100% { transform: translateX(100%); }
+          }
+          @keyframes wiggle {
+            0%, 100% { transform: rotate(-8deg); }
+            50% { transform: rotate(8deg); }
+          }
+        `}</style>
+        <Wand2 className="h-4 w-4 animate-[wiggle_0.5s_ease-in-out_infinite]" />
+        <span className="relative">Analyzing...</span>
+        <span className="flex gap-0.5">
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </span>
+      </Button>
+    );
   }
 
   return (
@@ -195,6 +230,24 @@ export function AIAnalysisButton({
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   Create visual mockups of the proposed project
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3 p-3 border rounded-lg border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30">
+              <Checkbox
+                id="breakdown"
+                checked={includeBreakdownReport}
+                onCheckedChange={(checked) => setIncludeBreakdownReport(checked as boolean)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="breakdown" className="flex items-center gap-2 cursor-pointer">
+                  <FileSearch className="h-4 w-4 text-amber-600" />
+                  Comprehensive Breakdown Report
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Deep analysis of completeness, correctness, community & regulatory compliance,
+                  categorized issues, and questions for homeowner. Analyzes all community documents including PDFs.
                 </p>
               </div>
             </div>

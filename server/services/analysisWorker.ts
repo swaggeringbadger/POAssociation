@@ -13,15 +13,21 @@
 import { storage } from '../storage';
 import { aiAnalysisService } from './aiAnalysisService';
 import { googleMapsService } from './googleMapsService';
+import { propertyBoundaryService } from './propertyBoundaryService';
 import { imageGenerationService } from './imageGenerationService';
-import { pdfReportService, type ReportContext } from './pdfReportService';
+import { pdfReportService, type ReportContext, type BreakdownReportContext } from './pdfReportService';
 import { analysisQueueService } from './analysisQueueService';
-import { calculateAnalysisCosts, type AnalysisCosts, type Coordinates } from '@shared/aiAnalysisTypes';
+import { azureBlobStorage } from '../azureBlobStorage';
+import { calculateAnalysisCosts, type AnalysisCosts, type Coordinates, type BreakdownReportResult } from '@shared/aiAnalysisTypes';
 import type { AiAnalysis } from '@shared/schema';
+
+// Container name for AI analysis reports
+const AI_REPORTS_CONTAINER = 'ai-analysis-reports';
 
 export interface AnalysisWorkerOptions {
   includeSatellite?: boolean;
   includeMockups?: boolean;
+  includeBreakdownReport?: boolean;
   mockupQuality?: 'standard' | 'high';
   mockupCount?: number;
 }
@@ -45,11 +51,13 @@ export class AnalysisWorker {
       const tenant = await storage.getTenant(analysis.tenantId);
       const propertyAddress = application.propertyAddress || '';
 
-      // Determine options (defaults for now, could be stored in job data)
+      // Read options from job data stored in the analysis record
+      const jobOptions = (analysis.jobOptions as AnalysisWorkerOptions) || {};
       const options: AnalysisWorkerOptions = {
-        includeSatellite: true,
-        includeMockups: true,
-        mockupQuality: 'standard',
+        includeSatellite: jobOptions.includeSatellite ?? true,
+        includeMockups: jobOptions.includeMockups ?? true,
+        includeBreakdownReport: jobOptions.includeBreakdownReport ?? false,
+        mockupQuality: jobOptions.mockupQuality ?? 'standard',
         mockupCount: 2,
       };
 
@@ -93,8 +101,9 @@ export class AnalysisWorker {
         }
       }
 
-      // Step 4: Generate AI mockups if enabled
+      // Step 4: Generate AI mockups and blueprint if enabled
       const mockupUrls: string[] = [];
+      let blueprintUrl: string | undefined;
       let imageGenCost = 0;
 
       if (options.includeMockups && imageGenerationService.getActiveProvider()) {
@@ -107,6 +116,7 @@ export class AnalysisWorker {
           formData: (application.formData as Record<string, unknown>) || {},
         };
 
+        // Generate mockups
         const mockups = await imageGenerationService.generateMockupVariations(
           mockupContext,
           options.mockupCount || 2,
@@ -119,10 +129,23 @@ export class AnalysisWorker {
           mockupUrls.push(`data:${mockup.mimeType};base64,${mockup.base64}`);
         }
 
-        // Calculate image gen cost
+        // Generate blueprint-style site plan
+        console.log(`[AnalysisWorker] Generating blueprint for ${analysis.id}`);
+        const blueprint = await imageGenerationService.generateBlueprint(
+          mockupContext,
+          { quality: options.mockupQuality }
+        );
+
+        if (blueprint) {
+          blueprintUrl = `data:${blueprint.mimeType};base64,${blueprint.base64}`;
+          console.log(`[AnalysisWorker] Blueprint generated successfully`);
+        }
+
+        // Calculate image gen cost (mockups + blueprint)
+        const totalImages = mockups.length + (blueprint ? 1 : 0);
         const costResult = imageGenerationService.calculateCosts({
-          standardCount: options.mockupQuality === 'standard' ? mockups.length : 0,
-          highCount: options.mockupQuality === 'high' ? mockups.length : 0,
+          standardCount: options.mockupQuality === 'standard' ? totalImages : 0,
+          highCount: options.mockupQuality === 'high' ? totalImages : 0,
           provider: 'stability_ai',
         });
         imageGenCost = parseFloat(costResult.total);
@@ -148,15 +171,80 @@ export class AnalysisWorker {
         },
       };
 
-      // Add satellite image if available
+      // Add satellite image with property boundary if available
+      let satelliteImageBlobUrl: string | undefined;
       if (satelliteImageUrl && propertyCoordinates) {
         try {
-          const satelliteData = await googleMapsService.getSatelliteImageBase64(propertyCoordinates);
-          if (satelliteData) {
-            reportContext.satelliteImage = {
-              base64: satelliteData.base64,
+          // Get form data to determine lot type
+          const formData = (application.formData as Record<string, unknown>) || {};
+          const lotType = propertyBoundaryService.determineLotType(formData);
+
+          console.log(`[AnalysisWorker] Generating enhanced satellite images with property boundary (lot type: ${lotType})`);
+
+          // Try to get enhanced images with property boundary
+          const enhancedImages = await propertyBoundaryService.getEnhancedSatelliteImages(
+            propertyCoordinates,
+            { lotType }
+          );
+
+          if (enhancedImages) {
+            // Add enhanced images to report context
+            reportContext.propertyBoundaryImage = {
+              base64: enhancedImages.propertyViewBase64,
               coordinates: propertyCoordinates,
             };
+            reportContext.neighborhoodContextImage = {
+              base64: enhancedImages.neighborhoodViewBase64,
+              coordinates: propertyCoordinates,
+            };
+
+            // Also set basic satellite image as fallback
+            reportContext.satelliteImage = {
+              base64: enhancedImages.propertyViewBase64,
+              coordinates: propertyCoordinates,
+            };
+
+            // Upload property boundary image to blob storage
+            if (azureBlobStorage.isAvailable()) {
+              const satelliteBlobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-satellite.png`;
+              const imageBuffer = Buffer.from(enhancedImages.propertyViewBase64, 'base64');
+              await azureBlobStorage.uploadFile(
+                AI_REPORTS_CONTAINER,
+                imageBuffer,
+                'satellite.png',
+                'image/png',
+                satelliteBlobPath
+              );
+              satelliteImageBlobUrl = `/api/ai/analysis/${analysis.id}/satellite`;
+              console.log(`[AnalysisWorker] Enhanced satellite image uploaded to blob storage: ${satelliteBlobPath}`);
+            }
+
+            // Extra API cost for enhanced images (2 static map calls instead of 1)
+            googleMapsCost += 0.002;
+          } else {
+            // Fall back to basic satellite image
+            console.log(`[AnalysisWorker] Falling back to basic satellite image`);
+            const satelliteData = await googleMapsService.getSatelliteImageBase64(propertyCoordinates);
+            if (satelliteData) {
+              reportContext.satelliteImage = {
+                base64: satelliteData.base64,
+                coordinates: propertyCoordinates,
+              };
+
+              if (azureBlobStorage.isAvailable()) {
+                const satelliteBlobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-satellite.png`;
+                const imageBuffer = Buffer.from(satelliteData.base64, 'base64');
+                await azureBlobStorage.uploadFile(
+                  AI_REPORTS_CONTAINER,
+                  imageBuffer,
+                  'satellite.png',
+                  'image/png',
+                  satelliteBlobPath
+                );
+                satelliteImageBlobUrl = `/api/ai/analysis/${analysis.id}/satellite`;
+                console.log(`[AnalysisWorker] Basic satellite image uploaded to blob storage: ${satelliteBlobPath}`);
+              }
+            }
           }
         } catch (error) {
           console.warn('[AnalysisWorker] Failed to fetch satellite image for PDF:', error);
@@ -173,9 +261,109 @@ export class AnalysisWorker {
 
       const pdfBuffer = await pdfReportService.generateReport(reportContext);
 
-      // In production, upload PDF to cloud storage and get URL
-      // For now, store as data URL
-      const pdfReportUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+      // Upload PDF to Azure Blob Storage if available, otherwise fall back to data URL
+      let pdfReportUrl: string;
+      if (azureBlobStorage.isAvailable()) {
+        const pdfBlobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-report.pdf`;
+        const uploadResult = await azureBlobStorage.uploadFile(
+          AI_REPORTS_CONTAINER,
+          pdfBuffer,
+          'analysis-report.pdf',
+          'application/pdf',
+          pdfBlobPath
+        );
+        // Store the blob path - we'll serve it through our API endpoint
+        pdfReportUrl = `/api/ai/analysis/${analysis.id}/report`;
+        console.log(`[AnalysisWorker] PDF uploaded to blob storage: ${pdfBlobPath}`);
+      } else {
+        // Fallback to data URL (not recommended for production)
+        console.warn('[AnalysisWorker] Azure Blob Storage not configured, storing PDF as data URL');
+        pdfReportUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+      }
+
+      // Step 5b: Generate breakdown report if requested
+      let breakdownResult: BreakdownReportResult | undefined;
+      let breakdownPdfReportUrl: string | undefined;
+      let breakdownCosts = { anthropicCostUsd: '0', totalCostUsd: '0' };
+
+      if (options.includeBreakdownReport) {
+        console.log(`[AnalysisWorker] Generating breakdown report for ${analysis.id}`);
+
+        try {
+          const breakdownResponse = await aiAnalysisService.generateBreakdownReport(analysis);
+          breakdownResult = breakdownResponse.result;
+          breakdownCosts = breakdownResponse.costs;
+
+          // Get applicant name
+          let applicantName = '';
+          const applicantUser = await storage.getUser(application.submittedByUserId);
+          if (applicantUser) {
+            applicantName = `${applicantUser.firstName || ''} ${applicantUser.lastName || ''}`.trim() || applicantUser.email || '';
+          }
+
+          // Get lot type from form data
+          const formData = (application.formData as Record<string, unknown>) || {};
+          const lotType = (formData.lot_type as string) || (formData.lotType as string) || '';
+
+          // Get tenant settings
+          const tenantSettings = tenant?.settings as { countyJurisdiction?: string } | undefined;
+
+          // Generate breakdown PDF
+          const breakdownReportContext: BreakdownReportContext = {
+            analysis,
+            result: breakdownResult,
+            application: {
+              applicationNumber: application.applicationNumber || '',
+              projectType: application.projectType || '',
+              title: application.title || '',
+              description: application.description || '',
+              propertyAddress,
+              submittedAt: application.submittedAt || new Date(),
+              lotType,
+              applicantName,
+            },
+            tenant: {
+              name: tenant?.name || 'Unknown Community',
+              logoUrl: (tenant as { logoUrl?: string })?.logoUrl || undefined,
+              countyJurisdiction: tenantSettings?.countyJurisdiction,
+            },
+          };
+
+          // Add satellite images if available (including enhanced property boundary images)
+          if (reportContext.satelliteImage) {
+            breakdownReportContext.satelliteImage = reportContext.satelliteImage;
+          }
+          if (reportContext.propertyBoundaryImage) {
+            breakdownReportContext.propertyBoundaryImage = reportContext.propertyBoundaryImage;
+          }
+          if (reportContext.neighborhoodContextImage) {
+            breakdownReportContext.neighborhoodContextImage = reportContext.neighborhoodContextImage;
+          }
+
+          const breakdownPdfBuffer = await pdfReportService.generateBreakdownReport(breakdownReportContext);
+
+          // Upload breakdown PDF to blob storage if available
+          if (azureBlobStorage.isAvailable()) {
+            const breakdownBlobPath = `${analysis.tenantId}/${analysis.applicationId}/${analysis.id}-breakdown.pdf`;
+            await azureBlobStorage.uploadFile(
+              AI_REPORTS_CONTAINER,
+              breakdownPdfBuffer,
+              'breakdown-report.pdf',
+              'application/pdf',
+              breakdownBlobPath
+            );
+            breakdownPdfReportUrl = `/api/ai/analysis/${analysis.id}/breakdown-report`;
+            console.log(`[AnalysisWorker] Breakdown PDF uploaded to blob storage: ${breakdownBlobPath}`);
+          } else {
+            breakdownPdfReportUrl = `data:application/pdf;base64,${breakdownPdfBuffer.toString('base64')}`;
+          }
+
+          console.log(`[AnalysisWorker] Breakdown report generated for ${analysis.id}`);
+        } catch (error) {
+          console.error('[AnalysisWorker] Failed to generate breakdown report:', error);
+          // Continue without breakdown report - don't fail the whole analysis
+        }
+      }
 
       // Step 6: Calculate final costs
       const finalCosts = calculateAnalysisCosts({
@@ -187,8 +375,9 @@ export class AnalysisWorker {
         imageGenQuality: options.mockupQuality || 'standard',
       });
 
-      // Add actual costs
-      const totalCost = parseFloat(aiCosts.totalCostUsd) + googleMapsCost + imageGenCost;
+      // Add actual costs (including breakdown report if generated)
+      const breakdownExtraCost = parseFloat(breakdownCosts.totalCostUsd || '0');
+      const totalCost = parseFloat(aiCosts.totalCostUsd) + googleMapsCost + imageGenCost + breakdownExtraCost;
 
       // Step 7: Complete the job with results
       const processingDurationMs = Date.now() - startTime;
@@ -203,9 +392,12 @@ export class AnalysisWorker {
         questionsConcerns: aiResult.questionsConcerns,
         recommendations: aiResult.recommendations,
         propertyCoordinates: propertyCoordinates,
-        satelliteImageUrl,
+        satelliteImageUrl: satelliteImageBlobUrl || satelliteImageUrl,
         aiMockupUrls: mockupUrls.length > 0 ? mockupUrls : undefined,
+        blueprintUrls: blueprintUrl ? [blueprintUrl] : undefined,
         pdfReportUrl,
+        breakdownReport: breakdownResult,
+        breakdownPdfReportUrl,
         anthropicTokensUsed: parseInt(finalCosts.anthropicTokensUsed.toString()),
         anthropicCostUsd: aiCosts.anthropicCostUsd,
         googleMapsCostUsd: googleMapsCost.toFixed(4),

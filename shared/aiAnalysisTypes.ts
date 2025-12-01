@@ -295,6 +295,319 @@ export interface AnalysisCosts {
   totalCostUsd: string;
 }
 
+// ============================================
+// BREAKDOWN REPORT TYPES
+// ============================================
+
+/**
+ * Overall assessment level for breakdown reports
+ */
+export const OverallAssessmentSchema = z.enum([
+  'comprehensive',
+  'mostly_complete',
+  'needs_attention',
+  'incomplete',
+]);
+export type OverallAssessment = z.infer<typeof OverallAssessmentSchema>;
+
+/**
+ * Documentation status
+ */
+export const DocumentationStatusSchema = z.enum(['complete', 'partial', 'insufficient']);
+export type DocumentationStatus = z.infer<typeof DocumentationStatusSchema>;
+
+/**
+ * Verification status for correctness checks
+ */
+export const VerificationStatusSchema = z.enum(['verified', 'plausible', 'questionable', 'incorrect']);
+export type VerificationStatus = z.infer<typeof VerificationStatusSchema>;
+
+/**
+ * Priority levels
+ */
+export const PriorityLevelSchema = z.enum(['high', 'medium', 'low']);
+export type PriorityLevel = z.infer<typeof PriorityLevelSchema>;
+
+/**
+ * Recommendation types for breakdown report
+ */
+export const BreakdownRecommendationTypeSchema = z.enum([
+  'approve',
+  'approve_with_conditions',
+  'request_more_info',
+  'deny',
+]);
+export type BreakdownRecommendationType = z.infer<typeof BreakdownRecommendationTypeSchema>;
+
+/**
+ * Report summary section
+ */
+export const ReportSummarySchema = z.object({
+  overallAssessment: OverallAssessmentSchema,
+  completenessScore: z.number().min(0).max(100),
+  correctnessScore: z.number().min(0).max(100),
+  communityComplianceScore: z.number().min(0).max(100),
+  regulatoryComplianceScore: z.number().min(0).max(100),
+  overallScore: z.number().min(0).max(100),
+  executiveSummary: z.string(),
+});
+export type ReportSummary = z.infer<typeof ReportSummarySchema>;
+
+/**
+ * Completeness analysis section
+ */
+export const CompletenessAnalysisSchema = z.object({
+  requiredItemsProvided: z.array(z.string()),
+  requiredItemsMissing: z.array(z.string()),
+  optionalItemsProvided: z.array(z.string()),
+  optionalItemsMissing: z.array(z.string()),
+  documentationStatus: DocumentationStatusSchema,
+  notes: z.string(),
+});
+export type CompletenessAnalysis = z.infer<typeof CompletenessAnalysisSchema>;
+
+/**
+ * Verified information item
+ */
+export const VerifiedInfoItemSchema = z.object({
+  item: z.string(),
+  status: VerificationStatusSchema,
+  notes: z.string(),
+});
+export type VerifiedInfoItem = z.infer<typeof VerifiedInfoItemSchema>;
+
+/**
+ * Inconsistency item
+ */
+export const InconsistencyItemSchema = z.object({
+  description: z.string(),
+  fields: z.array(z.string()),
+  impact: z.string(),
+});
+export type InconsistencyItem = z.infer<typeof InconsistencyItemSchema>;
+
+/**
+ * Correctness analysis section
+ */
+export const CorrectnessAnalysisSchema = z.object({
+  verifiedInformation: z.array(VerifiedInfoItemSchema),
+  inconsistencies: z.array(InconsistencyItemSchema),
+  notes: z.string(),
+});
+export type CorrectnessAnalysis = z.infer<typeof CorrectnessAnalysisSchema>;
+
+/**
+ * Compliant area item
+ */
+export const CompliantAreaSchema = z.object({
+  guideline: z.string(),
+  reference: z.string(),
+  explanation: z.string(),
+});
+export type CompliantArea = z.infer<typeof CompliantAreaSchema>;
+
+/**
+ * Non-compliant area item
+ */
+export const NonCompliantAreaSchema = z.object({
+  guideline: z.string(),
+  reference: z.string(),
+  explanation: z.string(),
+  remediation: z.string(),
+});
+export type NonCompliantArea = z.infer<typeof NonCompliantAreaSchema>;
+
+/**
+ * Unclear area item
+ */
+export const UnclearAreaSchema = z.object({
+  guideline: z.string(),
+  reason: z.string(),
+  recommendation: z.string(),
+});
+export type UnclearArea = z.infer<typeof UnclearAreaSchema>;
+
+/**
+ * Community compliance analysis section
+ */
+export const CommunityComplianceAnalysisSchema = z.object({
+  guidelinesReviewed: z.array(z.string()),
+  compliantAreas: z.array(CompliantAreaSchema),
+  nonCompliantAreas: z.array(NonCompliantAreaSchema),
+  unclearAreas: z.array(UnclearAreaSchema),
+});
+export type CommunityComplianceAnalysis = z.infer<typeof CommunityComplianceAnalysisSchema>;
+
+/**
+ * Likely compliant regulation item
+ */
+export const LikelyCompliantRegulationSchema = z.object({
+  regulation: z.string(),
+  explanation: z.string(),
+});
+export type LikelyCompliantRegulation = z.infer<typeof LikelyCompliantRegulationSchema>;
+
+/**
+ * Potential regulatory issue item
+ */
+export const PotentialRegulatoryIssueSchema = z.object({
+  regulation: z.string(),
+  concern: z.string(),
+  recommendation: z.string(),
+});
+export type PotentialRegulatoryIssue = z.infer<typeof PotentialRegulatoryIssueSchema>;
+
+/**
+ * Regulatory compliance analysis section
+ */
+export const RegulatoryComplianceAnalysisSchema = z.object({
+  applicableRegulations: z.array(z.string()),
+  likelyCompliant: z.array(LikelyCompliantRegulationSchema),
+  potentialIssues: z.array(PotentialRegulatoryIssueSchema),
+  permitsRequired: z.array(z.string()),
+  inspectionsRequired: z.array(z.string()),
+  notes: z.string(),
+});
+export type RegulatoryComplianceAnalysis = z.infer<typeof RegulatoryComplianceAnalysisSchema>;
+
+/**
+ * Critical issue
+ */
+export const CriticalIssueSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  impact: z.string(),
+  resolution: z.string(),
+  blocksApproval: z.boolean(),
+});
+export type CriticalIssue = z.infer<typeof CriticalIssueSchema>;
+
+/**
+ * Moderate issue
+ */
+export const ModerateIssueSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  impact: z.string(),
+  resolution: z.string(),
+  blocksApproval: z.boolean(),
+});
+export type ModerateIssue = z.infer<typeof ModerateIssueSchema>;
+
+/**
+ * Low issue
+ */
+export const LowIssueSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  suggestion: z.string(),
+});
+export type LowIssue = z.infer<typeof LowIssueSchema>;
+
+/**
+ * Issues categorized by severity
+ */
+export const IssuesBySeveritySchema = z.object({
+  critical: z.array(CriticalIssueSchema),
+  moderate: z.array(ModerateIssueSchema),
+  low: z.array(LowIssueSchema),
+});
+export type IssuesBySeverity = z.infer<typeof IssuesBySeveritySchema>;
+
+/**
+ * Clarification question
+ */
+export const ClarificationQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  reason: z.string(),
+  relatedTo: z.string(),
+  priority: PriorityLevelSchema,
+});
+export type ClarificationQuestion = z.infer<typeof ClarificationQuestionSchema>;
+
+/**
+ * Elaboration request
+ */
+export const ElaborationRequestSchema = z.object({
+  id: z.string(),
+  request: z.string(),
+  reason: z.string(),
+  relatedTo: z.string(),
+  priority: PriorityLevelSchema,
+});
+export type ElaborationRequest = z.infer<typeof ElaborationRequestSchema>;
+
+/**
+ * Document request
+ */
+export const DocumentRequestSchema = z.object({
+  id: z.string(),
+  document: z.string(),
+  reason: z.string(),
+  required: z.boolean(),
+});
+export type DocumentRequest = z.infer<typeof DocumentRequestSchema>;
+
+/**
+ * Questions for homeowner
+ */
+export const QuestionsForHomeownerSchema = z.object({
+  clarifications: z.array(ClarificationQuestionSchema),
+  elaborations: z.array(ElaborationRequestSchema),
+  documentRequests: z.array(DocumentRequestSchema),
+});
+export type QuestionsForHomeowner = z.infer<typeof QuestionsForHomeownerSchema>;
+
+/**
+ * Breakdown report recommendations
+ */
+export const BreakdownRecommendationsSchema = z.object({
+  primaryRecommendation: BreakdownRecommendationTypeSchema,
+  confidenceLevel: PriorityLevelSchema,
+  reasoning: z.string(),
+  conditions: z.array(z.string()),
+  nextSteps: z.array(z.string()),
+  estimatedResolutionTime: z.string(),
+});
+export type BreakdownRecommendations = z.infer<typeof BreakdownRecommendationsSchema>;
+
+/**
+ * Complete breakdown report result from Anthropic API
+ */
+export const BreakdownReportResultSchema = z.object({
+  reportSummary: ReportSummarySchema,
+  completenessAnalysis: CompletenessAnalysisSchema,
+  correctnessAnalysis: CorrectnessAnalysisSchema,
+  communityComplianceAnalysis: CommunityComplianceAnalysisSchema,
+  regulatoryComplianceAnalysis: RegulatoryComplianceAnalysisSchema,
+  issues: IssuesBySeveritySchema,
+  questionsForHomeowner: QuestionsForHomeownerSchema,
+  recommendations: BreakdownRecommendationsSchema,
+});
+export type BreakdownReportResult = z.infer<typeof BreakdownReportResultSchema>;
+
+/**
+ * Extended analysis context for breakdown reports
+ */
+export interface BreakdownAnalysisContext extends AnalysisContext {
+  countyJurisdiction?: string;
+  lotType?: string;
+  applicantName?: string;
+  uploadedDocuments?: Array<{
+    name: string;
+    type: string;
+    size?: number;
+  }>;
+}
+
+// ============================================
+// COST CALCULATION
+// ============================================
+
 /**
  * Calculate costs based on API usage
  */

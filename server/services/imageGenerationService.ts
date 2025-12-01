@@ -3,8 +3,8 @@
  *
  * Provider-agnostic AI image generation for architectural mockups.
  * Currently supports:
- * - Stability AI (default)
- * - Nano Banana API (future integration)
+ * - Stability AI
+ * - Nano Banana Pro (Gemini 2.0 Flash Image generation)
  *
  * Generates AI mockups showing proposed improvements on properties
  * based on application details and satellite imagery.
@@ -20,6 +20,7 @@ export interface ImageGenerationOptions {
   quality?: 'standard' | 'high';
   style?: string;
   negativePrompt?: string;
+  aspectRatio?: '1:1' | '16:9' | '4:3' | '3:4' | '9:16';
 }
 
 export interface GeneratedImage {
@@ -42,9 +43,10 @@ export interface MockupContext {
 const STABILITY_API_KEY = process.env.STABILITY_API_KEY || '';
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/sd3';
 
-// Nano Banana configuration (for future use)
-const NANO_BANANA_API_KEY = process.env.NANO_BANANA_API_KEY || '';
-const NANO_BANANA_API_URL = process.env.NANO_BANANA_API_URL || '';
+// Nano Banana Pro (Gemini) configuration
+const NANO_BANANA_API_KEY = process.env.GEMINI_API_KEY || process.env.NANO_BANANA_API_KEY || '';
+const NANO_BANANA_MODEL = 'gemini-2.0-flash-exp-image-generation';
+const NANO_BANANA_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${NANO_BANANA_MODEL}:generateContent`;
 
 export class ImageGenerationService {
   private defaultProvider: ImageProvider = 'stability_ai';
@@ -57,7 +59,8 @@ export class ImageGenerationService {
       case 'stability_ai':
         return !!STABILITY_API_KEY;
       case 'nano_banana':
-        return !!NANO_BANANA_API_KEY && !!NANO_BANANA_API_URL;
+        // Nano Banana Pro uses Gemini API - just needs the API key
+        return !!NANO_BANANA_API_KEY;
       default:
         return false;
     }
@@ -222,67 +225,117 @@ export class ImageGenerationService {
   }
 
   /**
-   * Generate image using Nano Banana API
-   * Placeholder for future implementation
+   * Generate image using Nano Banana Pro (Gemini 2.0 Flash Image Generation)
    */
   private async generateWithNanoBanana(
     prompt: string,
     context: MockupContext,
     options: ImageGenerationOptions
   ): Promise<GeneratedImage | null> {
-    if (!NANO_BANANA_API_KEY || !NANO_BANANA_API_URL) {
-      console.error('[ImageGen] Nano Banana API not configured');
+    if (!NANO_BANANA_API_KEY) {
+      console.error('[ImageGen] Nano Banana Pro (Gemini) API key not configured');
       return null;
     }
 
-    // TODO: Implement Nano Banana API integration
-    // The user mentioned they have a specific prompt that works well
-    // This will need to be customized based on their API structure
+    console.log(`[ImageGen] Generating with Nano Banana Pro (Gemini): ${prompt.substring(0, 100)}...`);
 
     try {
-      const response = await fetch(NANO_BANANA_API_URL, {
+      // Build the request parts
+      const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+
+      // Add satellite image as reference if available (image-to-image)
+      if (context.satelliteImageBase64) {
+        parts.push({
+          inlineData: {
+            mimeType: 'image/png',
+            data: context.satelliteImageBase64,
+          },
+        });
+        // Modify prompt to reference the input image
+        parts.push({
+          text: `Using the satellite image of the property as reference, ${prompt}`,
+        });
+      } else {
+        parts.push({ text: prompt });
+      }
+
+      // Map quality to aspect ratio
+      const aspectRatio = options.aspectRatio || (options.quality === 'high' ? '16:9' : '1:1');
+
+      const requestBody = {
+        contents: [{
+          parts,
+        }],
+        generationConfig: {
+          responseModalities: ['IMAGE', 'TEXT'],
+          // Note: Gemini may not support all these config options for image gen
+          // but we include them for future compatibility
+        },
+      };
+
+      const response = await fetch(`${NANO_BANANA_API_URL}?key=${NANO_BANANA_API_KEY}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${NANO_BANANA_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt,
-          // Add satellite image for img2img if available
-          init_image: context.satelliteImageBase64,
-          // Quality settings
-          quality: options.quality || 'standard',
-          // Additional context
-          project_type: context.projectType,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[ImageGen] Nano Banana error:', response.status, errorText);
+        console.error('[ImageGen] Nano Banana Pro error:', response.status, errorText);
         return null;
       }
 
       const data = await response.json() as {
-        image?: string;
-        base64?: string;
-        generation_id?: string;
+        candidates?: Array<{
+          content?: {
+            parts?: Array<{
+              text?: string;
+              inlineData?: {
+                mimeType: string;
+                data: string;
+              };
+            }>;
+          };
+        }>;
+        error?: {
+          message: string;
+          code: number;
+        };
       };
 
-      const imageData = data.image || data.base64;
-      if (!imageData) {
-        console.error('[ImageGen] No image in Nano Banana response');
+      if (data.error) {
+        console.error('[ImageGen] Nano Banana Pro API error:', data.error.message);
         return null;
       }
 
-      return {
-        base64: imageData,
-        mimeType: 'image/png',
-        provider: 'nano_banana',
-        generationId: data.generation_id,
-      };
+      // Find the image part in the response
+      const candidates = data.candidates || [];
+      for (const candidate of candidates) {
+        const parts = candidate.content?.parts || [];
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            console.log('[ImageGen] Nano Banana Pro image generated successfully');
+            return {
+              base64: part.inlineData.data,
+              mimeType: part.inlineData.mimeType || 'image/png',
+              provider: 'nano_banana',
+            };
+          }
+        }
+      }
+
+      // No image found in response - might have text response instead
+      const textParts = candidates[0]?.content?.parts?.filter(p => p.text);
+      if (textParts && textParts.length > 0) {
+        console.warn('[ImageGen] Nano Banana Pro returned text instead of image:', textParts[0].text?.substring(0, 200));
+      }
+
+      console.error('[ImageGen] No image found in Nano Banana Pro response');
+      return null;
     } catch (error) {
-      console.error('[ImageGen] Nano Banana generation error:', error);
+      console.error('[ImageGen] Nano Banana Pro generation error:', error);
       return null;
     }
   }
@@ -319,6 +372,111 @@ export class ImageGenerationService {
   }
 
   /**
+   * Build a blueprint-style prompt for property layout generation
+   */
+  private buildBlueprintPrompt(context: MockupContext): string {
+    const { projectType, projectDescription, formData } = context;
+
+    // Extract dimensions and measurements from form data
+    const measurements: string[] = [];
+    const landscapeElements: string[] = [];
+
+    // Look for dimension-related fields
+    const dimensionFields = ['height', 'width', 'length', 'size', 'dimensions', 'square_feet', 'footage', 'area', 'setback', 'distance'];
+    const landscapeFields = ['tree', 'shrub', 'plant', 'garden', 'lawn', 'flower', 'hedge', 'fence', 'pool', 'patio', 'deck', 'driveway', 'walkway', 'path'];
+
+    for (const [key, value] of Object.entries(formData)) {
+      const keyLower = key.toLowerCase();
+
+      if (dimensionFields.some(f => keyLower.includes(f)) && value) {
+        measurements.push(`${key.replace(/_/g, ' ')}: ${value}`);
+      }
+      if (landscapeFields.some(f => keyLower.includes(f)) && value) {
+        landscapeElements.push(`${key.replace(/_/g, ' ')}: ${value}`);
+      }
+    }
+
+    // Build detailed blueprint prompt
+    const measurementsStr = measurements.length > 0
+      ? `Clearly labeled measurements: ${measurements.join(', ')}.`
+      : 'Include estimated property dimensions and setbacks.';
+
+    const landscapeStr = landscapeElements.length > 0
+      ? `Show existing landscape elements: ${landscapeElements.join(', ')}.`
+      : 'Show typical landscape features like trees, shrubs, lawn areas, and hardscape.';
+
+    const projectSpecific = this.getBlueprintProjectPrompt(projectType);
+
+    return `Professional architectural blueprint style site plan drawing. Clean technical drawing with precise property layout.
+${projectSpecific}
+${projectDescription}
+${measurementsStr}
+${landscapeStr}
+Include: property boundaries, building footprint, existing structures, compass rose indicating north, scale bar.
+Style: Clean blue and white technical drawing, architectural blueprint aesthetic, clear line work, professional CAD-style presentation.
+Must include measurement annotations and dimension lines.`;
+  }
+
+  /**
+   * Get project-type-specific blueprint prompt additions
+   */
+  private getBlueprintProjectPrompt(projectType: string): string {
+    const prompts: Record<string, string> = {
+      fence: 'Show proposed fence line with dimensions, property setbacks clearly marked, gate locations.',
+      deck: 'Show deck footprint with dimensions, distance from property lines, connection to main structure.',
+      roof: 'Show roof plan view with dimensions, existing structure outline, surrounding context.',
+      solar: 'Show roof plan with solar panel layout, orientation, dimensions, and optimal placement.',
+      landscaping: 'Show detailed landscape plan with plant locations, hardscape areas, irrigation zones.',
+      addition: 'Show building footprint with addition highlighted, setback measurements, lot coverage.',
+      shed: 'Show shed placement, dimensions, setback distances from property lines and structures.',
+      pool: 'Show pool location, dimensions, equipment pad, fencing requirements, setbacks.',
+      driveway: 'Show driveway layout, dimensions, connection to street, drainage considerations.',
+    };
+
+    for (const [key, prompt] of Object.entries(prompts)) {
+      if (projectType.toLowerCase().includes(key)) {
+        return prompt;
+      }
+    }
+
+    return 'Show proposed improvement location and dimensions relative to property boundaries.';
+  }
+
+  /**
+   * Generate a blueprint-style property layout image
+   */
+  async generateBlueprint(
+    context: MockupContext,
+    options: ImageGenerationOptions = {}
+  ): Promise<GeneratedImage | null> {
+    const provider = options.provider || this.defaultProvider;
+
+    if (!this.isProviderConfigured(provider)) {
+      console.warn(`[ImageGen] Provider ${provider} not configured, skipping blueprint generation`);
+      return null;
+    }
+
+    const prompt = this.buildBlueprintPrompt(context);
+    console.log(`[ImageGen] Generating blueprint with prompt: ${prompt.substring(0, 200)}...`);
+
+    // Use specific negative prompt for blueprints
+    const blueprintOptions: ImageGenerationOptions = {
+      ...options,
+      negativePrompt: 'photorealistic, photograph, 3D render, perspective view, colorful, artistic, abstract, blurry, low quality, text overlay, watermark',
+    };
+
+    switch (provider) {
+      case 'stability_ai':
+        return this.generateWithStabilityAI(prompt, blueprintOptions);
+      case 'nano_banana':
+        return this.generateWithNanoBanana(prompt, context, blueprintOptions);
+      default:
+        console.error(`[ImageGen] Unknown provider: ${provider}`);
+        return null;
+    }
+  }
+
+  /**
    * Calculate estimated costs for image generation
    */
   calculateCosts(usage: {
@@ -336,9 +494,10 @@ export class ImageGenerationService {
         costPerHigh = 0.05;
         break;
       case 'nano_banana':
-        // Placeholder pricing
-        costPerStandard = 0.02;
-        costPerHigh = 0.04;
+        // Gemini 2.0 Flash pricing - very affordable
+        // Gemini charges per token, image gen is roughly $0.0025-0.01 per image
+        costPerStandard = 0.005;
+        costPerHigh = 0.01;
         break;
       default:
         costPerStandard = 0;

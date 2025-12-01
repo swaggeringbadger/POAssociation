@@ -5,6 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -27,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle } from "lucide-react";
+import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle, FileSearch, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
 import { formatDistanceToNow } from "date-fns";
@@ -37,16 +38,23 @@ export default function AIActivity() {
   const [selectedGeneration, setSelectedGeneration] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tenantFilter, setTenantFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState("analyses");
 
   useEffect(() => {
     setCurrentPageTitle("AI Activity");
     return () => setCurrentPageTitle(null);
   }, [setCurrentPageTitle]);
 
-  // Fetch all AI generations
+  // Fetch all AI generations (form generation)
   const { data: generations = [], isLoading, refetch } = useQuery({
     queryKey: ["aiGenerations", tenantFilter],
     queryFn: () => api.listAiGenerations(tenantFilter === "all" ? undefined : tenantFilter),
+  });
+
+  // Fetch all AI analyses (application analysis)
+  const { data: analyses = [], isLoading: loadingAnalyses } = useQuery({
+    queryKey: ["aiAnalyses"],
+    queryFn: () => api.getAllAiAnalyses(100),
   });
 
   // Fetch all tenants for filter
@@ -106,72 +114,217 @@ export default function AIActivity() {
     }
   };
 
-  // Calculate total stats
+  // Calculate form generation stats
   const totalGenerations = generations.length;
   const totalTokens = generations.reduce((sum, g) => sum + (g.tokensUsed || 0), 0);
-  const totalCost = generations.reduce((sum, g) => sum + parseFloat(g.estimatedCost || "0"), 0);
+  const totalFormCost = generations.reduce((sum, g) => sum + parseFloat(g.estimatedCost || "0"), 0);
   const avgGenerationTime = generations.length > 0
     ? generations.reduce((sum, g) => sum + (g.generationTimeMs || 0), 0) / generations.length
     : 0;
+
+  // Calculate AI analysis stats
+  const totalAnalyses = analyses.length;
+  const completedAnalyses = analyses.filter((a: any) => a.status === 'completed').length;
+  const failedAnalyses = analyses.filter((a: any) => a.status === 'failed').length;
+  const totalAnalysisCost = analyses.reduce((sum: number, a: any) => sum + parseFloat(a.totalCostUsd || "0"), 0);
+  const totalAnthropicCost = analyses.reduce((sum: number, a: any) => sum + parseFloat(a.anthropicCostUsd || "0"), 0);
+  const totalMapsCost = analyses.reduce((sum: number, a: any) => sum + parseFloat(a.googleMapsCostUsd || "0"), 0);
+  const totalImageCost = analyses.reduce((sum: number, a: any) => sum + parseFloat(a.imageGenCostUsd || "0"), 0);
+
+  // Combined total cost
+  const grandTotalCost = totalFormCost + totalAnalysisCost;
+
+  const getAnalysisStatusBadge = (status: string) => {
+    switch (status) {
+      case "completed":
+        return (
+          <Badge className="gap-1 bg-green-600">
+            <CheckCircle className="h-3 w-3" />
+            Completed
+          </Badge>
+        );
+      case "processing":
+        return (
+          <Badge variant="secondary" className="gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Processing
+          </Badge>
+        );
+      case "queued":
+        return (
+          <Badge variant="outline" className="gap-1">
+            <Clock className="h-3 w-3" />
+            Queued
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive" className="gap-1">
+            <XCircle className="h-3 w-3" />
+            Failed
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">AI Activity Dashboard</h1>
         <p className="text-muted-foreground">
-          Monitor AI form generations across all properties
+          Monitor AI usage and costs across all properties
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Combined Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="border-2 border-green-200 dark:border-green-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Generations</CardTitle>
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total AI Cost</CardTitle>
+            <DollarSign className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalGenerations}</div>
-            <p className="text-xs text-muted-foreground">AI-generated forms</p>
+            <div className="text-2xl font-bold text-green-600">${grandTotalCost.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">All AI operations combined</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tokens</CardTitle>
+            <CardTitle className="text-sm font-medium">Analysis Cost</CardTitle>
+            <FileSearch className="h-4 w-4 text-violet-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${totalAnalysisCost.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">{totalAnalyses} analyses ({completedAnalyses} completed)</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Form Generation Cost</CardTitle>
+            <Sparkles className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${totalFormCost.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">{totalGenerations} form generations</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Analysis Breakdown</CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalTokens.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Across all generations</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalCost.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Estimated API costs</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Generation Time</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{(avgGenerationTime / 1000).toFixed(1)}s</div>
-            <p className="text-xs text-muted-foreground">Per form generation</p>
+            <div className="text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Anthropic:</span>
+                <span className="font-medium">${totalAnthropicCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Maps API:</span>
+                <span className="font-medium">${totalMapsCost.toFixed(4)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Image Gen:</span>
+                <span className="font-medium">${totalImageCost.toFixed(2)}</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters and Table */}
-      <Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="analyses" className="gap-2">
+            <FileSearch className="h-4 w-4" />
+            Application Analyses
+          </TabsTrigger>
+          <TabsTrigger value="generations" className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            Form Generations
+          </TabsTrigger>
+        </TabsList>
+
+        {/* AI Analyses Tab */}
+        <TabsContent value="analyses">
+          <Card>
+            <CardHeader>
+              <CardTitle>Application AI Analyses</CardTitle>
+              <CardDescription>All AI-powered application analysis runs with cost tracking</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Compliance</TableHead>
+                    <TableHead>Anthropic</TableHead>
+                    <TableHead>Maps</TableHead>
+                    <TableHead>Images</TableHead>
+                    <TableHead>Total Cost</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Run At</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingAnalyses ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center">
+                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : analyses.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">
+                        No AI analyses yet
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    analyses.map((analysis: any) => (
+                      <TableRow key={analysis.id}>
+                        <TableCell className="font-medium">
+                          {tenants.find(t => t.id === analysis.tenantId)?.name || "Unknown"}
+                        </TableCell>
+                        <TableCell>{getAnalysisStatusBadge(analysis.status)}</TableCell>
+                        <TableCell>
+                          {analysis.complianceScore !== null ? (
+                            <Badge variant={analysis.complianceScore >= 70 ? "default" : "destructive"}>
+                              {analysis.complianceScore}%
+                            </Badge>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell>${analysis.anthropicCostUsd || "0.00"}</TableCell>
+                        <TableCell>${analysis.googleMapsCostUsd || "0.0000"}</TableCell>
+                        <TableCell>${analysis.imageGenCostUsd || "0.00"}</TableCell>
+                        <TableCell className="font-medium">${analysis.totalCostUsd || "0.00"}</TableCell>
+                        <TableCell>
+                          {analysis.processingDurationMs
+                            ? `${(analysis.processingDurationMs / 1000).toFixed(1)}s`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {analysis.queuedAt
+                            ? formatDistanceToNow(new Date(analysis.queuedAt), { addSuffix: true })
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Form Generations Tab */}
+        <TabsContent value="generations">
+          <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -251,6 +404,8 @@ export default function AIActivity() {
           </Table>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* View Generation Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

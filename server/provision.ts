@@ -212,7 +212,35 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     });
     console.log(`✅ Created ${applications.length} sample applications`);
 
-    // 7. Mark demo code as provisioned
+    // 7. Create AI Analysis credits for demo tenants
+    // Give demo tenants generous credits to showcase AI analysis feature
+    console.log('Creating AI analysis credits...');
+    await Promise.all([
+      storage.createAiAnalysisCredits({
+        tenantId: managementCompany.id,
+        monthlyIncludedCredits: 100, // Demo gets plenty of credits
+        overageCostPerAnalysis: '0', // No overage cost for demo
+        creditsUsedThisMonth: 0,
+        billingCycleStart: new Date(),
+      }),
+      storage.createAiAnalysisCredits({
+        tenantId: markland.id,
+        monthlyIncludedCredits: 100,
+        overageCostPerAnalysis: '0',
+        creditsUsedThisMonth: 0,
+        billingCycleStart: new Date(),
+      }),
+      storage.createAiAnalysisCredits({
+        tenantId: whisperingPines.id,
+        monthlyIncludedCredits: 100,
+        overageCostPerAnalysis: '0',
+        creditsUsedThisMonth: 0,
+        billingCycleStart: new Date(),
+      }),
+    ]);
+    console.log('✅ Created AI analysis credits for demo tenants');
+
+    // 8. Mark demo code as provisioned
     await storage.updateDemoCode(demoCodeId, {
       isProvisioned: true,
       provisionedAt: new Date(),
