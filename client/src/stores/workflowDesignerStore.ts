@@ -35,6 +35,7 @@ interface WorkflowDesignerState {
   // Step actions
   addStep: (step: Partial<WorkflowStep>) => void;
   updateStep: (stepId: string, updates: Partial<WorkflowStep>) => void;
+  updateStepPositions: (positions: Record<string, { x: number; y: number }>) => void;
   deleteStep: (stepId: string) => void;
   selectStep: (stepId: string | null) => void;
 
@@ -131,6 +132,32 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>((set, get)
       },
       hasUnsavedChanges: true,
     });
+  },
+
+  updateStepPositions: (positions) => {
+    const { template } = get();
+    if (!template) return;
+
+    // Only update if positions have actually changed
+    let hasChanges = false;
+    const updatedSteps = template.steps.map((step) => {
+      const newPos = positions[step.id];
+      if (newPos && (step.position?.x !== newPos.x || step.position?.y !== newPos.y)) {
+        hasChanges = true;
+        return { ...step, position: newPos };
+      }
+      return step;
+    });
+
+    if (hasChanges) {
+      set({
+        template: {
+          ...template,
+          steps: updatedSteps,
+        },
+        hasUnsavedChanges: true,
+      });
+    }
   },
 
   deleteStep: (stepId) => {

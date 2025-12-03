@@ -411,6 +411,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: req.params.tenantId,
       });
       const form = await storage.createFormTemplate(validated);
+
+      // Log usage event for form creation
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+        if (userId) {
+          await usageTrackingService.logFormCreated(
+            req.params.tenantId,
+            form.id,
+            userId
+          );
+          console.log(`[UsageTracking] Logged form created for tenant ${req.params.tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging form creation:", trackingError);
+        // Don't fail the form creation if tracking fails
+      }
+
       res.status(201).json(form);
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -609,16 +627,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Seed workflows for tenant and auto-create workflow for application
       try {
         await seedWorkflowTemplates(req.body.tenantId);
-        const templates = await storage.listWorkflowTemplatesForTenant(req.body.tenantId);
-        if (templates.length > 0) {
+
+        // Get the tenant to check for an active workflow template
+        const tenant = await storage.getTenant(req.body.tenantId);
+        let workflowTemplateId: string | null = null;
+
+        if (tenant?.workflowTemplateId) {
+          // Use the tenant's active workflow template
+          workflowTemplateId = tenant.workflowTemplateId;
+          console.log(`[Workflow] Using tenant's active workflow: ${workflowTemplateId}`);
+        } else {
+          // Fallback to first available template if no active workflow is set
+          const templates = await storage.listWorkflowTemplatesForTenant(req.body.tenantId);
+          if (templates.length > 0) {
+            workflowTemplateId = templates[0].id;
+            console.log(`[Workflow] No active workflow set, using first template: ${workflowTemplateId}`);
+          }
+        }
+
+        if (workflowTemplateId) {
           await storage.createApplicationWorkflow({
             applicationId: application.id,
-            workflowTemplateId: templates[0].id,
+            workflowTemplateId,
           });
         }
       } catch (workflowError) {
         console.error("Warning: Failed to create workflow:", workflowError);
         // Don't fail the entire application creation if workflow setup fails
+      }
+
+      // Log usage event for application submission
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+        if (userId && application.tenantId) {
+          await usageTrackingService.logApplicationSubmitted(
+            application.tenantId,
+            application.id,
+            userId
+          );
+          console.log(`[UsageTracking] Logged application submission for tenant ${application.tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging application submission:", trackingError);
+        // Don't fail the application creation if tracking fails
       }
 
       // Send application submitted email notification
@@ -838,6 +890,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         uploadedByUserId: userId,
         demoCodeId: application.demoCodeId,
       });
+
+      // Log usage event for document upload
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        if (application.tenantId) {
+          await usageTrackingService.logDocumentUploaded(
+            application.tenantId,
+            document.id,
+            userId,
+            uploadResult.size
+          );
+          console.log(`[UsageTracking] Logged document upload for tenant ${application.tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging document upload:", trackingError);
+        // Don't fail the document upload if tracking fails
+      }
 
       res.json(document);
     } catch (error: any) {
@@ -1312,6 +1381,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
         )
       );
+
+      // Log usage event for user added
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        const addedByUserId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+        if (addedByUserId && user) {
+          await usageTrackingService.logUserAdded(
+            tenantId,
+            user.id,
+            addedByUserId
+          );
+          console.log(`[UsageTracking] Logged user added for tenant ${tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging user added:", trackingError);
+        // Don't fail the user creation if tracking fails
+      }
 
       res.json({ user, roleAssignments });
     } catch (error: any) {
@@ -1869,7 +1955,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return true;
   };
 
-  // List all workflow templates (blueprints + custom)
+  // List all workflow templates (blueprints + custom for target tenant)
+  // Query params:
+  //   - targetTenantId: The tenant from the property filter dropdown (for checking clone permissions)
   app.get("/api/workflow-designer/templates", isAuthenticated, async (req: any, res) => {
     try {
       if (!requireAdmin(req, res)) return;
@@ -1879,27 +1967,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "User not authenticated" });
       }
 
-      // Get user's admin tenants
+      // Get target tenant from query param (from property filter dropdown)
+      const targetTenantId = req.query.targetTenantId as string | undefined;
+      console.log('[workflow-templates] targetTenantId:', targetTenantId);
+
+      // Get user's admin tenants to verify access
       const adminTenants = await storage.getManagedProperties(userId);
+      console.log('[workflow-templates] adminTenants:', adminTenants.map(t => ({ id: t.id, name: t.name })));
       if (!adminTenants || adminTenants.length === 0) {
         return res.status(404).json({ error: "No admin tenants found for user" });
       }
 
-      // Use the first admin tenant (in production, this would come from user's current context)
-      const tenant = adminTenants[0];
+      // Get all blueprint templates (global) plus custom templates for target tenant
+      const allBlueprints = await storage.listBlueprintWorkflowTemplates();
 
-      // NOTE: Viewing blueprints is available for all admin users.
-      // Only cloning/editing requires the custom_workflows feature.
-      const templates = await storage.listWorkflowTemplatesForTenant(tenant.id);
+      let customTemplates: any[] = [];
+      let hasCustomWorkflows = false;
+      let canClone = false;
+      let cloneDisabledReason: string | null = null;
+      let lockedWorkflowCount = 0;
+      let currentPlan: string | null = null;
+      let requiredPlan: string | null = null;
 
-      // Include feature access info in response so frontend can show/hide premium features
-      let hasCustomWorkflows = true;
-      if (process.env.NODE_ENV !== 'development') {
-        const featureAccess = await storage.checkFeatureAccess(tenant.id, 'custom_workflows');
+      if (targetTenantId) {
+        // Verify user has access to this tenant
+        const hasAccess = adminTenants.some(t => t.id === targetTenantId);
+        console.log('[workflow-templates] hasAccess:', hasAccess);
+        if (!hasAccess) {
+          return res.status(403).json({ error: "Access denied to target tenant" });
+        }
+
+        // Get custom templates for this tenant (always fetch to check for locked ones)
+        const allCustomTemplates = await storage.listCustomWorkflowTemplatesForTenant(targetTenantId);
+
+        // Check if target tenant has custom_workflows feature
+        const featureAccess = await storage.checkFeatureAccess(targetTenantId, 'custom_workflows');
+        console.log('[workflow-templates] featureAccess for', targetTenantId, ':', featureAccess);
         hasCustomWorkflows = featureAccess.hasAccess;
+        canClone = featureAccess.hasAccess;
+
+        // Get current plan name and determine required plan for the modal
+        const subscription = await storage.getTenantSubscription(targetTenantId);
+        currentPlan = subscription?.plan?.name || 'Free';
+
+        // Determine required plan based on tenant type (from plan_type prefix)
+        const planType = subscription?.plan?.planType || '';
+        if (planType.startsWith('management_')) {
+          requiredPlan = 'Starter'; // Management companies need Starter+
+        } else {
+          requiredPlan = 'Premium'; // Communities need Premium+
+        }
+
+        if (hasCustomWorkflows) {
+          // User has access - show all custom templates
+          customTemplates = allCustomTemplates;
+        } else {
+          // User downgraded - custom templates are locked
+          lockedWorkflowCount = allCustomTemplates.length;
+          customTemplates = []; // Don't show them, they're locked
+          cloneDisabledReason = `Upgrade to ${requiredPlan} or higher to clone and customize workflows`;
+        }
+      } else {
+        // No tenant selected ("All Properties") - can view but not clone
+        canClone = false;
+        cloneDisabledReason = "Select a specific property to clone workflows";
       }
 
-      res.json({ templates, hasCustomWorkflows });
+      // Combine blueprints and custom templates
+      const templates = [...allBlueprints, ...customTemplates];
+
+      res.json({
+        templates,
+        hasCustomWorkflows,
+        canClone,
+        cloneDisabledReason,
+        lockedWorkflowCount,
+        currentPlan,
+        requiredPlan,
+        targetTenantId: targetTenantId || null
+      });
     } catch (error: any) {
       console.error("Error fetching workflow templates:", error);
       res.status(500).json({ error: error.message });
@@ -1931,30 +2077,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Clone a template
+  // Clone a template into a target tenant
   app.post("/api/workflow-designer/templates/:id/clone", isAuthenticated, async (req: any, res) => {
     try {
       if (!requireAdmin(req, res)) return;
 
-      const { name, description } = req.body;
+      const { name, description, targetTenantId } = req.body;
       const userId = req.session?.userId || req.user?.claims?.sub;
+
+      // targetTenantId is required (from property filter dropdown)
+      if (!targetTenantId) {
+        return res.status(400).json({
+          error: "Please select a specific property to clone this workflow into"
+        });
+      }
 
       const sourceTemplate = await storage.getWorkflowTemplate(req.params.id);
       if (!sourceTemplate) {
         return res.status(404).json({ error: "Template not found" });
       }
 
-      // Check feature access
-      const featureAccess = await storage.checkFeatureAccess(sourceTemplate.tenantId, 'custom_workflows');
+      // Verify user has access to the target tenant
+      const adminTenants = await storage.getManagedProperties(userId);
+      const hasAccess = adminTenants.some(t => t.id === targetTenantId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied to target property" });
+      }
+
+      // Check feature access on the TARGET tenant (not the source)
+      const featureAccess = await storage.checkFeatureAccess(targetTenantId, 'custom_workflows');
       if (!featureAccess.hasAccess) {
         return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan"
+          error: "Custom Workflows are not available in this property's subscription plan. Upgrade to Professional or Enterprise."
         });
       }
 
-      // Create cloned template
+      // Create cloned template in the target tenant
       const clonedTemplate = await storage.cloneWorkflowTemplate(
         req.params.id,
+        targetTenantId,
         name,
         description,
         userId
@@ -2059,6 +2220,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(newVersion);
     } catch (error: any) {
       console.error("Error creating version:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Assign workflow template to a property (set as active)
+  app.post("/api/properties/:propertyId/workflow", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workflowTemplateId } = req.body;
+      const propertyId = req.params.propertyId;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      // Get the property/tenant
+      const property = await storage.getTenant(propertyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+
+      // Get user info for permission check and email
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+
+      // Check user has access to this property (account_admin, management_manager, or board_member)
+      const userTenants = await storage.getUserTenants(userId);
+      const userRolesForProperty = userTenants
+        .filter(ut => ut.tenantId === propertyId)
+        .map(ut => ut.role);
+
+      const allowedRoles = ['account_admin', 'super_admin', 'management_manager', 'poa_board_member', 'hoa_board_member'];
+      const hasPermission = userRolesForProperty.some(role => allowedRoles.includes(role));
+
+      if (!hasPermission) {
+        return res.status(403).json({ error: "You don't have permission to change the workflow for this property" });
+      }
+
+      // Get the workflow template (if specified)
+      let newWorkflowName = 'No workflow';
+      if (workflowTemplateId) {
+        const template = await storage.getWorkflowTemplate(workflowTemplateId);
+        if (!template) {
+          return res.status(404).json({ error: "Workflow template not found" });
+        }
+        newWorkflowName = template.name;
+
+        // If it's a custom template, verify the property has access to custom workflows
+        if (!template.isBlueprint) {
+          const featureAccess = await storage.checkFeatureAccess(propertyId, 'custom_workflows');
+          if (!featureAccess.hasAccess) {
+            return res.status(403).json({
+              error: "Custom workflows are not available in this property's subscription plan"
+            });
+          }
+        }
+      }
+
+      // Get previous workflow name for email
+      let previousWorkflowName: string | null = null;
+      if (property.workflowTemplateId) {
+        const previousTemplate = await storage.getWorkflowTemplate(property.workflowTemplateId);
+        previousWorkflowName = previousTemplate?.name || null;
+      }
+
+      // Update the property's workflow
+      await storage.updateTenantWorkflow(propertyId, workflowTemplateId || null);
+
+      // Send email notifications to account admins and board members
+      const tenantUsers = await storage.getTenantUsers(propertyId);
+      const notifyRoles = ['account_admin', 'poa_board_member', 'hoa_board_member'];
+      const usersToNotify = tenantUsers.filter(u =>
+        u.roles.some(role => notifyRoles.includes(role)) && u.id !== userId
+      );
+
+      // Import email service and template
+      const { emailService } = await import('./emailService');
+      const { workflowChangedTemplate } = await import('./emailTemplates');
+
+      const baseUrl = process.env.APP_URL || 'https://poassociation.com';
+      const settingsLink = `${baseUrl}/properties/${propertyId}/settings`;
+
+      const changerName = `${user.firstName} ${user.lastName}`;
+
+      for (const recipient of usersToNotify) {
+        if (recipient.email) {
+          const html = workflowChangedTemplate(
+            recipient.firstName || 'Team Member',
+            property.name,
+            previousWorkflowName,
+            newWorkflowName,
+            changerName,
+            settingsLink
+          );
+
+          emailService.send({
+            to: recipient.email,
+            subject: `Workflow Updated for ${property.name}`,
+            html,
+          }).catch(err => {
+            console.error(`Failed to send workflow change notification to ${recipient.email}:`, err);
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Workflow updated to "${newWorkflowName}"`,
+        workflowTemplateId: workflowTemplateId || null,
+      });
+    } catch (error: any) {
+      console.error("Error assigning workflow:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get current workflow for a property
+  app.get("/api/properties/:propertyId/workflow", isAuthenticated, async (req: any, res) => {
+    try {
+      const propertyId = req.params.propertyId;
+
+      const property = await storage.getTenant(propertyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+
+      let workflow = null;
+      if (property.workflowTemplateId) {
+        workflow = await storage.getWorkflowTemplate(property.workflowTemplateId);
+      }
+
+      res.json({
+        workflowTemplateId: property.workflowTemplateId,
+        workflow,
+      });
+    } catch (error: any) {
+      console.error("Error fetching property workflow:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -2332,6 +2632,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Link the template to the generation
       await storage.linkFormTemplateToGeneration(generation.id, formTemplate.id);
 
+      // Log usage event for AI-generated form creation
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        const userId = req.session?.userId || req.user?.id;
+        if (userId) {
+          await usageTrackingService.logFormCreated(
+            tenantId,
+            formTemplate.id,
+            userId
+          );
+          console.log(`[UsageTracking] Logged AI-generated form created for tenant ${tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging AI form creation:", trackingError);
+      }
+
       res.json({
         ...result,
         generationId: generation.id,
@@ -2400,6 +2716,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update generation status and link to form template
       await storage.updateAiFormGenerationStatus(id, 'approved', userId);
       await storage.linkFormTemplateToGeneration(id, formTemplate.id);
+
+      // Log usage event for form creation (from approval)
+      try {
+        const { usageTrackingService } = await import('./services/usageTrackingService');
+        if (userId && generation.tenantId) {
+          await usageTrackingService.logFormCreated(
+            generation.tenantId,
+            formTemplate.id,
+            userId
+          );
+          console.log(`[UsageTracking] Logged approved form created for tenant ${generation.tenantId}`);
+        }
+      } catch (trackingError) {
+        console.error("[UsageTracking] Error logging form approval:", trackingError);
+      }
 
       res.json({
         message: "Form approved and activated",
@@ -3974,6 +4305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errorMessage: analysis.errorMessage,
         userRating: analysis.userRating,
         userFeedback: analysis.userFeedback,
+        propertyResearch: analysis.propertyResearch,
         createdAt: analysis.queuedAt,
         completedAt: analysis.completedAt,
       };
@@ -4062,6 +4394,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(analyses);
     } catch (error: any) {
       console.error('Error getting AI analyses for application:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get application timeline (events and analyses)
+  app.get('/api/applications/:applicationId/timeline', isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+
+      // Get application to verify access
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Verify user has access - try subdomain first, then fallback for demo users
+      let tenant = null;
+
+      if (req.subdomain) {
+        tenant = await storage.getTenantBySubdomain(req.subdomain);
+      }
+
+      // Fallback for demo users: check user's tenant membership
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!tenant && userId) {
+        const userTenants = await storage.getUserTenants(userId);
+        const matchingTenant = userTenants.find(ut => ut.tenantId === application.tenantId);
+        if (matchingTenant) {
+          tenant = await storage.getTenant(matchingTenant.tenantId);
+        }
+      }
+
+      if (!tenant || tenant.id !== application.tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Get events for this application
+      const events = await storage.getApplicationEvents(applicationId);
+
+      // Enrich events with user info
+      const enrichedEvents = await Promise.all(
+        events.map(async (event) => {
+          let user = null;
+          if (event.userId) {
+            const userRecord = await storage.getUser(event.userId);
+            if (userRecord) {
+              user = {
+                id: userRecord.id,
+                firstName: userRecord.firstName,
+                lastName: userRecord.lastName,
+                email: userRecord.email,
+                profileImageUrl: userRecord.profileImageUrl,
+              };
+            }
+          }
+          return { ...event, user };
+        })
+      );
+
+      // Also get all AI analyses for this application (for the analysis history section)
+      const analyses = await storage.getAiAnalysisForApplication(applicationId);
+
+      res.json({
+        events: enrichedEvents,
+        analyses,
+      });
+    } catch (error: any) {
+      console.error('Error getting application timeline:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -4323,6 +4723,650 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(stats);
     } catch (error: any) {
       console.error('Error getting tenant AI analysis stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // SUBSCRIPTION & BILLING ENDPOINTS
+  // ============================================
+
+  // Get all community tiers
+  app.get('/api/subscription/tiers', async (req, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const tiers = await communitySubscriptionService.getTiers();
+      res.json(tiers);
+    } catch (error: any) {
+      console.error('Error getting community tiers:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get subscription for a community
+  app.get('/api/communities/:communityId/subscription', isAuthenticated, async (req: any, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { communityId } = req.params;
+      const subscription = await communitySubscriptionService.getSubscriptionWithTier(communityId);
+      if (!subscription) {
+        return res.status(404).json({ error: 'No subscription found for this community' });
+      }
+      res.json(subscription);
+    } catch (error: any) {
+      console.error('Error getting community subscription:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create subscription for a community
+  app.post('/api/communities/:communityId/subscription', isAuthenticated, async (req: any, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { communityId } = req.params;
+      const { doorCount, demoCodeId } = req.body;
+
+      if (!doorCount || doorCount < 1) {
+        return res.status(400).json({ error: 'Door count is required and must be at least 1' });
+      }
+
+      const subscription = await communitySubscriptionService.createSubscription(
+        communityId,
+        doorCount,
+        demoCodeId
+      );
+      res.json(subscription);
+    } catch (error: any) {
+      console.error('Error creating community subscription:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update door count for a community
+  app.patch('/api/communities/:communityId/subscription/doors', isAuthenticated, async (req: any, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { communityId } = req.params;
+      const { doorCount } = req.body;
+
+      if (!doorCount || doorCount < 1) {
+        return res.status(400).json({ error: 'Door count is required and must be at least 1' });
+      }
+
+      const subscription = await communitySubscriptionService.updateDoorCount(communityId, doorCount);
+      res.json(subscription);
+    } catch (error: any) {
+      console.error('Error updating door count:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Set custom pricing (super_admin only)
+  app.patch('/api/communities/:communityId/subscription/pricing', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { communityId } = req.params;
+      const userId = req.user?.id;
+
+      const subscription = await communitySubscriptionService.setCustomPricing(
+        communityId,
+        req.body,
+        userId
+      );
+      res.json(subscription);
+    } catch (error: any) {
+      console.error('Error setting custom pricing:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Clear custom pricing (super_admin only)
+  app.delete('/api/communities/:communityId/subscription/pricing', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { communityId } = req.params;
+
+      const subscription = await communitySubscriptionService.clearCustomPricing(communityId);
+      res.json(subscription);
+    } catch (error: any) {
+      console.error('Error clearing custom pricing:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // BILLING CONSUMPTION DASHBOARD ENDPOINTS
+  // ============================================
+
+  // Get consumption summary for account_admin
+  app.get('/api/billing/consumption', isAuthenticated, async (req: any, res) => {
+    try {
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const userId = req.user?.id;
+
+      // Get billing entity for this user
+      const billingEntityId = await consumptionDashboardService.getBillingEntityForUser(userId);
+      if (!billingEntityId) {
+        return res.status(404).json({ error: 'No billing entity found for this user' });
+      }
+
+      const summary = await consumptionDashboardService.getConsumptionSummary(billingEntityId);
+      res.json(summary);
+    } catch (error: any) {
+      console.error('Error getting consumption summary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get consumption for a specific community
+  app.get('/api/billing/consumption/:communityId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const { communityId } = req.params;
+
+      const consumption = await consumptionDashboardService.getCommunityConsumption(communityId);
+      if (!consumption) {
+        return res.status(404).json({ error: 'No consumption data found for this community' });
+      }
+      res.json(consumption);
+    } catch (error: any) {
+      console.error('Error getting community consumption:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get usage history for charts
+  app.get('/api/billing/history', isAuthenticated, async (req: any, res) => {
+    try {
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const userId = req.user?.id;
+      const months = parseInt(req.query.months as string) || 6;
+
+      // Get billing entity for this user
+      const billingEntityId = await consumptionDashboardService.getBillingEntityForUser(userId);
+      if (!billingEntityId) {
+        return res.status(404).json({ error: 'No billing entity found for this user' });
+      }
+
+      const history = await consumptionDashboardService.getUsageHistory(billingEntityId, months);
+      res.json(history);
+    } catch (error: any) {
+      console.error('Error getting usage history:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get overage projection for a community
+  app.get('/api/billing/projection/:communityId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const { communityId } = req.params;
+
+      const projection = await consumptionDashboardService.getOverageProjection(communityId);
+      res.json(projection);
+    } catch (error: any) {
+      console.error('Error getting overage projection:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // INVOICE ENDPOINTS
+  // ============================================
+
+  // List invoices for billing entity
+  app.get('/api/invoices', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const userId = req.user?.id;
+      const limit = parseInt(req.query.limit as string) || 12;
+
+      // Get billing entity for this user
+      const billingEntityId = await consumptionDashboardService.getBillingEntityForUser(userId);
+      if (!billingEntityId) {
+        return res.status(404).json({ error: 'No billing entity found for this user' });
+      }
+
+      const invoices = await invoiceService.listInvoices(billingEntityId, limit);
+      res.json(invoices);
+    } catch (error: any) {
+      console.error('Error listing invoices:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get invoice by ID
+  app.get('/api/invoices/:invoiceId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { invoiceId } = req.params;
+
+      const invoice = await invoiceService.getInvoice(invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error getting invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate invoice for current period (admin)
+  app.post('/api/invoices/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { consumptionDashboardService } = await import('./services/consumptionDashboardService');
+      const userId = req.user?.id;
+      const { billingEntityId: overrideBillingEntityId, periodStart, periodEnd } = req.body;
+
+      // Get billing entity - use override if provided (super_admin), otherwise get from user
+      let billingEntityId = overrideBillingEntityId;
+      if (!billingEntityId) {
+        billingEntityId = await consumptionDashboardService.getBillingEntityForUser(userId);
+      }
+
+      if (!billingEntityId) {
+        return res.status(404).json({ error: 'No billing entity found' });
+      }
+
+      const invoice = await invoiceService.generateMonthlyInvoice({
+        billingEntityId,
+        periodStart: periodStart ? new Date(periodStart) : new Date(new Date().setMonth(new Date().getMonth() - 1)),
+        periodEnd: periodEnd ? new Date(periodEnd) : new Date(),
+      });
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error generating invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Finalize invoice
+  app.patch('/api/invoices/:invoiceId/finalize', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { invoiceId } = req.params;
+
+      const invoice = await invoiceService.finalizeInvoice(invoiceId);
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error finalizing invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark invoice as paid
+  app.patch('/api/invoices/:invoiceId/paid', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { invoiceId } = req.params;
+      const { paymentMethod, paymentReference } = req.body;
+
+      const invoice = await invoiceService.markAsPaid(invoiceId, paymentMethod, paymentReference);
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error marking invoice as paid:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Void invoice
+  app.patch('/api/invoices/:invoiceId/void', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { invoiceId } = req.params;
+
+      const invoice = await invoiceService.voidInvoice(invoiceId);
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error voiding invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send invoice via email
+  app.post('/api/invoices/:invoiceId/send', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { emailService } = await import('./emailService');
+      const { invoiceId } = req.params;
+
+      // Get invoice with line items
+      const invoice = await invoiceService.getInvoice(invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Get billing entity info
+      const [billingEntity] = await db
+        .select()
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, invoice.billedToTenantId))
+        .limit(1);
+
+      if (!billingEntity?.contactEmail) {
+        return res.status(400).json({ error: 'Billing entity has no contact email' });
+      }
+
+      // Format dates for email
+      const periodStart = new Date(invoice.billingPeriodStart).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const periodEnd = new Date(invoice.billingPeriodEnd).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const dueDate = invoice.dueDate
+        ? new Date(invoice.dueDate).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : 'Upon receipt';
+
+      const invoiceAmount = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+      }).format(invoice.totalAmount);
+
+      // Send the email
+      const result = await emailService.sendInvoice(
+        billingEntity.contactEmail,
+        billingEntity.name,
+        billingEntity.name,
+        invoice.invoiceNumber,
+        invoiceAmount,
+        `${periodStart} - ${periodEnd}`,
+        dueDate,
+        `https://poassociation.com/billing?invoice=${invoiceId}`
+      );
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || 'Failed to send email' });
+      }
+
+      // Update invoice status to sent
+      const updatedInvoice = await invoiceService.markAsSent(invoiceId);
+
+      res.json({ success: true, invoice: updatedInvoice });
+    } catch (error: any) {
+      console.error('Error sending invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download invoice as PDF
+  app.get('/api/invoices/:invoiceId/download', isAuthenticated, async (req: any, res) => {
+    try {
+      const { invoiceService } = await import('./services/invoiceService');
+      const { invoicePdfService } = await import('./services/invoicePdfService');
+      const { invoiceId } = req.params;
+
+      // Get invoice with line items
+      const invoice = await invoiceService.getInvoice(invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Get billing entity info
+      const [billingEntity] = await db
+        .select()
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, invoice.billedToTenantId))
+        .limit(1);
+
+      // Generate PDF
+      const pdfBuffer = await invoicePdfService.generateInvoicePdf({
+        invoice: {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          billingPeriodStart: invoice.billingPeriodStart,
+          billingPeriodEnd: invoice.billingPeriodEnd,
+          status: invoice.status,
+          subtotal: invoice.subtotal,
+          taxAmount: invoice.taxAmount,
+          discountAmount: invoice.discountAmount,
+          totalAmount: invoice.totalAmount,
+          dueDate: invoice.dueDate,
+          paidAt: invoice.paidAt,
+          notes: invoice.notes,
+          createdAt: invoice.createdAt,
+        },
+        billingEntity: {
+          name: billingEntity?.name || 'Unknown',
+          email: billingEntity?.contactEmail || undefined,
+        },
+        lineItems: invoice.lineItems.map((item: any) => ({
+          communityName: item.communityName,
+          lineType: item.lineType,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+        })),
+      });
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error('Error downloading invoice PDF:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // STRIPE PAYMENT ENDPOINTS
+  // ============================================
+
+  // Get Stripe publishable key (for client-side)
+  app.get('/api/billing/stripe-config', isAuthenticated, async (req: any, res) => {
+    const { getStripePublishableKey, stripeService } = await import('./services/stripeService');
+    res.json({
+      publishableKey: getStripePublishableKey() || '',
+      enabled: stripeService.isEnabled(),
+      testMode: stripeService.isInTestMode(),
+    });
+  });
+
+  // Create SetupIntent for adding a payment method
+  app.post('/api/billing/setup-intent', isAuthenticated, async (req: any, res) => {
+    try {
+      const { stripeService } = await import('./services/stripeService');
+      const { tenantId } = req.body;
+
+      if (!tenantId) {
+        return res.status(400).json({ error: 'tenantId is required' });
+      }
+
+      if (!stripeService.isEnabled()) {
+        return res.status(503).json({ error: 'Stripe is not configured' });
+      }
+
+      const setupIntent = await stripeService.createSetupIntent(tenantId);
+      res.json({ clientSecret: setupIntent.client_secret });
+    } catch (error: any) {
+      console.error('Error creating setup intent:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List payment methods for a tenant
+  app.get('/api/billing/payment-methods/:tenantId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { stripeService } = await import('./services/stripeService');
+      const { tenantId } = req.params;
+
+      const paymentMethods = await stripeService.listPaymentMethods(tenantId);
+
+      // Map to a simpler format for the frontend
+      const methods = paymentMethods.map(pm => ({
+        id: pm.id,
+        type: pm.type,
+        card: pm.card ? {
+          brand: pm.card.brand,
+          last4: pm.card.last4,
+          expMonth: pm.card.exp_month,
+          expYear: pm.card.exp_year,
+        } : null,
+        bankAccount: pm.us_bank_account ? {
+          bankName: pm.us_bank_account.bank_name,
+          last4: pm.us_bank_account.last4,
+          accountType: pm.us_bank_account.account_type,
+        } : null,
+        isDefault: false, // Will be set below
+      }));
+
+      // Get customer to check default payment method
+      const customer = await stripeService.getCustomer(tenantId);
+      if (customer?.invoice_settings?.default_payment_method) {
+        const defaultId = customer.invoice_settings.default_payment_method;
+        const defaultMethod = methods.find(m => m.id === defaultId);
+        if (defaultMethod) {
+          defaultMethod.isDefault = true;
+        }
+      }
+
+      res.json(methods);
+    } catch (error: any) {
+      console.error('Error listing payment methods:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Set default payment method
+  app.post('/api/billing/payment-methods/:tenantId/default', isAuthenticated, async (req: any, res) => {
+    try {
+      const { stripeService } = await import('./services/stripeService');
+      const { tenantId } = req.params;
+      const { paymentMethodId } = req.body;
+
+      if (!paymentMethodId) {
+        return res.status(400).json({ error: 'paymentMethodId is required' });
+      }
+
+      await stripeService.setDefaultPaymentMethod(tenantId, paymentMethodId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error setting default payment method:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove a payment method
+  app.delete('/api/billing/payment-methods/:paymentMethodId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { stripeService } = await import('./services/stripeService');
+      const { paymentMethodId } = req.params;
+
+      await stripeService.removePaymentMethod(paymentMethodId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error removing payment method:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get billing settings for a tenant
+  app.get('/api/billing/settings/:tenantId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+
+      const [tenant] = await db
+        .select({
+          id: schema.tenants.id,
+          name: schema.tenants.name,
+          contactEmail: schema.tenants.contactEmail,
+          autoPayEnabled: schema.tenants.autoPayEnabled,
+          paymentTermsDays: schema.tenants.paymentTermsDays,
+          billingStatus: schema.tenants.billingStatus,
+          stripeCustomerId: schema.tenants.stripeCustomerId,
+        })
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      res.json({
+        ...tenant,
+        hasStripeCustomer: !!tenant.stripeCustomerId,
+      });
+    } catch (error: any) {
+      console.error('Error getting billing settings:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update billing settings
+  app.patch('/api/billing/settings/:tenantId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { contactEmail, autoPayEnabled, paymentTermsDays } = req.body;
+
+      const updateData: Record<string, any> = {};
+      if (contactEmail !== undefined) updateData.contactEmail = contactEmail;
+      if (autoPayEnabled !== undefined) updateData.autoPayEnabled = autoPayEnabled;
+      if (paymentTermsDays !== undefined) updateData.paymentTermsDays = paymentTermsDays;
+
+      await db
+        .update(schema.tenants)
+        .set(updateData)
+        .where(eq(schema.tenants.id, tenantId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error updating billing settings:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Stripe webhook handler
+  app.post('/api/webhooks/stripe', async (req: any, res) => {
+    try {
+      const { stripeService } = await import('./services/stripeService');
+      const signature = req.headers['stripe-signature'];
+
+      if (!signature) {
+        return res.status(400).json({ error: 'Missing stripe-signature header' });
+      }
+
+      let event;
+      try {
+        event = stripeService.constructWebhookEvent(req.rawBody, signature);
+      } catch (err: any) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+      }
+
+      // Handle the event
+      switch (event.type) {
+        case 'invoice.paid':
+          await stripeService.handleInvoicePaid(event.data.object as any);
+          break;
+        case 'invoice.payment_failed':
+          await stripeService.handleInvoicePaymentFailed(event.data.object as any);
+          break;
+        case 'payment_method.attached':
+          await stripeService.handlePaymentMethodAttached(event.data.object as any);
+          break;
+        default:
+          console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('Webhook error:', error);
       res.status(500).json({ error: error.message });
     }
   });

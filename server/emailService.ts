@@ -10,6 +10,8 @@ import {
   applicationRejectedTemplate,
   stepAssignmentTemplate,
   commentNotificationTemplate,
+  invoiceTemplate,
+  paymentReceivedTemplate,
 } from './emailTemplates';
 
 interface EmailPayload {
@@ -215,6 +217,64 @@ export class EmailService {
     return this.send({
       to: recipientEmail,
       subject: `New Comment: ${applicationTitle}`,
+      html,
+    });
+  }
+
+  /**
+   * Send invoice email
+   */
+  async sendInvoice(
+    recipientEmail: string,
+    recipientName: string,
+    billingEntityName: string,
+    invoiceNumber: string,
+    invoiceAmount: string,
+    billingPeriod: string,
+    dueDate: string,
+    invoiceLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = invoiceTemplate(
+      recipientName,
+      billingEntityName,
+      invoiceNumber,
+      invoiceAmount,
+      billingPeriod,
+      dueDate,
+      invoiceLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `Invoice ${invoiceNumber} - ${billingEntityName}`,
+      html,
+    });
+  }
+
+  /**
+   * Send payment received confirmation
+   */
+  async sendPaymentReceived(
+    recipientEmail: string,
+    recipientName: string,
+    billingEntityName: string,
+    invoiceNumber: string,
+    paymentAmount: string,
+    paymentDate: string,
+    receiptLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = paymentReceivedTemplate(
+      recipientName,
+      billingEntityName,
+      invoiceNumber,
+      paymentAmount,
+      paymentDate,
+      receiptLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `Payment Received - Invoice ${invoiceNumber}`,
       html,
     });
   }

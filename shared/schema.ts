@@ -126,11 +126,18 @@ export const tenants = pgTable("tenants", {
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
   workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
   designGuidelinesUrl: text("design_guidelines_url"), // URL to property's design guidelines/covenants
+  doorCount: integer("door_count").default(0), // Number of doors/units in the community
   settings: jsonb("settings").$type<ManagementCompanySettings>(), // Management company settings (address, payment instructions, etc.)
   communitySettings: jsonb("community_settings").$type<CommunitySettings>(), // Community-specific settings (legal entity, contact info, etc.)
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  // Billing fields
+  contactEmail: text("contact_email"), // Billing contact email
+  stripeCustomerId: varchar("stripe_customer_id"), // Stripe customer ID for billing
+  autoPayEnabled: boolean("auto_pay_enabled").default(false), // Whether to auto-charge saved payment method
+  paymentTermsDays: integer("payment_terms_days").default(30), // Net 30, Net 60, etc.
+  billingStatus: text("billing_status").default('active'), // 'active' | 'delinquent' | 'suspended'
 });
 
 export const insertTenantSchema = createInsertSchema(tenants).omit({
@@ -311,6 +318,8 @@ export const workflowTemplates = pgTable("workflow_templates", {
   steps: jsonb("steps").notNull(), // [{title, role, allowEdit, actions}]
   isBlueprint: boolean("is_blueprint").default(false).notNull(),
   version: integer("version").default(1).notNull(),
+  parentTemplateId: varchar("parent_template_id").references((): any => workflowTemplates.id),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -887,6 +896,225 @@ export type InsertCalendarFeedToken = z.infer<typeof insertCalendarFeedTokenSche
 export type CalendarFeedToken = typeof calendarFeedTokens.$inferSelect;
 
 // ============================================
+// SUBSCRIPTION & BILLING MODULE TABLES
+// ============================================
+
+// Community Tiers - Simplified 4-tier system based on door count
+export const communityTiers = pgTable("community_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tierCode: varchar("tier_code", { length: 20 }).notNull().unique(), // 'small', 'medium', 'large', 'xl'
+  name: varchar("name", { length: 50 }).notNull(),
+  minDoors: integer("min_doors").notNull(),
+  maxDoors: integer("max_doors"), // NULL for XL (unlimited)
+  basePriceMonthly: text("base_price_monthly").notNull(), // Stored as string for precision
+  basePriceYearly: text("base_price_yearly").notNull(),
+  includedAiCredits: integer("included_ai_credits").notNull(),
+  defaultOverageCost: text("default_overage_cost").notNull().default("4.99"),
+  maxUsers: integer("max_users"),
+  maxStorageGb: integer("max_storage_gb"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCommunityTierSchema = createInsertSchema(communityTiers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCommunityTier = z.infer<typeof insertCommunityTierSchema>;
+export type CommunityTier = typeof communityTiers.$inferSelect;
+
+// Community Subscription Status enum
+export const communitySubscriptionStatusSchema = z.enum([
+  'active',
+  'trial',
+  'canceled',
+  'paused'
+]);
+export type CommunitySubscriptionStatus = z.infer<typeof communitySubscriptionStatusSchema>;
+
+// Community Subscriptions - Per-community subscription with custom pricing
+export const communitySubscriptions = pgTable("community_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  communityId: varchar("community_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  tierId: varchar("tier_id").notNull().references(() => communityTiers.id),
+  doorCount: integer("door_count").notNull().default(0),
+  status: text("status").notNull().default("active"), // active, trial, canceled, paused
+
+  // Custom pricing overrides (NULL = use tier default)
+  customPriceMonthly: text("custom_price_monthly"),
+  customPriceYearly: text("custom_price_yearly"),
+  customAiCredits: integer("custom_ai_credits"),
+  customOverageCost: text("custom_overage_cost"),
+  pricingNote: text("pricing_note"),
+  pricingSetByUserId: varchar("pricing_set_by_user_id").references(() => users.id),
+  pricingSetAt: timestamp("pricing_set_at"),
+
+  // Billing cycle
+  billingCycleDay: integer("billing_cycle_day").notNull().default(1),
+  currentPeriodStart: timestamp("current_period_start").notNull().defaultNow(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+
+  // Current period usage
+  aiCreditsUsed: integer("ai_credits_used").notNull().default(0),
+  applicationsThisMonth: integer("applications_this_month").notNull().default(0),
+
+  // External billing (Stripe - future)
+  stripeSubscriptionId: varchar("stripe_subscription_id"),
+  stripeCustomerId: varchar("stripe_customer_id"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  communityUniqueIdx: uniqueIndex("community_subscriptions_community_unique_idx").on(table.communityId),
+  tierIdx: index("community_subscriptions_tier_idx").on(table.tierId),
+  statusIdx: index("community_subscriptions_status_idx").on(table.status),
+}));
+
+export const insertCommunitySubscriptionSchema = createInsertSchema(communitySubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCommunitySubscription = z.infer<typeof insertCommunitySubscriptionSchema>;
+export type CommunitySubscription = typeof communitySubscriptions.$inferSelect;
+
+// Usage Event Type enum
+export const usageEventTypeSchema = z.enum([
+  'ai_analysis',
+  'application_submitted',
+  'document_uploaded',
+  'user_added',
+  'storage_increased',
+  'form_created'
+]);
+export type UsageEventType = z.infer<typeof usageEventTypeSchema>;
+
+// Usage Events - Audit log for all billable actions
+export const usageEvents = pgTable("usage_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  communityId: varchar("community_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(), // 'ai_analysis', 'application_submitted', etc.
+  entityType: text("entity_type"), // 'ai_analysis', 'application', etc.
+  entityId: varchar("entity_id"),
+  creditsUsed: integer("credits_used").default(0),
+  isOverage: boolean("is_overage").default(false),
+  costAtTime: text("cost_at_time"), // Snapshot of overage cost
+  metadata: jsonb("metadata"),
+  userId: varchar("user_id").references(() => users.id),
+  billingPeriodStart: timestamp("billing_period_start").notNull(),
+  billingPeriodEnd: timestamp("billing_period_end").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  communityIdx: index("usage_events_community_idx").on(table.communityId),
+  eventTypeIdx: index("usage_events_type_idx").on(table.eventType),
+  periodIdx: index("usage_events_period_idx").on(table.billingPeriodStart, table.billingPeriodEnd),
+}));
+
+export const insertUsageEventSchema = createInsertSchema(usageEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertUsageEvent = z.infer<typeof insertUsageEventSchema>;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+
+// Invoice Status enum
+export const invoiceStatusSchema = z.enum([
+  'draft',
+  'finalized',
+  'sent',
+  'paid',
+  'void'
+]);
+export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
+
+// Invoices - Monthly invoice records
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: varchar("invoice_number", { length: 50 }).notNull().unique(),
+  billedToTenantId: varchar("billed_to_tenant_id").notNull().references(() => tenants.id),
+  billingPeriodStart: timestamp("billing_period_start").notNull(),
+  billingPeriodEnd: timestamp("billing_period_end").notNull(),
+  status: text("status").notNull().default("draft"),
+
+  // Amounts
+  subtotal: text("subtotal").notNull().default("0"),
+  taxAmount: text("tax_amount").notNull().default("0"),
+  discountAmount: text("discount_amount").notNull().default("0"),
+  totalAmount: text("total_amount").notNull().default("0"),
+
+  // Payment tracking
+  dueDate: timestamp("due_date"),
+  paidAt: timestamp("paid_at"),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  paymentReference: varchar("payment_reference", { length: 255 }),
+
+  // External billing (Stripe)
+  stripeInvoiceId: varchar("stripe_invoice_id"),
+  stripeHostedInvoiceUrl: text("stripe_hosted_invoice_url"),
+
+  // Notes
+  notes: text("notes"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  finalizedAt: timestamp("finalized_at"),
+  sentAt: timestamp("sent_at"),
+}, (table) => ({
+  tenantIdx: index("invoices_tenant_idx").on(table.billedToTenantId),
+  statusIdx: index("invoices_status_idx").on(table.status),
+  periodIdx: index("invoices_period_idx").on(table.billingPeriodStart, table.billingPeriodEnd),
+}));
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+// Invoice Line Item Type enum
+export const invoiceLineTypeSchema = z.enum([
+  'subscription',
+  'ai_overage',
+  'storage_overage',
+  'other'
+]);
+export type InvoiceLineType = z.infer<typeof invoiceLineTypeSchema>;
+
+// Invoice Line Items - Itemized charges on invoices
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  communityId: varchar("community_id").references(() => tenants.id),
+  lineType: text("line_type").notNull(), // 'subscription', 'ai_overage', etc.
+  description: text("description").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: text("unit_price").notNull(),
+  totalPrice: text("total_price").notNull(),
+  tierId: varchar("tier_id").references(() => communityTiers.id),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  invoiceIdx: index("invoice_line_items_invoice_idx").on(table.invoiceId),
+  communityIdx: index("invoice_line_items_community_idx").on(table.communityId),
+}));
+
+export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+
+// ============================================
 // AI ANALYSIS MODULE TABLES
 // ============================================
 
@@ -1001,6 +1229,9 @@ export const aiAnalyses = pgTable("ai_analyses", {
   breakdownReport: jsonb("breakdown_report"), // Full BreakdownReportResult object
   breakdownPdfReportUrl: text("breakdown_pdf_report_url"),
 
+  // Property research (tax, liens, permits, deeds, legal issues, etc.)
+  propertyResearch: jsonb("property_research"), // Full PropertyResearchResult object
+
   // Quality feedback
   userRating: integer("user_rating"), // 1-5 stars
   userFeedback: text("user_feedback"),
@@ -1024,3 +1255,44 @@ export const insertAiAnalysisSchema = createInsertSchema(aiAnalyses).omit({
 });
 export type InsertAiAnalysis = z.infer<typeof insertAiAnalysisSchema>;
 export type AiAnalysis = typeof aiAnalyses.$inferSelect;
+
+// Application Events - unified audit log for application lifecycle events
+export const applicationEvents = pgTable("application_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Event type (ai_analysis_queued, ai_analysis_completed, workflow_approved, etc.)
+  eventType: text("event_type").notNull(),
+
+  // Actor (who triggered the event)
+  userId: varchar("user_id").references(() => users.id),
+
+  // Event-specific data (structured JSON)
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+
+  // Human-readable summary
+  summary: text("summary"),
+
+  // Related entity references (for linking to AI analyses, documents, etc.)
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: varchar("related_entity_id"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+
+  // Timestamp
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  applicationIdx: index("application_events_application_idx").on(table.applicationId),
+  tenantIdx: index("application_events_tenant_idx").on(table.tenantId),
+  eventTypeIdx: index("application_events_type_idx").on(table.eventType),
+  createdAtIdx: index("application_events_created_at_idx").on(table.createdAt),
+}));
+
+export const insertApplicationEventSchema = createInsertSchema(applicationEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertApplicationEvent = z.infer<typeof insertApplicationEventSchema>;
+export type ApplicationEvent = typeof applicationEvents.$inferSelect;

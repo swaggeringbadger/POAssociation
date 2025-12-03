@@ -4,17 +4,20 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
-import { Edit, Copy, Trash2, Plus, Crown } from 'lucide-react';
+import { useAppStore } from '@/lib/store';
+import { PremiumFeatureModal, LockedWorkflowsModal } from '@/components/PremiumFeatureModal';
+import { Edit, Copy, Trash2, Plus, Crown, Info, Lock, Check, Star } from 'lucide-react';
 
 interface WorkflowTemplate {
   id: string;
@@ -27,22 +30,42 @@ interface WorkflowTemplate {
 interface TemplatesResponse {
   templates: WorkflowTemplate[];
   hasCustomWorkflows: boolean;
+  canClone: boolean;
+  cloneDisabledReason: string | null;
+  lockedWorkflowCount: number;
+  currentPlan: string | null;
+  requiredPlan: string | null;
+  targetTenantId: string | null;
+}
+
+interface PropertyWorkflowResponse {
+  workflowTemplateId: string | null;
+  workflow: WorkflowTemplate | null;
 }
 
 export default function WorkflowTemplatesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const { selectedPropertyFilter } = useAppStore();
 
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  const [premiumModalOpen, setPremiumModalOpen] = useState(false);
+  const [lockedModalOpen, setLockedModalOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplate | null>(null);
   const [cloneName, setCloneName] = useState('');
   const [cloneDescription, setCloneDescription] = useState('');
 
+  // Pass the selected property filter to the API
   const { data, isLoading } = useQuery<TemplatesResponse>({
-    queryKey: ['/api/workflow-designer/templates'],
+    queryKey: ['/api/workflow-designer/templates', selectedPropertyFilter],
     queryFn: async () => {
-      const response = await fetch('/api/workflow-designer/templates', {
+      const url = selectedPropertyFilter
+        ? `/api/workflow-designer/templates?targetTenantId=${selectedPropertyFilter}`
+        : '/api/workflow-designer/templates';
+      const response = await fetch(url, {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -52,8 +75,29 @@ export default function WorkflowTemplatesPage() {
     },
   });
 
+  // Get current active workflow for the selected property
+  const { data: propertyWorkflow } = useQuery<PropertyWorkflowResponse>({
+    queryKey: ['/api/properties', selectedPropertyFilter, 'workflow'],
+    queryFn: async () => {
+      const response = await fetch(`/api/properties/${selectedPropertyFilter}/workflow`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch property workflow');
+      }
+      return response.json();
+    },
+    enabled: !!selectedPropertyFilter,
+  });
+
   const templates = data?.templates || [];
-  const hasCustomWorkflows = data?.hasCustomWorkflows ?? true;
+  const canClone = data?.canClone ?? false;
+  const cloneDisabledReason = data?.cloneDisabledReason || null;
+  const hasCustomWorkflows = data?.hasCustomWorkflows ?? false;
+  const lockedWorkflowCount = data?.lockedWorkflowCount ?? 0;
+  const currentPlan = data?.currentPlan || 'Free';
+  const requiredPlan = data?.requiredPlan || 'Premium';
+  const activeWorkflowId = propertyWorkflow?.workflowTemplateId || null;
 
   const cloneMutation = useMutation({
     mutationFn: async ({ templateId, name, description }: { templateId: string; name: string; description: string }) => {
@@ -61,11 +105,15 @@ export default function WorkflowTemplatesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({
+          name,
+          description,
+          targetTenantId: selectedPropertyFilter,
+        }),
       });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to clone template');
+        throw new Error(error.error || 'Failed to clone template');
       }
       return response.json();
     },
@@ -96,7 +144,7 @@ export default function WorkflowTemplatesPage() {
       });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to delete template');
+        throw new Error(error.error || 'Failed to delete template');
       }
       return response.json();
     },
@@ -117,13 +165,53 @@ export default function WorkflowTemplatesPage() {
     },
   });
 
-  const handleCloneClick = (template: WorkflowTemplate) => {
-    if (!hasCustomWorkflows) {
+  const activateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      if (!selectedPropertyFilter) {
+        throw new Error('No property selected');
+      }
+      console.log('[activateMutation] Setting workflow for property:', selectedPropertyFilter, 'template:', templateId);
+      const response = await fetch(`/api/properties/${selectedPropertyFilter}/workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ workflowTemplateId: templateId }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Failed to set active workflow';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          // Response wasn't JSON, might be HTML error page
+          console.error('Unexpected response:', errorText.substring(0, 200));
+        }
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties', selectedPropertyFilter, 'workflow'] });
+      setActivateDialogOpen(false);
       toast({
-        title: 'Premium Feature',
-        description: 'Upgrade to Premium or higher to clone and create custom workflows.',
+        title: 'Workflow activated',
+        description: data.message || 'The workflow has been set as active for this property.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Activation failed',
+        description: error.message,
         variant: 'destructive',
       });
+    },
+  });
+
+  const handleCloneClick = (template: WorkflowTemplate) => {
+    if (!canClone) {
+      // Show premium modal instead of toast
+      setPremiumModalOpen(true);
       return;
     }
     setSelectedTemplate(template);
@@ -153,6 +241,35 @@ export default function WorkflowTemplatesPage() {
     }
   };
 
+  const handleActivateClick = (template: WorkflowTemplate) => {
+    if (!selectedPropertyFilter) {
+      toast({
+        title: 'No property selected',
+        description: 'Please select a property from the dropdown to set an active workflow.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSelectedTemplate(template);
+    setActivateDialogOpen(true);
+  };
+
+  const handleActivateConfirm = () => {
+    if (selectedTemplate) {
+      activateMutation.mutate(selectedTemplate.id);
+    }
+  };
+
+  const handleUpgrade = () => {
+    // Navigate to subscription management page for the selected property
+    if (selectedPropertyFilter) {
+      setLocation(`/properties/${selectedPropertyFilter}/subscription`);
+    } else {
+      // If no property selected, go to properties list
+      setLocation('/properties');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -166,6 +283,10 @@ export default function WorkflowTemplatesPage() {
   const blueprints = templates?.filter((t) => t.isBlueprint) || [];
   const customTemplates = templates?.filter((t) => !t.isBlueprint) || [];
 
+  // Determine if we need to show "select property" message vs "upgrade" message
+  const needsPropertySelection = !selectedPropertyFilter;
+  const needsUpgrade = selectedPropertyFilter && !canClone;
+
   return (
     <div className="p-8">
       <div className="max-w-6xl mx-auto">
@@ -178,60 +299,147 @@ export default function WorkflowTemplatesPage() {
           </div>
         </div>
 
+        {/* Info banner when property not selected */}
+        {needsPropertySelection && (
+          <Alert className="mb-6">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Select a property from the dropdown above to clone workflows and set an active workflow.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Current active workflow banner */}
+        {selectedPropertyFilter && propertyWorkflow && (
+          <Alert className="mb-6 border-green-200 bg-green-50">
+            <Star className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">
+              <span className="font-medium">Active Workflow: </span>
+              {propertyWorkflow.workflow?.name || 'No workflow assigned'}
+              {propertyWorkflow.workflow && (
+                <span className="text-green-600 ml-2">
+                  — All new applications will use this workflow
+                </span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Locked workflows warning banner */}
+        {lockedWorkflowCount > 0 && (
+          <Alert className="mb-6 border-amber-200 bg-amber-50">
+            <Lock className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              <span className="font-medium">
+                {lockedWorkflowCount} custom workflow{lockedWorkflowCount !== 1 ? 's are' : ' is'} locked.
+              </span>{' '}
+              Your plan was downgraded and these workflows are no longer accessible.{' '}
+              <button
+                onClick={() => setLockedModalOpen(true)}
+                className="underline font-medium hover:text-amber-900"
+              >
+                Upgrade to restore access
+              </button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* System Templates (Blueprints) */}
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">System Templates</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Pre-built workflow templates. Clone a template to customize it for your needs.
+            Pre-built workflow templates. Set one as active or clone to customize.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {blueprints.map((template) => (
-              <Card key={template.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{template.name}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {template.description || 'No description'}
-                      </CardDescription>
+            {blueprints.map((template) => {
+              const isActive = template.id === activeWorkflowId;
+              return (
+                <Card key={template.id} className={isActive ? 'ring-2 ring-green-500' : ''}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          {template.name}
+                          {isActive && (
+                            <Badge className="bg-green-600">
+                              <Check className="h-3 w-3 mr-1" />
+                              Active
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          {template.description || 'No description'}
+                        </CardDescription>
+                      </div>
+                      <Badge variant="outline">Blueprint</Badge>
                     </div>
-                    <Badge variant="outline">Blueprint</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <TooltipProvider>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href={`/workflow-designer/${template.id}`}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          View
-                        </Link>
-                      </Button>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCloneClick(template)}
-                            disabled={!hasCustomWorkflows}
-                            className={!hasCustomWorkflows ? 'opacity-60' : ''}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Clone
-                            {!hasCustomWorkflows && <Crown className="h-3 w-3 ml-1 text-yellow-500" />}
-                          </Button>
-                        </TooltipTrigger>
-                        {!hasCustomWorkflows && (
-                          <TooltipContent>
-                            <p className="text-sm">Premium feature - Upgrade to clone workflows</p>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </div>
-                  </TooltipProvider>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent>
+                    <TooltipProvider>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/workflow-designer/${template.id}`}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            View
+                          </Link>
+                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant={isActive ? "secondary" : "default"}
+                              onClick={() => handleActivateClick(template)}
+                              disabled={!selectedPropertyFilter || isActive}
+                            >
+                              {isActive ? (
+                                <>
+                                  <Check className="h-4 w-4 mr-2" />
+                                  Active
+                                </>
+                              ) : (
+                                <>
+                                  <Star className="h-4 w-4 mr-2" />
+                                  Set Active
+                                </>
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          {!selectedPropertyFilter && (
+                            <TooltipContent>
+                              <p className="text-sm">Select a property first</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCloneClick(template)}
+                              disabled={needsPropertySelection}
+                              className={!canClone && !needsPropertySelection ? 'opacity-70' : ''}
+                            >
+                              <Copy className="h-4 w-4 mr-2" />
+                              Clone
+                              {!canClone && !needsPropertySelection && <Crown className="h-3 w-3 ml-1 text-yellow-500" />}
+                            </Button>
+                          </TooltipTrigger>
+                          {(!canClone || needsPropertySelection) && (
+                            <TooltipContent>
+                              <p className="text-sm max-w-xs">
+                                {needsPropertySelection
+                                  ? 'Select a property first'
+                                  : 'Premium feature - Click to learn more'}
+                              </p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </div>
+                    </TooltipProvider>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
 
@@ -243,97 +451,107 @@ export default function WorkflowTemplatesPage() {
               Workflows you've created or customized for your community.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {customTemplates.map((template) => (
-                <Card key={template.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
-                        <CardDescription className="mt-1">
-                          {template.description || 'No description'}
-                        </CardDescription>
+              {customTemplates.map((template) => {
+                const isActive = template.id === activeWorkflowId;
+                return (
+                  <Card key={template.id} className={isActive ? 'ring-2 ring-green-500' : ''}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            {template.name}
+                            {isActive && (
+                              <Badge className="bg-green-600">
+                                <Check className="h-3 w-3 mr-1" />
+                                Active
+                              </Badge>
+                            )}
+                          </CardTitle>
+                          <CardDescription className="mt-1">
+                            {template.description || 'No description'}
+                          </CardDescription>
+                        </div>
+                        <Badge variant="secondary">v{template.version}</Badge>
                       </div>
-                      <Badge variant="secondary">v{template.version}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <TooltipProvider>
-                      <div className="flex gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              asChild={hasCustomWorkflows}
-                              disabled={!hasCustomWorkflows}
-                              className={!hasCustomWorkflows ? 'opacity-60' : ''}
-                            >
-                              {hasCustomWorkflows ? (
-                                <Link href={`/workflow-designer/${template.id}`}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </Link>
-                              ) : (
-                                <span>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                  <Crown className="h-3 w-3 ml-1 text-yellow-500" />
-                                </span>
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          {!hasCustomWorkflows && (
-                            <TooltipContent>
-                              <p className="text-sm">Premium feature - Upgrade to edit workflows</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteClick(template)}
-                              disabled={!hasCustomWorkflows}
-                              className={!hasCustomWorkflows ? 'opacity-60' : ''}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                              {!hasCustomWorkflows && <Crown className="h-3 w-3 ml-1 text-yellow-500" />}
-                            </Button>
-                          </TooltipTrigger>
-                          {!hasCustomWorkflows && (
-                            <TooltipContent>
-                              <p className="text-sm">Premium feature - Upgrade to delete workflows</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </div>
-                    </TooltipProvider>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    <CardContent>
+                      <TooltipProvider>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/workflow-designer/${template.id}`}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant={isActive ? "secondary" : "default"}
+                                onClick={() => handleActivateClick(template)}
+                                disabled={!selectedPropertyFilter || isActive}
+                              >
+                                {isActive ? (
+                                  <>
+                                    <Check className="h-4 w-4 mr-2" />
+                                    Active
+                                  </>
+                                ) : (
+                                  <>
+                                    <Star className="h-4 w-4 mr-2" />
+                                    Set Active
+                                  </>
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            {!selectedPropertyFilter && (
+                              <TooltipContent>
+                                <p className="text-sm">Select a property first</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteClick(template)}
+                            disabled={isActive}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TooltipProvider>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {customTemplates.length === 0 && (
+        {/* Empty state for custom templates */}
+        {customTemplates.length === 0 && !lockedWorkflowCount && (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <div className="text-gray-400 mb-4">
                 <Plus className="h-12 w-12" />
               </div>
               <h3 className="font-semibold text-lg mb-2">No custom workflows yet</h3>
-              <p className="text-gray-600 text-center mb-4">
-                {hasCustomWorkflows
-                  ? 'Clone a system template to create your first custom workflow'
-                  : 'Upgrade to Premium or higher to clone templates and create custom workflows'}
+              <p className="text-gray-600 text-center mb-4 max-w-md">
+                {canClone
+                  ? 'Clone a system template above to create your first custom workflow tailored to your community.'
+                  : needsPropertySelection
+                    ? 'Select a property from the dropdown above, then clone a system template to get started.'
+                    : 'Upgrade to Professional or Enterprise to create custom workflows for your community.'}
               </p>
-              {!hasCustomWorkflows && (
-                <Badge variant="secondary" className="mt-2">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Premium Feature
-                </Badge>
+              {needsUpgrade && (
+                <Button
+                  onClick={() => setPremiumModalOpen(true)}
+                  className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
+                >
+                  <Crown className="h-4 w-4 mr-2" />
+                  Upgrade to Unlock
+                </Button>
               )}
             </CardContent>
           </Card>
@@ -386,6 +604,36 @@ export default function WorkflowTemplatesPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Activate Workflow Dialog */}
+        <AlertDialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Set Active Workflow</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to set "{selectedTemplate?.name}" as the active workflow?
+                <br /><br />
+                All new applications submitted to this property will use this workflow.
+                Existing applications in progress will continue using their original workflow.
+                <br /><br />
+                <span className="text-amber-600 font-medium">
+                  Account admins and board members will be notified of this change.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={activateMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleActivateConfirm}
+                disabled={activateMutation.isPending}
+              >
+                {activateMutation.isPending ? 'Setting...' : 'Set as Active'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
@@ -410,6 +658,26 @@ export default function WorkflowTemplatesPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Premium Feature Modal */}
+        <PremiumFeatureModal
+          open={premiumModalOpen}
+          onOpenChange={setPremiumModalOpen}
+          featureName="Custom Workflows"
+          featureDescription="Create and customize approval workflows tailored to your community's unique needs."
+          currentPlan={currentPlan}
+          requiredPlan={requiredPlan}
+          onUpgrade={handleUpgrade}
+        />
+
+        {/* Locked Workflows Modal */}
+        <LockedWorkflowsModal
+          open={lockedModalOpen}
+          onOpenChange={setLockedModalOpen}
+          lockedWorkflowCount={lockedWorkflowCount}
+          requiredPlan={requiredPlan}
+          onUpgrade={handleUpgrade}
+        />
       </div>
     </div>
   );

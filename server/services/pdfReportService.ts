@@ -593,6 +593,7 @@ export class PdfReportService {
   private addFooter(doc: typeof PDFDocument.prototype, context: ReportContext | BreakdownReportContext): void {
     const range = doc.bufferedPageRange();
     const totalPages = range.start + range.count;
+    const footerY = doc.page.height - 40;
 
     // Add footer to each page
     for (let i = range.start; i < totalPages; i++) {
@@ -605,33 +606,36 @@ export class PdfReportService {
         .lineTo(doc.page.width - 50, doc.page.height - 50)
         .stroke();
 
-      // Page number
+      // Page number - use height constraint to prevent PDFKit from creating new pages
       doc.fillColor(COLORS.textLight)
         .font('Helvetica')
         .fontSize(8)
         .text(
           `Page ${i + 1} of ${totalPages}`,
           50,
-          doc.page.height - 40,
-          { width: 100 }
+          footerY,
+          { width: 100, height: 12, lineBreak: false }
         );
 
       // Disclaimer
       doc.text(
         'AI-generated analysis for reference only. Human review required.',
         150,
-        doc.page.height - 40,
-        { width: 300, align: 'center' }
+        footerY,
+        { width: 300, height: 12, align: 'center', lineBreak: false }
       );
 
       // Generation date
       doc.text(
         `Generated: ${new Date().toLocaleString()}`,
         doc.page.width - 150,
-        doc.page.height - 40,
-        { width: 100, align: 'right' }
+        footerY,
+        { width: 100, height: 12, align: 'right', lineBreak: false }
       );
     }
+
+    // Flush all buffered pages
+    doc.flushPages();
   }
 
   /**

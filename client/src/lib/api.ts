@@ -1332,7 +1332,135 @@ export interface AiAnalysis {
   errorMessage?: string;
   userRating?: number;
   userFeedback?: string;
+  propertyResearch?: {
+    researchSummary: string;
+    overallRiskLevel: 'low' | 'medium' | 'high' | 'critical';
+    taxRecords: Array<{
+      parcelId?: string;
+      assessedValue?: string;
+      marketValue?: string;
+      taxYear?: number;
+      annualTaxAmount?: string;
+      taxStatus?: 'current' | 'delinquent' | 'unknown';
+      lastPaymentDate?: string;
+      exemptions: string[];
+      notes?: string;
+    }>;
+    taxAnalysis?: string;
+    liens: Array<{
+      lienType: 'tax' | 'mechanics' | 'hoa' | 'judgment' | 'mortgage' | 'other';
+      lienHolder: string;
+      amount?: string;
+      filedDate?: string;
+      status: 'active' | 'released' | 'satisfied' | 'unknown';
+      recordingNumber?: string;
+      description: string;
+    }>;
+    lienAnalysis?: string;
+    permits: Array<{
+      permitNumber?: string;
+      permitType: string;
+      description: string;
+      issueDate?: string;
+      status: 'issued' | 'final' | 'expired' | 'pending' | 'revoked' | 'unknown';
+      estimatedValue?: string;
+      contractor?: string;
+      notes?: string;
+    }>;
+    permitAnalysis?: string;
+    deeds: Array<{
+      recordingDate?: string;
+      documentType: 'warranty_deed' | 'quitclaim_deed' | 'trust_deed' | 'special_warranty' | 'other';
+      grantor?: string;
+      grantee?: string;
+      salePrice?: string;
+      documentNumber?: string;
+      notes?: string;
+    }>;
+    titleAnalysis?: string;
+    surveyInfo?: {
+      surveyDate?: string;
+      surveyor?: string;
+      platBook?: string;
+      platPage?: string;
+      lotNumber?: string;
+      blockNumber?: string;
+      subdivision?: string;
+      lotSize?: string;
+      setbacks?: {
+        front?: string;
+        rear?: string;
+        leftSide?: string;
+        rightSide?: string;
+      };
+      easements: string[];
+      notes?: string;
+    };
+    surveyAnalysis?: string;
+    legalIssues: Array<{
+      issueType: 'code_violation' | 'lawsuit' | 'easement_dispute' | 'boundary_dispute' | 'environmental' | 'zoning' | 'hoa_violation' | 'other';
+      description: string;
+      status: 'open' | 'resolved' | 'pending' | 'unknown';
+      filedDate?: string;
+      resolvedDate?: string;
+      parties: string[];
+      caseNumber?: string;
+      potentialImpact?: string;
+    }>;
+    legalAnalysis?: string;
+    zoning?: {
+      zoningCode?: string;
+      zoningDescription?: string;
+      allowedUses: string[];
+      restrictions: string[];
+      overlayDistricts: string[];
+      floodZone?: string;
+      maxBuildingHeight?: string;
+      maxLotCoverage?: string;
+      notes?: string;
+    };
+    zoningAnalysis?: string;
+    ownershipHistory: Array<{
+      ownerName: string;
+      ownershipType?: 'individual' | 'joint' | 'trust' | 'llc' | 'corporation' | 'other';
+      purchaseDate?: string;
+      purchasePrice?: string;
+      saleDate?: string;
+      salePrice?: string;
+      durationOwned?: string;
+    }>;
+    ownershipAnalysis?: string;
+    keyFindings: Array<{
+      category: 'tax' | 'lien' | 'permit' | 'deed' | 'survey' | 'legal' | 'zoning' | 'ownership' | 'other';
+      title: string;
+      description: string;
+      severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+      relevanceToApplication: string;
+      recommendation?: string;
+      source?: string;
+    }>;
+    redFlags: Array<{
+      issue: string;
+      severity: 'low' | 'medium' | 'high' | 'critical';
+      recommendation: string;
+    }>;
+    dataSources: Array<{
+      name: string;
+      url?: string;
+      accessDate: string;
+      reliability: 'official' | 'likely_accurate' | 'needs_verification' | 'estimated';
+      notes?: string;
+    }>;
+    researchLimitations: string[];
+    furtherResearchNeeded: Array<{
+      area: string;
+      reason: string;
+      suggestedSource?: string;
+    }>;
+  };
   createdAt: string;
+  queuedAt?: string;
+  startedAt?: string;
   completedAt?: string;
 }
 
@@ -1403,4 +1531,307 @@ export async function submitAnalysisFeedback(
 // Cancel a queued analysis
 export async function cancelAiAnalysis(analysisId: string): Promise<{ success: boolean }> {
   return apiRequest('POST', `/api/ai/analysis/${analysisId}/cancel`);
+}
+
+// Application event for timeline
+export interface ApplicationEvent {
+  id: string;
+  applicationId: string;
+  tenantId: string;
+  eventType: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+  summary?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  createdAt: string;
+  user?: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    profileImageUrl?: string;
+  };
+}
+
+// Timeline response combining events and analyses
+export interface ApplicationTimeline {
+  events: ApplicationEvent[];
+  analyses: AiAnalysis[];
+}
+
+// Get application timeline (events and analyses)
+export async function getApplicationTimeline(applicationId: string): Promise<ApplicationTimeline> {
+  return apiRequest('GET', `/api/applications/${applicationId}/timeline`);
+}
+
+// ============================================
+// SUBSCRIPTION & BILLING API
+// ============================================
+
+// Community tier definition
+export interface CommunityTierDef {
+  id: string;
+  tierCode: 'small' | 'medium' | 'large' | 'xl';
+  name: string;
+  minDoors: number;
+  maxDoors: number | null;
+  basePriceMonthly: number;
+  basePriceYearly: number;
+  includedAiCredits: number;
+  defaultOverageCost: number;
+  maxUsers: number | null;
+  maxStorageGb: number | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+// Community subscription with computed effective values
+export interface CommunitySubscriptionWithTier {
+  id: string;
+  communityId: string;
+  tierId: string;
+  tier?: CommunityTierDef;
+  doorCount: number;
+  status: 'active' | 'trial' | 'canceled' | 'paused';
+  customPriceMonthly: number | null;
+  customPriceYearly: number | null;
+  customAiCredits: number | null;
+  customOverageCost: number | null;
+  pricingNote: string | null;
+  billingCycleDay: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  aiCreditsUsed: number;
+  applicationsThisMonth: number;
+  effectivePrice?: number;
+  effectiveAiCredits?: number;
+  effectiveOverageCost?: number;
+  aiCreditsRemaining?: number;
+  overageCreditsUsed?: number;
+  estimatedOverageCost?: number;
+}
+
+// Per-community consumption data
+export interface CommunityConsumption {
+  communityId: string;
+  communityName: string;
+  tierCode: 'small' | 'medium' | 'large' | 'xl';
+  tierName: string;
+  doorCount: number;
+  basePrice: number;
+  effectivePrice: number;
+  hasCustomPricing: boolean;
+  aiCreditsIncluded: number;
+  aiCreditsUsed: number;
+  aiCreditsRemaining: number;
+  overageCredits: number;
+  overageCostPerCredit: number;
+  overageCost: number;
+  applicationsThisMonth: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  daysUntilReset: number;
+  billingCycleProgress: number;
+}
+
+// Aggregated consumption summary
+export interface BillingConsumptionSummary {
+  billingEntityId: string;
+  billingEntityName: string;
+  billingEntityType: 'management_company' | 'community';
+  communities: CommunityConsumption[];
+  totalBaseCharges: number;
+  totalOverageCharges: number;
+  totalProjectedCharges: number;
+  totalAiCreditsIncluded: number;
+  totalAiCreditsUsed: number;
+  totalOverageCredits: number;
+  totalApplicationsThisMonth: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  daysRemaining: number;
+}
+
+// Monthly usage history
+export interface UsageHistoryMonth {
+  month: string;
+  aiCreditsUsed: number;
+  overageCredits: number;
+  overageCost: number;
+  applicationsSubmitted: number;
+  totalCost: number;
+}
+
+// Overage projection
+export interface OverageProjection {
+  communityId: string;
+  currentCreditsUsed: number;
+  creditsIncluded: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  dailyUsageRate: number;
+  projectedTotalUsage: number;
+  projectedOverageCredits: number;
+  projectedOverageCost: number;
+  willExceedLimit: boolean;
+}
+
+// Invoice line item
+export interface InvoiceLineItem {
+  id: string;
+  invoiceId: string;
+  communityId: string | null;
+  communityName?: string;
+  lineType: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  tierId: string | null;
+  sortOrder: number;
+}
+
+// Invoice with line items
+export interface InvoiceWithLineItems {
+  id: string;
+  invoiceNumber: string;
+  billedToTenantId: string;
+  billedToTenantName?: string;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  status: 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  dueDate: string | null;
+  paidAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  finalizedAt: string | null;
+  sentAt: string | null;
+  stripeInvoiceId: string | null;
+  stripeHostedInvoiceUrl?: string | null;
+  lineItems: InvoiceLineItem[];
+}
+
+// Get all community tiers
+export async function getCommunityTiers(): Promise<CommunityTierDef[]> {
+  return apiRequest('GET', '/api/subscription/tiers');
+}
+
+// Get subscription for a community
+export async function getCommunitySubscription(communityId: string): Promise<CommunitySubscriptionWithTier> {
+  return apiRequest('GET', `/api/communities/${communityId}/subscription`);
+}
+
+// Create subscription for a community
+export async function createCommunitySubscription(
+  communityId: string,
+  doorCount: number,
+  demoCodeId?: string
+): Promise<CommunitySubscriptionWithTier> {
+  return apiRequest('POST', `/api/communities/${communityId}/subscription`, { doorCount, demoCodeId });
+}
+
+// Update door count
+export async function updateDoorCount(
+  communityId: string,
+  doorCount: number
+): Promise<CommunitySubscriptionWithTier> {
+  return apiRequest('PATCH', `/api/communities/${communityId}/subscription/doors`, { doorCount });
+}
+
+// Set custom pricing (super_admin)
+export async function setCustomPricing(
+  communityId: string,
+  pricing: {
+    customPriceMonthly?: number;
+    customPriceYearly?: number;
+    customAiCredits?: number;
+    customOverageCost?: number;
+    pricingNote?: string;
+  }
+): Promise<CommunitySubscriptionWithTier> {
+  return apiRequest('PATCH', `/api/communities/${communityId}/subscription/pricing`, pricing);
+}
+
+// Clear custom pricing (super_admin)
+export async function clearCustomPricing(communityId: string): Promise<CommunitySubscriptionWithTier> {
+  return apiRequest('DELETE', `/api/communities/${communityId}/subscription/pricing`);
+}
+
+// Get consumption summary for account_admin
+export async function getConsumptionSummary(): Promise<BillingConsumptionSummary> {
+  return apiRequest('GET', '/api/billing/consumption');
+}
+
+// Get consumption for a specific community
+export async function getCommunityConsumption(communityId: string): Promise<CommunityConsumption> {
+  return apiRequest('GET', `/api/billing/consumption/${communityId}`);
+}
+
+// Get usage history for charts
+export async function getUsageHistory(months: number = 6): Promise<UsageHistoryMonth[]> {
+  return apiRequest('GET', `/api/billing/history?months=${months}`);
+}
+
+// Get overage projection for a community
+export async function getOverageProjection(communityId: string): Promise<OverageProjection> {
+  return apiRequest('GET', `/api/billing/projection/${communityId}`);
+}
+
+// List invoices
+export async function listInvoices(limit: number = 12): Promise<InvoiceWithLineItems[]> {
+  return apiRequest('GET', `/api/invoices?limit=${limit}`);
+}
+
+// Get invoice by ID
+export async function getInvoice(invoiceId: string): Promise<InvoiceWithLineItems> {
+  return apiRequest('GET', `/api/invoices/${invoiceId}`);
+}
+
+// Generate invoice
+export async function generateInvoice(options?: {
+  billingEntityId?: string;
+  periodStart?: string;
+  periodEnd?: string;
+}): Promise<InvoiceWithLineItems> {
+  return apiRequest('POST', '/api/invoices/generate', options || {});
+}
+
+// Finalize invoice
+export async function finalizeInvoice(invoiceId: string): Promise<InvoiceWithLineItems> {
+  return apiRequest('PATCH', `/api/invoices/${invoiceId}/finalize`);
+}
+
+// Mark invoice as paid
+export async function markInvoicePaid(
+  invoiceId: string,
+  paymentMethod?: string,
+  paymentReference?: string
+): Promise<InvoiceWithLineItems> {
+  return apiRequest('PATCH', `/api/invoices/${invoiceId}/paid`, { paymentMethod, paymentReference });
+}
+
+// Void invoice
+export async function voidInvoice(invoiceId: string): Promise<InvoiceWithLineItems> {
+  return apiRequest('PATCH', `/api/invoices/${invoiceId}/void`);
+}
+
+// Download invoice as PDF
+export function downloadInvoicePdf(invoiceId: string, invoiceNumber: string): void {
+  // Create a link and trigger download
+  const link = document.createElement('a');
+  link.href = `/api/invoices/${invoiceId}/download`;
+  link.download = `invoice-${invoiceNumber}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Send invoice via email
+export async function sendInvoice(invoiceId: string): Promise<{ success: boolean; invoice: InvoiceWithLineItems }> {
+  return apiRequest('POST', `/api/invoices/${invoiceId}/send`);
 }

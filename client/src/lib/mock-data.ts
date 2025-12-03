@@ -1,5 +1,5 @@
 
-import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar } from "lucide-react";
+import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar, Receipt } from "lucide-react";
 
 // Types for our mockup
 export type Role = 
@@ -94,6 +94,12 @@ export const NAV_ITEMS = [
     label: 'Workflows',
     icon: GitBranch,
     href: '/workflows',
+    roles: ['account_admin', 'super_admin']
+  },
+  {
+    label: 'Billing',
+    icon: Receipt,
+    href: '/billing',
     roles: ['account_admin', 'super_admin']
   },
   {

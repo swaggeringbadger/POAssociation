@@ -38,6 +38,14 @@ Based on the form configuration, these bylaws are most relevant:
 
 {RELEVANT_BYLAWS}
 
+## Property Research Findings
+
+Prior to this analysis, property research was conducted on this address. The following findings are relevant to your compliance assessment:
+
+{PROPERTY_RESEARCH_SUMMARY}
+
+**Important**: Factor the property research findings into your compliance analysis, risk assessment, and recommendations. If there are red flags, liens, legal issues, or zoning concerns identified in the research, these should be reflected in your analysis. If there are setback requirements, easements, or restrictions identified, ensure the proposed project respects them.
+
 ---
 
 Please analyze this application and provide your assessment in the specified JSON format. Focus on:
@@ -46,5 +54,6 @@ Please analyze this application and provide your assessment in the specified JSO
 2. What risks does this project pose to the community?
 3. What questions should the review committee ask?
 4. What is your recommendation and why?
+5. How do the property research findings affect your analysis?
 
 Respond with ONLY the JSON object, no additional text or markdown formatting.

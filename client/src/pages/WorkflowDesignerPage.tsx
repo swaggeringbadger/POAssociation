@@ -16,6 +16,7 @@ import ReactFlow, {
   useEdgesState,
   NodeTypes,
   ReactFlowInstance,
+  NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Play, AlertCircle, Lock, Copy, X } from 'lucide-react';
+import { Save, Play, AlertCircle, Lock, Copy, X, Wand2 } from 'lucide-react';
 import { useWorkflowDesignerStore } from '@/stores/workflowDesignerStore';
 import { StartNode, StepNode, DecisionNode, EndNode } from '@/components/workflow-designer/nodes';
 import { StepPropertiesPanel } from '@/components/workflow-designer/StepPropertiesPanel';
@@ -69,6 +70,7 @@ export default function WorkflowDesignerPage() {
     selectTransition,
     addTransition,
     addStep,
+    updateStepPositions,
     setLoading,
     validate,
     markAsSaved,
@@ -110,10 +112,11 @@ export default function WorkflowDesignerPage() {
   const initialNodes: Node[] = useMemo(() => {
     if (!template?.steps || !Array.isArray(template.steps)) return [];
 
-    return template.steps.map((step: WorkflowStep) => ({
+    return template.steps.map((step: WorkflowStep, index: number) => ({
       id: step.id,
       type: step.type,
-      position: step.position,
+      // Provide default position if missing (auto-layout vertically)
+      position: step.position || { x: 250, y: index * 150 },
       data: {
         step,
         isValid: !validationErrors.some((err) => err.stepId === step.id),
@@ -149,12 +152,161 @@ export default function WorkflowDesignerPage() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const prevStepCountRef = useRef(template?.steps?.length || 0);
 
-  // Update nodes/edges when template changes
+  // Auto-layout function - arranges nodes in a clean top-to-bottom flow
+  const autoLayout = useCallback(() => {
+    if (!template?.steps || template.steps.length === 0) return;
+
+    const nodeWidth = 200;
+    const nodeHeight = 80;
+    const verticalSpacing = 100;
+    const branchSpacing = 280; // Horizontal spacing between parallel branches
+
+    // Build adjacency map from transitions
+    const adjacencyMap = new Map<string, string[]>();
+    const incomingEdges = new Map<string, string[]>();
+
+    template.steps.forEach(step => {
+      adjacencyMap.set(step.id, []);
+      incomingEdges.set(step.id, []);
+    });
+
+    template.steps.forEach(step => {
+      step.transitions?.forEach(t => {
+        adjacencyMap.get(step.id)?.push(t.targetStepId);
+        incomingEdges.get(t.targetStepId)?.push(step.id);
+      });
+    });
+
+    // Find the start node
+    const startNode = template.steps.find(s => s.type === 'start');
+    if (!startNode) return;
+
+    // BFS to assign levels and track branching
+    const levels = new Map<string, number>();
+    const columns = new Map<string, number>(); // Track horizontal position for branches
+    const visited = new Set<string>();
+    const queue: Array<{ id: string; level: number; column: number }> = [
+      { id: startNode.id, level: 0, column: 0 }
+    ];
+
+    levels.set(startNode.id, 0);
+    columns.set(startNode.id, 0);
+
+    while (queue.length > 0) {
+      const { id: currentId, level: currentLevel, column: currentColumn } = queue.shift()!;
+
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const targets = adjacencyMap.get(currentId) || [];
+      const numTargets = targets.length;
+
+      targets.forEach((targetId, index) => {
+        if (!visited.has(targetId)) {
+          const newLevel = currentLevel + 1;
+
+          // For branching (multiple targets), spread them horizontally
+          let newColumn = currentColumn;
+          if (numTargets > 1) {
+            // Center the branches around the parent
+            const offset = index - (numTargets - 1) / 2;
+            newColumn = currentColumn + offset;
+          }
+
+          // Only update if this gives a deeper level (handles convergent paths)
+          const existingLevel = levels.get(targetId);
+          if (existingLevel === undefined || newLevel > existingLevel) {
+            levels.set(targetId, newLevel);
+            columns.set(targetId, newColumn);
+          }
+
+          queue.push({ id: targetId, level: newLevel, column: newColumn });
+        }
+      });
+    }
+
+    // Handle disconnected nodes
+    let disconnectedLevel = Math.max(...Array.from(levels.values()), 0) + 1;
+    template.steps.forEach(step => {
+      if (!levels.has(step.id)) {
+        levels.set(step.id, disconnectedLevel++);
+        columns.set(step.id, 0);
+      }
+    });
+
+    // Calculate positions - center horizontally, flow top to bottom
+    const positions: Record<string, { x: number; y: number }> = {};
+    const centerX = 400;
+
+    template.steps.forEach(step => {
+      const level = levels.get(step.id) || 0;
+      const column = columns.get(step.id) || 0;
+
+      positions[step.id] = {
+        x: centerX + column * branchSpacing - nodeWidth / 2,
+        y: 50 + level * (nodeHeight + verticalSpacing),
+      };
+    });
+
+    // Update store with new positions
+    updateStepPositions(positions);
+
+    // Also update local nodes state immediately for visual feedback
+    setNodes(currentNodes =>
+      currentNodes.map(node => ({
+        ...node,
+        position: positions[node.id] || node.position,
+      }))
+    );
+
+    toast({
+      title: 'Layout applied',
+      description: 'Nodes have been automatically arranged.',
+    });
+  }, [template?.steps, updateStepPositions, setNodes, toast]);
+
+  // Sync node positions back to store when dragging ends
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes);
+
+    // Check if any position changes are complete (not dragging)
+    const positionChanges = changes.filter(
+      (change): change is NodeChange & { type: 'position'; position: { x: number; y: number }; dragging: boolean } =>
+        change.type === 'position' && 'position' in change && change.position !== undefined && !change.dragging
+    );
+
+    if (positionChanges.length > 0) {
+      const positions: Record<string, { x: number; y: number }> = {};
+      positionChanges.forEach(change => {
+        if (change.position) {
+          positions[change.id] = change.position;
+        }
+      });
+      updateStepPositions(positions);
+    }
+  }, [onNodesChange, updateStepPositions]);
+
+  // Update nodes/edges when template changes, but preserve positions during edits
   useEffect(() => {
+    const currentStepCount = template?.steps?.length || 0;
+    const prevStepCount = prevStepCountRef.current;
+
+    // Check if a new step was added
+    if (currentStepCount > prevStepCount) {
+      // New node added - run auto-layout after a short delay to let React Flow update
+      setTimeout(() => {
+        autoLayout();
+      }, 100);
+    }
+
+    prevStepCountRef.current = currentStepCount;
+
+    // Always sync nodes from template
     setNodes(initialNodes);
     setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+  }, [initialNodes, initialEdges, setNodes, setEdges, autoLayout, template?.steps?.length]);
 
   // Handle node selection
   const onNodeClick = useCallback(
@@ -401,6 +553,12 @@ export default function WorkflowDesignerPage() {
             <X className="h-4 w-4 mr-2" />
             Cancel
           </Button>
+          {!isReadOnly && (
+            <Button variant="outline" size="sm" onClick={autoLayout}>
+              <Wand2 className="h-4 w-4 mr-2" />
+              Beautify
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleTest}>
             <Play className="h-4 w-4 mr-2" />
             Test
@@ -445,7 +603,7 @@ export default function WorkflowDesignerPage() {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={isReadOnly ? undefined : onNodesChange}
+            onNodesChange={isReadOnly ? undefined : handleNodesChange}
             onEdgesChange={isReadOnly ? undefined : onEdgesChange}
             onConnect={isReadOnly ? undefined : onConnect}
             onNodeClick={onNodeClick}

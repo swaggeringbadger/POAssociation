@@ -16,8 +16,15 @@
 
 import { storage } from '../storage';
 import { aiCreditService } from './aiCreditService';
+import { applicationEventService } from './applicationEventService';
 import type { AiAnalysis, InsertAiAnalysis } from '@shared/schema';
 import type { AnalysisJobData, TriggerAnalysisResponse } from '@shared/aiAnalysisTypes';
+
+// Lazy import to avoid circular dependency
+const getUsageTrackingService = async () => {
+  const { usageTrackingService } = await import('./usageTrackingService');
+  return usageTrackingService;
+};
 
 // Estimated processing time in seconds (for UI feedback)
 const ESTIMATED_PROCESSING_TIME = 90;
@@ -98,6 +105,19 @@ export class AnalysisQueueService {
 
     const analysis = await storage.createAiAnalysis(analysisData);
 
+    // Emit event for timeline
+    try {
+      await applicationEventService.emitAiAnalysisQueued({
+        applicationId,
+        tenantId,
+        userId: requestedByUserId,
+        analysisId: analysis.id,
+        demoCodeId,
+      });
+    } catch (e) {
+      console.error('[AnalysisQueue] Failed to emit queued event:', e);
+    }
+
     return {
       analysisId: analysis.id,
       status: 'queued',
@@ -120,7 +140,22 @@ export class AnalysisQueueService {
    * Mark a job as processing
    */
   async startProcessing(analysisId: string): Promise<AiAnalysis> {
-    return storage.updateAiAnalysisStatus(analysisId, 'processing');
+    const updated = await storage.updateAiAnalysisStatus(analysisId, 'processing');
+
+    // Emit event for timeline
+    try {
+      await applicationEventService.emitAiAnalysisStarted({
+        applicationId: updated.applicationId,
+        tenantId: updated.tenantId,
+        userId: updated.requestedByUserId || undefined,
+        analysisId: updated.id,
+        demoCodeId: updated.demoCodeId || undefined,
+      });
+    } catch (e) {
+      console.error('[AnalysisQueue] Failed to emit started event:', e);
+    }
+
+    return updated;
   }
 
   /**
@@ -150,8 +185,37 @@ export class AnalysisQueueService {
       processingDurationMs,
     });
 
-    // Deduct credit from tenant
+    // Emit event for timeline
+    try {
+      await applicationEventService.emitAiAnalysisCompleted({
+        applicationId: updated.applicationId,
+        tenantId: updated.tenantId,
+        userId: updated.requestedByUserId || undefined,
+        analysisId: updated.id,
+        complianceScore: updated.complianceScore || 0,
+        riskLevel: updated.riskLevel || 'unknown',
+        recommendation: undefined, // Will be in the full analysis result
+        demoCodeId: updated.demoCodeId || undefined,
+      });
+    } catch (e) {
+      console.error('[AnalysisQueue] Failed to emit completed event:', e);
+    }
+
+    // Deduct credit from tenant (old system - for backwards compatibility)
     await aiCreditService.deductCredit(analysis.tenantId);
+
+    // Also log to new usage tracking system (if community subscription exists)
+    try {
+      const usageTrackingService = await getUsageTrackingService();
+      await usageTrackingService.logAiAnalysis(
+        analysis.tenantId,
+        analysis.requestedByUserId,
+        analysis.id
+      );
+    } catch (e) {
+      // Don't fail if new system isn't set up yet
+      console.log('[AnalysisQueue] Usage tracking not available:', e);
+    }
 
     return updated;
   }
@@ -178,7 +242,23 @@ export class AnalysisQueueService {
     }
 
     // Max retries exceeded, mark as permanently failed
-    return storage.updateAiAnalysisStatus(analysisId, 'failed', errorMessage);
+    const updated = await storage.updateAiAnalysisStatus(analysisId, 'failed', errorMessage);
+
+    // Emit event for timeline
+    try {
+      await applicationEventService.emitAiAnalysisFailed({
+        applicationId: analysis.applicationId,
+        tenantId: analysis.tenantId,
+        userId: analysis.requestedByUserId || undefined,
+        analysisId: analysis.id,
+        errorMessage,
+        demoCodeId: analysis.demoCodeId || undefined,
+      });
+    } catch (e) {
+      console.error('[AnalysisQueue] Failed to emit failed event:', e);
+    }
+
+    return updated;
   }
 
   /**

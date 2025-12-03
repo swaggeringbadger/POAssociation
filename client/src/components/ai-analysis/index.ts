@@ -7,4 +7,5 @@
 export { AIAnalysisButton } from './AIAnalysisButton';
 export { AIAnalysisStatusCard } from './AIAnalysisStatus';
 export { AIAnalysisResults } from './AIAnalysisResults';
+export { AIAnalysisTimeline } from './AIAnalysisTimeline';
 export { CreditDisplay } from './CreditDisplay';

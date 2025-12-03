@@ -504,3 +504,119 @@ export function commentNotificationTemplate(
     `,
   });
 }
+
+/**
+ * Workflow Changed Notification
+ * Sent to account admins and board members when the active workflow is changed
+ */
+export function workflowChangedTemplate(
+  recipientName: string,
+  communityName: string,
+  previousWorkflowName: string | null,
+  newWorkflowName: string,
+  changedByName: string,
+  settingsLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Workflow Updated",
+    preheader: `The approval workflow for ${communityName} has been changed.`,
+    recipientName,
+    communityName,
+    status: 'info',
+    mainContent: `
+      <p>The approval workflow for <span class="accent-text">${communityName}</span> has been updated by <span class="accent-text">${changedByName}</span>.</p>
+      <div class="highlight-box">
+        <p><strong>Workflow Change</strong><br>
+        ${previousWorkflowName
+          ? `Previous: <em>${previousWorkflowName}</em><br>`
+          : 'Previous: <em>No workflow assigned</em><br>'}
+        New: <strong>${newWorkflowName}</strong></p>
+      </div>
+      <p>All new applications submitted to this community will now follow the <strong>${newWorkflowName}</strong> workflow. Existing applications in progress will continue using their original workflow.</p>
+    `,
+    actionButton: {
+      text: "View Workflow Settings",
+      url: settingsLink,
+    },
+    secondaryContent: `
+      <strong>Need to Review?</strong><br>If you have questions about this change, please contact your property administrator.
+    `,
+  });
+}
+
+/**
+ * Invoice Email Template
+ * Sent to billing contacts when an invoice is ready
+ */
+export function invoiceTemplate(
+  recipientName: string,
+  billingEntityName: string,
+  invoiceNumber: string,
+  invoiceAmount: string,
+  billingPeriod: string,
+  dueDate: string,
+  invoiceLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Your Invoice is Ready",
+    preheader: `Invoice ${invoiceNumber} for ${billingPeriod} is now available.`,
+    recipientName,
+    communityName: billingEntityName,
+    status: 'action',
+    mainContent: `
+      <p>Your invoice for <span class="accent-text">${billingEntityName}</span> is now ready for review.</p>
+      <div class="highlight-box" style="text-align: center;">
+        <p style="margin-bottom: 8px;"><strong>Invoice #${invoiceNumber}</strong></p>
+        <p style="font-size: 28px; font-weight: bold; color: #3b82f6; margin: 8px 0;">${invoiceAmount}</p>
+        <p style="color: #6b7280; font-size: 14px;">Billing Period: ${billingPeriod}</p>
+        <p style="color: #6b7280; font-size: 14px;">Due Date: <strong>${dueDate}</strong></p>
+      </div>
+      <p>Click the button below to view your invoice details and download a PDF copy.</p>
+    `,
+    actionButton: {
+      text: "View Invoice",
+      url: invoiceLink,
+    },
+    secondaryContent: `
+      <strong>Payment Options</strong><br>You can pay your invoice online via ACH or credit card. If you have any questions about this invoice, please contact billing@poassociation.com.
+    `,
+  });
+}
+
+/**
+ * Payment Received Template
+ * Sent when a payment is successfully processed
+ */
+export function paymentReceivedTemplate(
+  recipientName: string,
+  billingEntityName: string,
+  invoiceNumber: string,
+  paymentAmount: string,
+  paymentDate: string,
+  receiptLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Payment Received",
+    preheader: `Thank you! Your payment of ${paymentAmount} has been received.`,
+    recipientName,
+    communityName: billingEntityName,
+    status: 'success',
+    mainContent: `
+      <p>We have received your payment. Thank you for your prompt payment!</p>
+      <div class="highlight-box" style="text-align: center;">
+        <p style="margin-bottom: 8px;"><strong>Payment Confirmation</strong></p>
+        <p style="font-size: 28px; font-weight: bold; color: #10b981; margin: 8px 0;">${paymentAmount}</p>
+        <p style="color: #6b7280; font-size: 14px;">Invoice: #${invoiceNumber}</p>
+        <p style="color: #6b7280; font-size: 14px;">Payment Date: ${paymentDate}</p>
+      </div>
+      <p>A receipt has been generated and is available for download in your billing dashboard.</p>
+    `,
+    actionButton: {
+      text: "View Receipt",
+      url: receiptLink,
+    },
+    secondaryContent: `
+      <strong>Thank You</strong><br>We appreciate your continued partnership. If you have any questions, please don't hesitate to reach out.
+    `,
+  });
+}

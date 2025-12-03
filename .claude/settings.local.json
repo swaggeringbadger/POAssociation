@@ -55,7 +55,15 @@
       "Bash(ss:*)",
       "Bash(netstat:*)",
       "Bash(kill:*)",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(if [ -n \"$AZURE_STORAGE_CONNECTION_STRING\" ])",
+      "Bash(then echo \"Azure Storage configured\")",
+      "Bash(else echo \"Azure Storage NOT configured\")",
+      "Bash(fi)",
+      "Bash(xxd:*)",
+      "WebSearch",
+      "WebFetch(domain:support.relayfi.com)",
+      "WebFetch(domain:apitracker.io)"
     ],
     "deny": [],
     "ask": []

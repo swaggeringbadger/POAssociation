@@ -33,6 +33,8 @@ import ManagementCompanies from "@/pages/admin/ManagementCompanies";
 import Communities from "@/pages/admin/Communities";
 import AIActivity from "@/pages/admin/AIActivity";
 import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
+import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
+import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -215,6 +217,24 @@ function Router() {
             <ProtectedRoute>
               <DashboardLayout>
                 <PropertySubscription />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          {/* Billing Dashboard */}
+          <Route path="/billing">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ConsumptionDashboard />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          {/* Payment Methods */}
+          <Route path="/billing/payment-methods">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <PaymentMethodsPage />
               </DashboardLayout>
             </ProtectedRoute>
           </Route>

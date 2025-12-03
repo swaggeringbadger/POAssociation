@@ -18,7 +18,7 @@ import { imageGenerationService } from './imageGenerationService';
 import { pdfReportService, type ReportContext, type BreakdownReportContext } from './pdfReportService';
 import { analysisQueueService } from './analysisQueueService';
 import { azureBlobStorage } from '../azureBlobStorage';
-import { calculateAnalysisCosts, type AnalysisCosts, type Coordinates, type BreakdownReportResult } from '@shared/aiAnalysisTypes';
+import { calculateAnalysisCosts, type AnalysisCosts, type Coordinates, type BreakdownReportResult, type PropertyResearchResult } from '@shared/aiAnalysisTypes';
 import type { AiAnalysis } from '@shared/schema';
 
 // Container name for AI analysis reports
@@ -28,6 +28,7 @@ export interface AnalysisWorkerOptions {
   includeSatellite?: boolean;
   includeMockups?: boolean;
   includeBreakdownReport?: boolean;
+  includePropertyResearch?: boolean;
   mockupQuality?: 'standard' | 'high';
   mockupCount?: number;
 }
@@ -55,17 +56,35 @@ export class AnalysisWorker {
       const jobOptions = (analysis.jobOptions as AnalysisWorkerOptions) || {};
       const options: AnalysisWorkerOptions = {
         includeSatellite: jobOptions.includeSatellite ?? true,
-        includeMockups: jobOptions.includeMockups ?? true,
+        includeMockups: jobOptions.includeMockups ?? false, // Disabled by default - AI mockups hallucinate
         includeBreakdownReport: jobOptions.includeBreakdownReport ?? false,
+        includePropertyResearch: jobOptions.includePropertyResearch ?? true, // Enable by default
         mockupQuality: jobOptions.mockupQuality ?? 'standard',
         mockupCount: 2,
       };
 
-      // Step 2: Run AI analysis
-      console.log(`[AnalysisWorker] Running AI analysis for ${analysis.id}`);
-      const { result: aiResult, costs: aiCosts } = await aiAnalysisService.analyzeApplication(analysis);
+      // Step 2: Run property research if enabled (do this first so it can inform the main analysis)
+      let propertyResearchResult: PropertyResearchResult | undefined;
+      let propertyResearchCosts = { anthropicCostUsd: '0', totalCostUsd: '0' };
 
-      // Step 3: Get satellite imagery if enabled
+      if (options.includePropertyResearch) {
+        console.log(`[AnalysisWorker] Running property research for ${analysis.id}`);
+        try {
+          const researchResponse = await aiAnalysisService.conductPropertyResearch(analysis);
+          propertyResearchResult = researchResponse.result;
+          propertyResearchCosts = researchResponse.costs;
+          console.log(`[AnalysisWorker] Property research completed for ${analysis.id} - Risk level: ${propertyResearchResult.overallRiskLevel}, ${propertyResearchResult.keyFindings.length} key findings, ${propertyResearchResult.redFlags.length} red flags`);
+        } catch (error) {
+          console.error('[AnalysisWorker] Property research failed:', error);
+          // Continue without property research - don't fail the whole analysis
+        }
+      }
+
+      // Step 3: Run AI analysis (pass property research if available)
+      console.log(`[AnalysisWorker] Running AI analysis for ${analysis.id}`);
+      const { result: aiResult, costs: aiCosts } = await aiAnalysisService.analyzeApplication(analysis, propertyResearchResult);
+
+      // Step 4: Get satellite imagery if enabled
       let satelliteImageUrl: string | undefined;
       let propertyCoordinates: Coordinates | undefined;
       let googleMapsCost = 0;
@@ -402,9 +421,10 @@ export class AnalysisWorker {
         imageGenQuality: options.mockupQuality || 'standard',
       });
 
-      // Add actual costs (including breakdown report if generated)
+      // Add actual costs (including breakdown report and property research if generated)
       const breakdownExtraCost = parseFloat(breakdownCosts.totalCostUsd || '0');
-      const totalCost = parseFloat(aiCosts.totalCostUsd) + googleMapsCost + imageGenCost + breakdownExtraCost;
+      const propertyResearchExtraCost = parseFloat(propertyResearchCosts.totalCostUsd || '0');
+      const totalCost = parseFloat(aiCosts.totalCostUsd) + googleMapsCost + imageGenCost + breakdownExtraCost + propertyResearchExtraCost;
 
       // Step 7: Complete the job with results
       const processingDurationMs = Date.now() - startTime;
@@ -425,6 +445,7 @@ export class AnalysisWorker {
         pdfReportUrl,
         breakdownReport: breakdownResult,
         breakdownPdfReportUrl,
+        propertyResearch: propertyResearchResult,
         anthropicTokensUsed: parseInt(finalCosts.anthropicTokensUsed.toString()),
         anthropicCostUsd: aiCosts.anthropicCostUsd,
         googleMapsCostUsd: googleMapsCost.toFixed(4),

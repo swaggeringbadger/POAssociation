@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "./useAuth";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { User } from "@shared/schema";
 
 // Role hierarchy for determining default role (highest privilege first)
@@ -24,6 +24,19 @@ function getHighestPrivilegeRole(roles: string[]): string {
     }
   }
   return roles[0] || 'homeowner';
+}
+
+// Sync role with backend session
+async function syncRoleWithBackend(role: string): Promise<void> {
+  try {
+    await fetch('/api/auth/switch-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+  } catch (error) {
+    console.error('Failed to sync role with backend:', error);
+  }
 }
 
 export function useUserTenants() {
@@ -48,6 +61,9 @@ export function useUserTenants() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // Track if we've synced the initial role to avoid duplicate syncs
+  const hasInitializedRole = useRef(false);
+
   // Update store when user tenants are loaded
   useEffect(() => {
     if (userTenants && userTenants.length > 0) {
@@ -66,9 +82,18 @@ export function useUserTenants() {
         // Set the highest privilege role as default
         const defaultRole = getHighestPrivilegeRole(rolesForTenant);
         setCurrentUserRole(defaultRole);
+        // Sync the initial role with the backend session
+        if (!hasInitializedRole.current) {
+          hasInitializedRole.current = true;
+          syncRoleWithBackend(defaultRole);
+        }
+      } else if (!hasInitializedRole.current && currentUserRole) {
+        // If tenant was already set (from localStorage), still sync the role
+        hasInitializedRole.current = true;
+        syncRoleWithBackend(currentUserRole);
       }
     }
-  }, [userTenants, setAvailableTenants, setCurrentTenant, setCurrentUserRole, setAvailableRolesForCurrentTenant, currentTenant]);
+  }, [userTenants, setAvailableTenants, setCurrentTenant, setCurrentUserRole, setAvailableRolesForCurrentTenant, currentTenant, currentUserRole]);
 
   // Update roles when tenant changes
   useEffect(() => {
@@ -83,6 +108,8 @@ export function useUserTenants() {
       if (!rolesForTenant.includes(currentUserRole)) {
         const defaultRole = getHighestPrivilegeRole(rolesForTenant);
         setCurrentUserRole(defaultRole);
+        // Sync new role with backend when tenant changes and role needs adjustment
+        syncRoleWithBackend(defaultRole);
       }
     }
   }, [currentTenant, userTenants, currentUserRole, setCurrentUserRole, setAvailableRolesForCurrentTenant]);

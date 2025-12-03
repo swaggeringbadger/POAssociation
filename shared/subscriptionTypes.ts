@@ -206,3 +206,238 @@ export interface AiAnalysisCreditCheck {
   effectiveOverageCost: string;     // Override or tier default
   reason?: string;               // Why access was denied
 }
+
+// ============================================
+// NEW SIMPLIFIED COMMUNITY TIER SYSTEM
+// ============================================
+
+/**
+ * Community tier codes based on door count
+ */
+export type CommunityTierCode = 'small' | 'medium' | 'large' | 'xl';
+
+/**
+ * Community tier definition
+ */
+export interface CommunityTierDef {
+  id: string;
+  tierCode: CommunityTierCode;
+  name: string;
+  minDoors: number;
+  maxDoors: number | null; // NULL for XL (unlimited)
+  basePriceMonthly: number;
+  basePriceYearly: number;
+  includedAiCredits: number;
+  defaultOverageCost: number;
+  maxUsers: number | null;
+  maxStorageGb: number | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/**
+ * Community subscription with computed effective values
+ */
+export interface CommunitySubscriptionWithTier {
+  id: string;
+  communityId: string;
+  tierId: string;
+  tier?: CommunityTierDef;
+  doorCount: number;
+  status: 'active' | 'trial' | 'canceled' | 'paused';
+
+  // Custom overrides (null = use tier default)
+  customPriceMonthly: number | null;
+  customPriceYearly: number | null;
+  customAiCredits: number | null;
+  customOverageCost: number | null;
+  pricingNote: string | null;
+
+  // Billing cycle
+  billingCycleDay: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+
+  // Usage
+  aiCreditsUsed: number;
+  applicationsThisMonth: number;
+
+  // Computed effective values (filled by service)
+  effectivePrice?: number;
+  effectiveAiCredits?: number;
+  effectiveOverageCost?: number;
+  aiCreditsRemaining?: number;
+  overageCreditsUsed?: number;
+  estimatedOverageCost?: number;
+}
+
+/**
+ * Per-community consumption data for dashboard
+ */
+export interface CommunityConsumption {
+  communityId: string;
+  communityName: string;
+  tierCode: CommunityTierCode;
+  tierName: string;
+  doorCount: number;
+
+  // Pricing
+  basePrice: number;
+  effectivePrice: number;
+  hasCustomPricing: boolean;
+
+  // AI Credits
+  aiCreditsIncluded: number;
+  aiCreditsUsed: number;
+  aiCreditsRemaining: number;
+  overageCredits: number;
+  overageCostPerCredit: number;
+  overageCost: number;
+
+  // Usage
+  applicationsThisMonth: number;
+
+  // Billing cycle
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  daysUntilReset: number;
+  billingCycleProgress: number; // 0-100%
+}
+
+/**
+ * Aggregated consumption summary for billing entity (management company or self-managed community)
+ */
+export interface BillingConsumptionSummary {
+  billingEntityId: string;
+  billingEntityName: string;
+  billingEntityType: 'management_company' | 'community';
+
+  // Communities included in this billing
+  communities: CommunityConsumption[];
+
+  // Totals
+  totalBaseCharges: number;
+  totalOverageCharges: number;
+  totalProjectedCharges: number;
+  totalAiCreditsIncluded: number;
+  totalAiCreditsUsed: number;
+  totalOverageCredits: number;
+  totalApplicationsThisMonth: number;
+
+  // Period info
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  daysRemaining: number;
+}
+
+/**
+ * Monthly usage history for charts
+ */
+export interface UsageHistoryMonth {
+  month: string; // 'YYYY-MM'
+  aiCreditsUsed: number;
+  overageCredits: number;
+  overageCost: number;
+  applicationsSubmitted: number;
+  totalCost: number;
+}
+
+/**
+ * Overage projection based on current usage rate
+ */
+export interface OverageProjection {
+  communityId: string;
+  currentCreditsUsed: number;
+  creditsIncluded: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  dailyUsageRate: number;
+  projectedTotalUsage: number;
+  projectedOverageCredits: number;
+  projectedOverageCost: number;
+  willExceedLimit: boolean;
+}
+
+/**
+ * Custom pricing input for super admin overrides
+ */
+export interface CustomPricingInput {
+  customPriceMonthly?: number;
+  customPriceYearly?: number;
+  customAiCredits?: number;
+  customOverageCost?: number;
+  pricingNote?: string;
+}
+
+/**
+ * Invoice status
+ */
+export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
+
+/**
+ * Default tier definitions (for reference, actual values from DB)
+ */
+export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
+  name: string;
+  minDoors: number;
+  maxDoors: number | null;
+  basePriceMonthly: number;
+  basePriceYearly: number;
+  includedAiCredits: number;
+  defaultOverageCost: number;
+}> = {
+  small: {
+    name: 'Small Community',
+    minDoors: 1,
+    maxDoors: 50,
+    basePriceMonthly: 29,
+    basePriceYearly: 290,
+    includedAiCredits: 3,
+    defaultOverageCost: 4.99,
+  },
+  medium: {
+    name: 'Medium Community',
+    minDoors: 51,
+    maxDoors: 150,
+    basePriceMonthly: 79,
+    basePriceYearly: 790,
+    includedAiCredits: 5,
+    defaultOverageCost: 4.99,
+  },
+  large: {
+    name: 'Large Community',
+    minDoors: 151,
+    maxDoors: 500,
+    basePriceMonthly: 149,
+    basePriceYearly: 1490,
+    includedAiCredits: 10,
+    defaultOverageCost: 4.99,
+  },
+  xl: {
+    name: 'Extra Large Community',
+    minDoors: 501,
+    maxDoors: null,
+    basePriceMonthly: 299,
+    basePriceYearly: 2990,
+    includedAiCredits: 20,
+    defaultOverageCost: 4.99,
+  },
+};
+
+/**
+ * Determine tier code based on door count
+ */
+export function getTierCodeByDoorCount(doorCount: number): CommunityTierCode {
+  if (doorCount <= 50) return 'small';
+  if (doorCount <= 150) return 'medium';
+  if (doorCount <= 500) return 'large';
+  return 'xl';
+}
+
+/**
+ * Get tier defaults by door count
+ */
+export function getTierDefaultsByDoorCount(doorCount: number) {
+  const tierCode = getTierCodeByDoorCount(doorCount);
+  return { tierCode, ...COMMUNITY_TIER_DEFAULTS[tierCode] };
+}

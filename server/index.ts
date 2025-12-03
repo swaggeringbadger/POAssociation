@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { analysisWorker } from "./services/analysisWorker";
+import { billingScheduler } from "./services/billingScheduler";
 
 const app = express();
 
@@ -86,12 +87,17 @@ app.use((req, res, next) => {
     } else {
       log('AI Analysis worker not started (ANTHROPIC_API_KEY not set)');
     }
+
+    // Start the billing scheduler
+    billingScheduler.initialize();
+    log('Billing scheduler started');
   });
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
     log('SIGTERM received, shutting down gracefully...');
     analysisWorker.stop();
+    billingScheduler.shutdown();
     server.close(() => {
       log('Server closed');
       process.exit(0);
@@ -101,6 +107,7 @@ app.use((req, res, next) => {
   process.on('SIGINT', () => {
     log('SIGINT received, shutting down gracefully...');
     analysisWorker.stop();
+    billingScheduler.shutdown();
     server.close(() => {
       log('Server closed');
       process.exit(0);

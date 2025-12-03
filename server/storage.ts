@@ -94,12 +94,14 @@ export interface IStorage {
   // Workflow Templates
   getWorkflowTemplate(id: string): Promise<schema.WorkflowTemplate | undefined>;
   listWorkflowTemplatesForTenant(tenantId: string): Promise<schema.WorkflowTemplate[]>;
+  listBlueprintWorkflowTemplates(): Promise<schema.WorkflowTemplate[]>;
+  listCustomWorkflowTemplatesForTenant(tenantId: string): Promise<schema.WorkflowTemplate[]>;
   createWorkflowTemplate(template: schema.InsertWorkflowTemplate): Promise<schema.WorkflowTemplate>;
   updateWorkflowTemplate(id: string, updates: Partial<schema.WorkflowTemplate>): Promise<schema.WorkflowTemplate>;
-  cloneWorkflowTemplate(sourceId: string, name: string, description: string | undefined, userId: string): Promise<schema.WorkflowTemplate>;
+  cloneWorkflowTemplate(sourceId: string, targetTenantId: string, name: string, description: string | undefined, userId: string): Promise<schema.WorkflowTemplate>;
   createWorkflowTemplateVersion(parentId: string, name: string, description: string | undefined, steps: any, userId: string): Promise<schema.WorkflowTemplate>;
   deleteWorkflowTemplate(id: string): Promise<void>;
-  updateTenantWorkflow(tenantId: string, workflowTemplateId: string): Promise<schema.Tenant>;
+  updateTenantWorkflow(tenantId: string, workflowTemplateId: string | null): Promise<schema.Tenant>;
 
   // Comments
   addComment(comment: schema.InsertComment): Promise<schema.Comment>;
@@ -256,6 +258,10 @@ export interface IStorage {
     totalCostUsd: string;
     averageRating: number | null;
   }>;
+
+  // Application Events (audit log)
+  createApplicationEvent(event: schema.InsertApplicationEvent): Promise<schema.ApplicationEvent>;
+  getApplicationEvents(applicationId: string): Promise<schema.ApplicationEvent[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -775,6 +781,21 @@ export class DbStorage implements IStorage {
     return db.select().from(schema.workflowTemplates).where(eq(schema.workflowTemplates.tenantId, tenantId));
   }
 
+  async listBlueprintWorkflowTemplates(): Promise<schema.WorkflowTemplate[]> {
+    // Get all blueprint templates (global, available to all tenants)
+    return db.select().from(schema.workflowTemplates).where(eq(schema.workflowTemplates.isBlueprint, true));
+  }
+
+  async listCustomWorkflowTemplatesForTenant(tenantId: string): Promise<schema.WorkflowTemplate[]> {
+    // Get custom (non-blueprint) templates for a specific tenant
+    return db.select().from(schema.workflowTemplates).where(
+      and(
+        eq(schema.workflowTemplates.tenantId, tenantId),
+        eq(schema.workflowTemplates.isBlueprint, false)
+      )
+    );
+  }
+
   async createWorkflowTemplate(template: schema.InsertWorkflowTemplate): Promise<schema.WorkflowTemplate> {
     const [created] = await db.insert(schema.workflowTemplates).values(template).returning();
     return created;
@@ -790,6 +811,7 @@ export class DbStorage implements IStorage {
 
   async cloneWorkflowTemplate(
     sourceId: string,
+    targetTenantId: string,
     name: string,
     description: string | undefined,
     userId: string
@@ -798,7 +820,7 @@ export class DbStorage implements IStorage {
     if (!source) throw new Error("Source template not found");
 
     const cloned: schema.InsertWorkflowTemplate = {
-      tenantId: source.tenantId,
+      tenantId: targetTenantId, // Clone into the target tenant, not the source tenant
       name,
       description: description || source.description,
       steps: source.steps,
@@ -857,7 +879,7 @@ export class DbStorage implements IStorage {
     await db.delete(schema.workflowTemplates).where(eq(schema.workflowTemplates.id, id));
   }
 
-  async updateTenantWorkflow(tenantId: string, workflowTemplateId: string): Promise<schema.Tenant> {
+  async updateTenantWorkflow(tenantId: string, workflowTemplateId: string | null): Promise<schema.Tenant> {
     const [updated] = await db.update(schema.tenants).set({ workflowTemplateId }).where(eq(schema.tenants.id, tenantId)).returning();
     return updated;
   }
@@ -900,6 +922,12 @@ export class DbStorage implements IStorage {
 
     const application = await this.getApplication(applicationId);
     if (!application) throw new Error("Application not found");
+
+    // Validate that the workflow template belongs to the same tenant as the application
+    // Blueprint templates (tenantId is null) are allowed for any tenant
+    if (template.tenantId && template.tenantId !== application.tenantId) {
+      throw new Error("Workflow template is not accessible for this application's tenant");
+    }
 
     const steps = template.steps as any[];
     let nextStepIndex: number;
@@ -1377,22 +1405,23 @@ export class DbStorage implements IStorage {
       return { hasAccess: false, limit: 0, current: 0, reason: 'No active subscription' };
     }
 
-    // Map feature names to plan columns and usage columns
-    const featureMap: Record<string, { planColumn: string; usageColumn?: string; flag?: boolean }> = {
-      'communities': { planColumn: 'max_communities', usageColumn: 'usage_communities' },
-      'users': { planColumn: 'max_users', usageColumn: 'usage_users' },
-      'storage': { planColumn: 'max_storage_gb', usageColumn: 'usage_storage_gb' },
-      'forms': { planColumn: 'max_forms', usageColumn: 'usage_forms' },
-      'applications': { planColumn: 'max_applications_per_month', usageColumn: 'usage_applications_current_month' },
-      'custom_branding': { planColumn: 'custom_branding', flag: true },
-      'ai_form_generation': { planColumn: 'ai_form_generation', flag: true },
-      'advanced_reporting': { planColumn: 'advanced_reporting', flag: true },
-      'api_access': { planColumn: 'api_access', flag: true },
-      'custom_workflows': { planColumn: 'custom_workflows', flag: true },
-      'white_label': { planColumn: 'white_label', flag: true },
-      'priority_support': { planColumn: 'priority_support', flag: true },
-      'sso': { planColumn: 'sso', flag: true },
-      'audit_logs': { planColumn: 'audit_logs', flag: true },
+    // Map feature names to plan properties (camelCase) and usage properties
+    // Note: plan properties are nested under subscription.plan, usage properties are on subscription directly
+    const featureMap: Record<string, { planProp: string; usageProp?: string; flag?: boolean }> = {
+      'communities': { planProp: 'maxCommunities', usageProp: 'usageCommunities' },
+      'users': { planProp: 'maxUsers', usageProp: 'usageUsers' },
+      'storage': { planProp: 'maxStorageGb', usageProp: 'usageStorageGb' },
+      'forms': { planProp: 'maxForms', usageProp: 'usageForms' },
+      'applications': { planProp: 'maxApplicationsPerMonth', usageProp: 'usageApplicationsCurrentMonth' },
+      'custom_branding': { planProp: 'customBranding', flag: true },
+      'ai_form_generation': { planProp: 'aiFormGeneration', flag: true },
+      'advanced_reporting': { planProp: 'advancedReporting', flag: true },
+      'api_access': { planProp: 'apiAccess', flag: true },
+      'custom_workflows': { planProp: 'customWorkflows', flag: true },
+      'white_label': { planProp: 'whiteLabel', flag: true },
+      'priority_support': { planProp: 'prioritySupport', flag: true },
+      'sso': { planProp: 'sso', flag: true },
+      'audit_logs': { planProp: 'auditLogs', flag: true },
     };
 
     const mapping = featureMap[feature];
@@ -1400,9 +1429,12 @@ export class DbStorage implements IStorage {
       return { hasAccess: false, limit: 0, current: 0, reason: 'Unknown feature' };
     }
 
-    // For boolean flags
+    // For boolean flags - these are on the plan object
     if (mapping.flag) {
-      const hasAccess = subscription[mapping.planColumn] === true;
+      const planValue = subscription.plan?.[mapping.planProp];
+      const hasAccess = planValue === true;
+      console.log(`[checkFeatureAccess] tenantId=${tenantId}, feature=${feature}, planProp=${mapping.planProp}, planValue=${planValue}, hasAccess=${hasAccess}`);
+      console.log(`[checkFeatureAccess] subscription.plan:`, JSON.stringify(subscription.plan, null, 2));
       return {
         hasAccess,
         limit: null,
@@ -1411,9 +1443,9 @@ export class DbStorage implements IStorage {
       };
     }
 
-    // For limits
-    const limit = subscription[mapping.planColumn];
-    const current = mapping.usageColumn ? subscription[mapping.usageColumn] : 0;
+    // For limits - limits are on plan, usage is on subscription
+    const limit = subscription.plan?.[mapping.planProp];
+    const current = mapping.usageProp ? subscription[mapping.usageProp] : 0;
 
     if (limit === null) {
       // Unlimited
@@ -2348,6 +2380,23 @@ export class DbStorage implements IStorage {
       totalCostUsd: stats.totalCost,
       averageRating: stats.avgRating ? Math.round(stats.avgRating * 10) / 10 : null,
     };
+  }
+
+  // Application Events (audit log)
+  async createApplicationEvent(event: schema.InsertApplicationEvent): Promise<schema.ApplicationEvent> {
+    const [created] = await db
+      .insert(schema.applicationEvents)
+      .values(event)
+      .returning();
+    return created;
+  }
+
+  async getApplicationEvents(applicationId: string): Promise<schema.ApplicationEvent[]> {
+    return db
+      .select()
+      .from(schema.applicationEvents)
+      .where(eq(schema.applicationEvents.applicationId, applicationId))
+      .orderBy(desc(schema.applicationEvents.createdAt));
   }
 }
 

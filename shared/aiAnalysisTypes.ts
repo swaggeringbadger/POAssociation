@@ -605,6 +605,242 @@ export interface BreakdownAnalysisContext extends AnalysisContext {
 }
 
 // ============================================
+// PROPERTY RESEARCH TYPES
+// ============================================
+
+/**
+ * Tax record information
+ */
+export const TaxRecordSchema = z.object({
+  parcelId: z.string().optional(),
+  assessedValue: z.string().optional(),
+  marketValue: z.string().optional(),
+  taxYear: z.number().optional(),
+  annualTaxAmount: z.string().optional(),
+  taxStatus: z.enum(['current', 'delinquent', 'unknown']).optional(),
+  lastPaymentDate: z.string().optional(),
+  exemptions: z.array(z.string()).default([]),
+  notes: z.string().optional(),
+});
+export type TaxRecord = z.infer<typeof TaxRecordSchema>;
+
+/**
+ * Lien information
+ */
+export const LienRecordSchema = z.object({
+  lienType: z.enum(['tax', 'mechanics', 'hoa', 'judgment', 'mortgage', 'other']),
+  lienHolder: z.string(),
+  amount: z.string().optional(),
+  filedDate: z.string().optional(),
+  status: z.enum(['active', 'released', 'satisfied', 'unknown']),
+  recordingNumber: z.string().optional(),
+  description: z.string(),
+});
+export type LienRecord = z.infer<typeof LienRecordSchema>;
+
+/**
+ * Permit history record
+ */
+export const PermitRecordSchema = z.object({
+  permitNumber: z.string().optional(),
+  permitType: z.string(),
+  description: z.string(),
+  issueDate: z.string().optional(),
+  status: z.enum(['issued', 'final', 'expired', 'pending', 'revoked', 'unknown']),
+  estimatedValue: z.string().optional(),
+  contractor: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type PermitRecord = z.infer<typeof PermitRecordSchema>;
+
+/**
+ * Deed/Title information
+ */
+export const DeedRecordSchema = z.object({
+  recordingDate: z.string().optional(),
+  documentType: z.enum(['warranty_deed', 'quitclaim_deed', 'trust_deed', 'special_warranty', 'other']),
+  grantor: z.string().optional(),
+  grantee: z.string().optional(),
+  salePrice: z.string().optional(),
+  documentNumber: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type DeedRecord = z.infer<typeof DeedRecordSchema>;
+
+/**
+ * Survey/Plat information
+ */
+export const SurveyRecordSchema = z.object({
+  surveyDate: z.string().optional(),
+  surveyor: z.string().optional(),
+  platBook: z.string().optional(),
+  platPage: z.string().optional(),
+  lotNumber: z.string().optional(),
+  blockNumber: z.string().optional(),
+  subdivision: z.string().optional(),
+  lotSize: z.string().optional(),
+  setbacks: z.object({
+    front: z.string().optional(),
+    rear: z.string().optional(),
+    leftSide: z.string().optional(),
+    rightSide: z.string().optional(),
+  }).optional(),
+  easements: z.array(z.string()).default([]),
+  notes: z.string().optional(),
+});
+export type SurveyRecord = z.infer<typeof SurveyRecordSchema>;
+
+/**
+ * Legal issue or violation
+ */
+export const LegalIssueSchema = z.object({
+  issueType: z.enum(['code_violation', 'lawsuit', 'easement_dispute', 'boundary_dispute', 'environmental', 'zoning', 'hoa_violation', 'other']),
+  description: z.string(),
+  status: z.enum(['open', 'resolved', 'pending', 'unknown']),
+  filedDate: z.string().optional(),
+  resolvedDate: z.string().optional(),
+  parties: z.array(z.string()).default([]),
+  caseNumber: z.string().optional(),
+  potentialImpact: z.string().optional(),
+});
+export type LegalIssue = z.infer<typeof LegalIssueSchema>;
+
+/**
+ * Zoning information
+ */
+export const ZoningInfoSchema = z.object({
+  zoningCode: z.string().optional(),
+  zoningDescription: z.string().optional(),
+  allowedUses: z.array(z.string()).default([]),
+  restrictions: z.array(z.string()).default([]),
+  overlayDistricts: z.array(z.string()).default([]),
+  floodZone: z.string().optional(),
+  maxBuildingHeight: z.string().optional(),
+  maxLotCoverage: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type ZoningInfo = z.infer<typeof ZoningInfoSchema>;
+
+/**
+ * Property ownership history
+ */
+export const OwnershipRecordSchema = z.object({
+  ownerName: z.string(),
+  ownershipType: z.enum(['individual', 'joint', 'trust', 'llc', 'corporation', 'other']).optional(),
+  purchaseDate: z.string().optional(),
+  purchasePrice: z.string().optional(),
+  saleDate: z.string().optional(),
+  salePrice: z.string().optional(),
+  durationOwned: z.string().optional(),
+});
+export type OwnershipRecord = z.infer<typeof OwnershipRecordSchema>;
+
+/**
+ * Data source for property research
+ */
+export const DataSourceSchema = z.object({
+  name: z.string(),
+  url: z.string().optional(),
+  accessDate: z.string(),
+  reliability: z.enum(['official', 'likely_accurate', 'needs_verification', 'estimated']),
+  notes: z.string().optional(),
+});
+export type DataSource = z.infer<typeof DataSourceSchema>;
+
+/**
+ * Research finding with confidence level
+ */
+export const ResearchFindingSchema = z.object({
+  category: z.enum(['tax', 'lien', 'permit', 'deed', 'survey', 'legal', 'zoning', 'ownership', 'other']),
+  title: z.string(),
+  description: z.string(),
+  severity: z.enum(['info', 'low', 'medium', 'high', 'critical']),
+  relevanceToApplication: z.string(),
+  recommendation: z.string().optional(),
+  source: z.string().optional(),
+});
+export type ResearchFinding = z.infer<typeof ResearchFindingSchema>;
+
+/**
+ * Complete property research result
+ */
+export const PropertyResearchResultSchema = z.object({
+  // Summary
+  researchSummary: z.string(),
+  overallRiskLevel: z.enum(['low', 'medium', 'high', 'critical']),
+
+  // Tax Information
+  taxRecords: z.array(TaxRecordSchema).default([]),
+  taxAnalysis: z.string().optional(),
+
+  // Liens and Encumbrances
+  liens: z.array(LienRecordSchema).default([]),
+  lienAnalysis: z.string().optional(),
+
+  // Permit History
+  permits: z.array(PermitRecordSchema).default([]),
+  permitAnalysis: z.string().optional(),
+
+  // Deed/Title Information
+  deeds: z.array(DeedRecordSchema).default([]),
+  titleAnalysis: z.string().optional(),
+
+  // Survey/Plat Information
+  surveyInfo: SurveyRecordSchema.optional(),
+  surveyAnalysis: z.string().optional(),
+
+  // Legal Issues
+  legalIssues: z.array(LegalIssueSchema).default([]),
+  legalAnalysis: z.string().optional(),
+
+  // Zoning
+  zoning: ZoningInfoSchema.optional(),
+  zoningAnalysis: z.string().optional(),
+
+  // Ownership History
+  ownershipHistory: z.array(OwnershipRecordSchema).default([]),
+  ownershipAnalysis: z.string().optional(),
+
+  // Key Findings (prioritized list for quick review)
+  keyFindings: z.array(ResearchFindingSchema).default([]),
+
+  // Red Flags (issues that could affect approval)
+  redFlags: z.array(z.object({
+    issue: z.string(),
+    severity: z.enum(['low', 'medium', 'high', 'critical']),
+    recommendation: z.string(),
+  })).default([]),
+
+  // Data Sources Used
+  dataSources: z.array(DataSourceSchema).default([]),
+
+  // Limitations and Caveats
+  researchLimitations: z.array(z.string()).default([]),
+
+  // Recommendations for Further Research
+  furtherResearchNeeded: z.array(z.object({
+    area: z.string(),
+    reason: z.string(),
+    suggestedSource: z.string().optional(),
+  })).default([]),
+});
+export type PropertyResearchResult = z.infer<typeof PropertyResearchResultSchema>;
+
+/**
+ * Extended analysis context for property research
+ */
+export interface PropertyResearchContext extends AnalysisContext {
+  countyJurisdiction?: string;
+  stateCode?: string;
+  parcelId?: string;
+  lotInfo?: {
+    subdivision?: string;
+    lot?: string;
+    block?: string;
+  };
+}
+
+// ============================================
 // COST CALCULATION
 // ============================================
 
