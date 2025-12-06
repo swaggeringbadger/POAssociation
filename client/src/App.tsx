@@ -1,10 +1,11 @@
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
+import CommunityLanding from "@/pages/CommunityLanding";
 import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
@@ -17,6 +18,7 @@ import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
 import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
+import Team from "@/pages/Team";
 import FormWizard from "@/pages/FormWizard";
 import FormBuilderPage from "@/pages/FormBuilderPage";
 import WorkflowDesignerPage from "@/pages/WorkflowDesignerPage";
@@ -35,6 +37,7 @@ import AIActivity from "@/pages/admin/AIActivity";
 import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
 import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
+import PricingPage from "@/pages/PricingPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -43,9 +46,29 @@ function Router() {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Check for subdomain context
+  const { data: subdomainData } = useQuery<{ subdomain: string | null; hostname: string }>({
+    queryKey: ['subdomain'],
+    queryFn: async () => {
+      // Also check URL query param for testing: ?subdomain=markland
+      const urlParams = new URLSearchParams(window.location.search);
+      const querySubdomain = urlParams.get('subdomain');
+      if (querySubdomain) {
+        return { subdomain: querySubdomain, hostname: window.location.hostname };
+      }
+      const response = await fetch('/api/subdomain');
+      return response.json();
+    },
+    staleTime: Infinity, // Subdomain doesn't change during a session
+  });
+
   // Check if we're in logout mode to prevent redirect loop
   const urlParams = new URLSearchParams(window.location.search);
   const isLoggingOut = urlParams.get('logout') === 'true';
+
+  // If we have a subdomain and user is not authenticated, show community landing
+  const subdomain = subdomainData?.subdomain;
+  const showCommunityLanding = subdomain && !isAuthenticated && !isLoading && !isLoggingOut;
 
   return (
     <Switch>
@@ -55,6 +78,16 @@ function Router() {
 
       {/* Mobile document upload - accessible without auth */}
       <Route path="/upload/:token" component={MobileDocumentUpload} />
+
+      {/* Public pricing page - accessible without auth */}
+      <Route path="/pricing" component={PricingPage} />
+
+      {/* Community landing for subdomain access when not authenticated */}
+      {showCommunityLanding && (
+        <Route path="/">
+          {() => <CommunityLanding subdomain={subdomain} />}
+        </Route>
+      )}
 
       {isLoading || !isAuthenticated || isLoggingOut ? (
         <Route path="/" component={Landing} />
@@ -149,6 +182,14 @@ function Router() {
             <ProtectedRoute>
               <DashboardLayout>
                 <Properties />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/team">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Team />
               </DashboardLayout>
             </ProtectedRoute>
           </Route>
@@ -272,20 +313,36 @@ function Router() {
             </ProtectedRoute>
           </Route>
 
+          <Route path="/admin/demo-codes/new">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DemoCodeForm />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/admin/demo-codes/:id/edit">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DemoCodeForm />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/admin/demo-codes/:id/stats">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DemoCodeStats />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
           <Route path="/admin/demo-codes/:id">
-            {(params: { id?: string }) => (
-              <ProtectedRoute>
-                <DashboardLayout>
-                  {params.id === 'new' || params.id?.endsWith('/edit') ? (
-                    <DemoCodeForm />
-                  ) : params.id?.endsWith('/stats') ? (
-                    <DemoCodeStats />
-                  ) : (
-                    <DemoCodeForm />
-                  )}
-                </DashboardLayout>
-              </ProtectedRoute>
-            )}
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DemoCodeForm />
+              </DashboardLayout>
+            </ProtectedRoute>
           </Route>
         </>
       )}

@@ -22,11 +22,12 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    'management_auxiliary',
     'account_admin',
     'super_admin'
   ],
 
-  // Applications - all authenticated users
+  // Applications - all authenticated users (auxiliary is read-only, enforced at component level)
   '/applications': [
     'homeowner',
     'poa_board_contributor',
@@ -34,6 +35,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    'management_auxiliary',
     'account_admin',
     'super_admin'
   ],
@@ -44,6 +46,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    'management_auxiliary',
     'account_admin',
     'super_admin'
   ],
@@ -54,6 +57,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    // Note: management_auxiliary excluded - no edit access
     'account_admin',
     'super_admin'
   ],
@@ -64,6 +68,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    // Note: management_auxiliary excluded - no submit access
     'account_admin',
     'super_admin'
   ],
@@ -91,17 +96,25 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
-  // Properties - management only
+  // Properties - management only (auxiliary has read-only view access)
   '/properties': [
     'management_rep',
     'management_manager',
+    'management_auxiliary',
     'account_admin',
     'super_admin'
   ],
   '/properties/:propertyId/subscription': [
     'management_rep',
     'management_manager',
+    // Note: management_auxiliary excluded - no subscription management
     'account_admin',
+    'super_admin'
+  ],
+
+  // Team - management managers only (for managing company staff)
+  '/team': [
+    'management_manager',
     'super_admin'
   ],
 
@@ -167,6 +180,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'delegated_rep',
     'management_rep',
     'management_manager',
+    'management_auxiliary',
     'account_admin',
     'super_admin'
   ],

@@ -367,7 +367,7 @@ class UsageTrackingService {
   ): Promise<
     {
       month: string;
-      aiCreditsUsed: number;
+      creditsUsed: number;
       overageCredits: number;
       overageCost: number;
       applicationsSubmitted: number;
@@ -375,7 +375,7 @@ class UsageTrackingService {
   > {
     const result: {
       month: string;
-      aiCreditsUsed: number;
+      creditsUsed: number;
       overageCredits: number;
       overageCost: number;
       applicationsSubmitted: number;
@@ -392,7 +392,7 @@ class UsageTrackingService {
 
       result.push({
         month: monthKey,
-        aiCreditsUsed: summary.totalAiAnalyses,
+        creditsUsed: summary.totalAiAnalyses,
         overageCredits: summary.totalOverageCredits,
         overageCost: summary.totalOverageCost,
         applicationsSubmitted: summary.totalApplications,

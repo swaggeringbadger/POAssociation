@@ -112,15 +112,15 @@ function ConsumptionSummaryCards({ summary }: { summary: BillingConsumptionSumma
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">AI Credits Used</CardTitle>
+          <CardTitle className="text-sm font-medium">Credits Used</CardTitle>
           <Zap className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">
-            {summary.totalAiCreditsUsed} / {summary.totalAiCreditsIncluded}
+            {summary.totalCreditsUsed} / {summary.totalCreditsIncluded}
           </div>
           <Progress
-            value={(summary.totalAiCreditsUsed / summary.totalAiCreditsIncluded) * 100}
+            value={(summary.totalCreditsUsed / summary.totalCreditsIncluded) * 100}
             className="mt-2"
           />
           {hasOverage && (
@@ -172,7 +172,7 @@ function OverageAlert({ summary }: { summary: BillingConsumptionSummary }) {
       <AlertTitle className="text-orange-800">Overage Alert</AlertTitle>
       <AlertDescription className="text-orange-700">
         {communitiesInOverage.length} communit{communitiesInOverage.length === 1 ? 'y has' : 'ies have'} exceeded
-        their included AI credits this month. Additional charges of {formatCurrency(summary.totalOverageCharges)} will apply.
+        their included credits this month. Additional charges of {formatCurrency(summary.totalOverageCharges)} will apply.
       </AlertDescription>
     </Alert>
   );
@@ -199,7 +199,7 @@ function CommunityBillingTable({ communities }: { communities: CommunityConsumpt
               <TableHead>Tier</TableHead>
               <TableHead>Doors</TableHead>
               <TableHead className="text-right">Base Price</TableHead>
-              <TableHead className="text-center">AI Credits</TableHead>
+              <TableHead className="text-center">Credits</TableHead>
               <TableHead className="text-right">Overage</TableHead>
               <TableHead className="text-right">Total</TableHead>
             </TableRow>
@@ -220,7 +220,7 @@ function CommunityBillingTable({ communities }: { communities: CommunityConsumpt
                 <TableCell className="text-right">{formatCurrency(community.effectivePrice)}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <span>{community.aiCreditsUsed}/{community.aiCreditsIncluded}</span>
+                    <span>{community.creditsUsed}/{community.creditsIncluded}</span>
                     {community.overageCredits > 0 && (
                       <Badge variant="destructive" className="text-xs">
                         +{community.overageCredits}
@@ -261,7 +261,7 @@ function UsageHistoryChart({ history }: { history: UsageHistoryMonth[] }) {
           <TrendingUp className="h-5 w-5" />
           Usage Trends
         </CardTitle>
-        <CardDescription>AI credits and applications over the past 6 months</CardDescription>
+        <CardDescription>Credits and applications over the past 6 months</CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -272,7 +272,7 @@ function UsageHistoryChart({ history }: { history: UsageHistoryMonth[] }) {
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
             <Legend />
-            <Bar yAxisId="left" dataKey="aiCreditsUsed" name="AI Credits" fill="#8884d8" />
+            <Bar yAxisId="left" dataKey="creditsUsed" name="Credits" fill="#8884d8" />
             <Bar yAxisId="left" dataKey="overageCredits" name="Overage" fill="#ff7300" />
             <Bar yAxisId="right" dataKey="applicationsSubmitted" name="Applications" fill="#82ca9d" />
           </BarChart>

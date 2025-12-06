@@ -48,7 +48,7 @@ export class AiCreditService {
     return {
       hasAccess,
       hasCredits,
-      creditsRemaining: remaining,
+      remaining,
       isOverage,
       overageCost: effectiveOverageCost,
       effectiveMonthlyCredits,

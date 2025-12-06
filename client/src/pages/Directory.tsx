@@ -63,6 +63,7 @@ const getRoles = (tenant: Tenant | null) => {
     { value: 'delegated_rep', label: 'Delegated Rep', icon: '📝' },
     { value: 'management_rep', label: 'Management Rep', icon: '💼' },
     { value: 'management_manager', label: 'Management Manager', icon: '🏢' },
+    { value: 'management_auxiliary', label: 'Management Auxiliary', icon: '👤' },
     { value: 'account_admin', label: 'Account Admin', icon: '⚙️' },
   ];
 };
@@ -79,6 +80,8 @@ const PERMISSIONS = {
     delegated_rep: ['management_rep', 'management_manager', 'account_admin', 'super_admin'],
     management_rep: ['management_manager', 'account_admin', 'super_admin'],
     management_manager: ['account_admin', 'super_admin'],
+    management_auxiliary: ['management_manager', 'account_admin', 'super_admin'],
+    // account_admin is an overlay role - only super_admin can assign it
     account_admin: ['super_admin'],
   },
   // Who can remove users?

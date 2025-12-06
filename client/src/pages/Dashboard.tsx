@@ -8,6 +8,7 @@ import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldC
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
+import RepContactCard from "@/components/RepContactCard";
 
 export default function Dashboard() {
   const { currentUserRole, currentTenant } = useAppStore();
@@ -694,6 +695,11 @@ function HomeownerDashboard() {
 
         {/* Sidebar */}
         <div className="col-span-3 space-y-8">
+          {/* Property Rep Contact Card */}
+          {currentTenant?.id && (
+            <RepContactCard propertyId={currentTenant.id} />
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Community Guidelines</CardTitle>

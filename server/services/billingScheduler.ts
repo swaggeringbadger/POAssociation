@@ -9,6 +9,7 @@
 import cron from 'node-cron';
 import { communitySubscriptionService } from './communitySubscriptionService';
 import { invoiceService } from './invoiceService';
+import { billingStatusService } from './billingStatusService';
 
 class BillingScheduler {
   private isInitialized = false;
@@ -60,16 +61,23 @@ class BillingScheduler {
   /**
    * Run daily billing cycle reset
    * Resets AI credits and application counts for expired periods
+   * Also checks for delinquent accounts
    */
   async runDailyCycleReset(): Promise<void> {
     const startTime = Date.now();
     console.log('[BillingScheduler] Starting daily billing cycle reset...');
 
     try {
+      // Reset expired billing cycles
       const resetCount = await communitySubscriptionService.checkAndResetExpiredCycles();
-      const duration = Date.now() - startTime;
 
-      console.log(`[BillingScheduler] Daily cycle reset complete: ${resetCount} subscriptions reset in ${duration}ms`);
+      // Check and update delinquent accounts
+      const delinquentResult = await billingStatusService.checkAndUpdateDelinquentAccounts();
+
+      const duration = Date.now() - startTime;
+      console.log(`[BillingScheduler] Daily cycle reset complete in ${duration}ms:`);
+      console.log(`[BillingScheduler] - ${resetCount} subscriptions reset`);
+      console.log(`[BillingScheduler] - ${delinquentResult.updated} accounts marked delinquent`);
     } catch (error) {
       console.error('[BillingScheduler] Error during daily cycle reset:', error);
     }

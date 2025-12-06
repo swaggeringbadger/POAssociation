@@ -16,6 +16,23 @@ export interface Tenant {
   subdomain: string;
   managementCompanyId: string | null;
   designGuidelinesUrl?: string | null;
+  heroImageUrl?: string | null;
+  communitySettings?: {
+    legalEntityType?: string;
+    legalEntityName?: string;
+    stateOfIncorporation?: string;
+    taxId?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    officeHours?: string;
+    emergencyPhone?: string;
+    physicalAddress?: { street?: string; city?: string; state?: string; zip?: string };
+    mailingAddress?: { street?: string; city?: string; state?: string; zip?: string };
+    description?: string;
+    website?: string;
+    yearEstablished?: number;
+    numberOfLots?: number;
+  } | null;
   createdAt: string;
   isActive: boolean;
 }
@@ -49,9 +66,35 @@ export interface Application {
 export interface User {
   id: string;
   email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  profileImageUrl?: string | null;
   name: string;
   passwordHash: string | null;
   createdAt: string;
+}
+
+export interface PropertyRepAssignment {
+  id: string;
+  propertyId: string;
+  userId: string;
+  designation: string;
+  title: string | null;
+  assignedByUserId: string | null;
+  assignedAt: string;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: User;
+  property?: Tenant;
+}
+
+export interface PropertyRepInfo {
+  reps: PropertyRepAssignment[];
+  fallbackRep: User | null;
+  fallbackTitle: string | null;
 }
 
 class ApiClient {
@@ -361,6 +404,116 @@ class ApiClient {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("Failed to remove user");
+    return response.json();
+  }
+
+  // ============================================================
+  // PROPERTY REP ASSIGNMENT API METHODS
+  // ============================================================
+
+  // Get rep assignments for a property
+  async getPropertyReps(propertyId: string): Promise<PropertyRepAssignment[]> {
+    const response = await fetch(`${this.baseUrl}/properties/${propertyId}/reps`);
+    if (!response.ok) throw new Error("Failed to fetch property reps");
+    return response.json();
+  }
+
+  // Get rep info for homeowner display (includes fallback)
+  async getPropertyRepInfo(propertyId: string): Promise<PropertyRepInfo> {
+    const response = await fetch(`${this.baseUrl}/properties/${propertyId}/rep-info`);
+    if (!response.ok) throw new Error("Failed to fetch property rep info");
+    return response.json();
+  }
+
+  // Assign rep to property
+  async assignRepToProperty(
+    propertyId: string,
+    data: { userId: string; designation?: string; title?: string; notes?: string }
+  ): Promise<PropertyRepAssignment> {
+    const response = await fetch(`${this.baseUrl}/properties/${propertyId}/reps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("Failed to assign rep to property");
+    return response.json();
+  }
+
+  // Update rep assignment
+  async updateRepAssignment(
+    assignmentId: string,
+    data: { designation?: string; title?: string; notes?: string; isActive?: boolean }
+  ): Promise<PropertyRepAssignment> {
+    const response = await fetch(`${this.baseUrl}/property-rep-assignments/${assignmentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("Failed to update rep assignment");
+    return response.json();
+  }
+
+  // Remove rep from property
+  async removeRepAssignment(assignmentId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/property-rep-assignments/${assignmentId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to remove rep assignment");
+    return response.json();
+  }
+
+  // Bulk assign rep to properties
+  async bulkAssignRep(
+    userId: string,
+    propertyIds: string[],
+    designation?: string
+  ): Promise<PropertyRepAssignment[]> {
+    const response = await fetch(`${this.baseUrl}/reps/${userId}/bulk-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyIds, designation }),
+    });
+    if (!response.ok) throw new Error("Failed to bulk assign rep");
+    return response.json();
+  }
+
+  // Get properties assigned to a user
+  async getUserPropertyAssignments(userId: string): Promise<PropertyRepAssignment[]> {
+    const response = await fetch(`${this.baseUrl}/users/${userId}/property-assignments`);
+    if (!response.ok) throw new Error("Failed to fetch user property assignments");
+    return response.json();
+  }
+
+  // Get default fallback rep for management company
+  async getDefaultFallbackRep(managementCompanyId: string): Promise<{
+    defaultRepUserId: string | null;
+    defaultRepTitle: string | null;
+    defaultRep: User | null;
+  }> {
+    const response = await fetch(`${this.baseUrl}/management-companies/${managementCompanyId}/default-rep`);
+    if (!response.ok) throw new Error("Failed to fetch default rep");
+    return response.json();
+  }
+
+  // Set default fallback rep for management company
+  async setDefaultFallbackRep(
+    managementCompanyId: string,
+    userId: string | null,
+    title?: string
+  ): Promise<Tenant> {
+    const response = await fetch(`${this.baseUrl}/management-companies/${managementCompanyId}/default-rep`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, title }),
+    });
+    if (!response.ok) throw new Error("Failed to set default rep");
+    return response.json();
+  }
+
+  // Check if current user is assigned to property
+  async checkPropertyAssignment(propertyId: string): Promise<{ isAssigned: boolean }> {
+    const response = await fetch(`${this.baseUrl}/properties/${propertyId}/is-assigned`);
+    if (!response.ok) return { isAssigned: false };
     return response.json();
   }
 
@@ -1596,18 +1749,18 @@ export interface CommunitySubscriptionWithTier {
   status: 'active' | 'trial' | 'canceled' | 'paused';
   customPriceMonthly: number | null;
   customPriceYearly: number | null;
-  customAiCredits: number | null;
+  customCredits: number | null;
   customOverageCost: number | null;
   pricingNote: string | null;
   billingCycleDay: number;
   currentPeriodStart: string;
   currentPeriodEnd: string;
-  aiCreditsUsed: number;
+  creditsUsed: number;
   applicationsThisMonth: number;
   effectivePrice?: number;
-  effectiveAiCredits?: number;
+  effectiveCredits?: number;
   effectiveOverageCost?: number;
-  aiCreditsRemaining?: number;
+  creditsRemaining?: number;
   overageCreditsUsed?: number;
   estimatedOverageCost?: number;
 }
@@ -1622,9 +1775,9 @@ export interface CommunityConsumption {
   basePrice: number;
   effectivePrice: number;
   hasCustomPricing: boolean;
-  aiCreditsIncluded: number;
-  aiCreditsUsed: number;
-  aiCreditsRemaining: number;
+  creditsIncluded: number;
+  creditsUsed: number;
+  creditsRemaining: number;
   overageCredits: number;
   overageCostPerCredit: number;
   overageCost: number;
@@ -1644,8 +1797,8 @@ export interface BillingConsumptionSummary {
   totalBaseCharges: number;
   totalOverageCharges: number;
   totalProjectedCharges: number;
-  totalAiCreditsIncluded: number;
-  totalAiCreditsUsed: number;
+  totalCreditsIncluded: number;
+  totalCreditsUsed: number;
   totalOverageCredits: number;
   totalApplicationsThisMonth: number;
   currentPeriodStart: string;
@@ -1656,7 +1809,7 @@ export interface BillingConsumptionSummary {
 // Monthly usage history
 export interface UsageHistoryMonth {
   month: string;
-  aiCreditsUsed: number;
+  creditsUsed: number;
   overageCredits: number;
   overageCost: number;
   applicationsSubmitted: number;
@@ -1749,7 +1902,7 @@ export async function setCustomPricing(
   pricing: {
     customPriceMonthly?: number;
     customPriceYearly?: number;
-    customAiCredits?: number;
+    customCredits?: number;
     customOverageCost?: number;
     pricingNote?: string;
   }

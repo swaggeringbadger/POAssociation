@@ -34,6 +34,15 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     });
     console.log('✅ Created management company:', managementCompany.name);
 
+    // 1b. Create subscription for management company (Professional plan for full demo features)
+    console.log('Creating subscriptions for tenants...');
+    await storage.updateTenantSubscription(
+      managementCompany.id,
+      '003a34be-ef35-478e-bafb-2c4d64438beb', // management_professional plan
+      undefined,
+      'Demo provisioning - Professional tier'
+    );
+
     // 2. Create Communities
     console.log('Creating communities...');
     const markland = await storage.createTenant({
@@ -54,6 +63,25 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
       demoCodeId,
     });
     console.log('✅ Created 2 communities');
+
+    // 2b. Create subscriptions for communities
+    // Markland POA gets Premium (full features for demo)
+    // Whispering Pines HOA gets Free (to demonstrate tier differences)
+    await Promise.all([
+      storage.updateTenantSubscription(
+        markland.id,
+        'a5fe8048-05b4-465a-ad52-6084c0391ec8', // community_premium plan
+        undefined,
+        'Demo provisioning - Premium tier'
+      ),
+      storage.updateTenantSubscription(
+        whisperingPines.id,
+        '5b79270e-79ee-4f84-b5e3-df0026392bfe', // community_free plan
+        undefined,
+        'Demo provisioning - Free tier'
+      ),
+    ]);
+    console.log('✅ Created subscriptions for all tenants');
 
     const communities = [markland, whisperingPines];
 
@@ -78,12 +106,12 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         profileImageUrl: null,
         demoCodeId,
       }),
-      // James - Resident/Homeowner
+      // Jordan - Management Rep (replaces James the homeowner - Sarah doubles as homeowner)
       storage.upsertUser({
-        id: `${demoCodeId}-user-resident`,
-        email: `demo-resident-${suffix}@poassociation.com`,
-        firstName: 'James',
-        lastName: 'Martinez',
+        id: `${demoCodeId}-user-rep`,
+        email: `demo-rep-${suffix}@poassociation.com`,
+        firstName: 'Jordan',
+        lastName: 'Mitchell',
         profileImageUrl: null,
         demoCodeId,
       }),
@@ -143,11 +171,11 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         demoCodeId,
       }),
 
-      // James (Resident) - Whispering Pines only
+      // Jordan (Management Rep) - Apex Management (has management_rep role)
       storage.assignUserRole({
         userId: demoUsers[2].id,
-        tenantId: whisperingPines.id,
-        role: 'homeowner',
+        tenantId: managementCompany.id,
+        role: 'management_rep',
         demoCodeId,
       }),
 
@@ -161,6 +189,35 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     ]);
     console.log('✅ Assigned user roles');
 
+    // 4b. Create Property Rep Assignments (Jordan assigned only to Whispering Pines)
+    console.log('Creating property rep assignments...');
+    await storage.createPropertyRepAssignment({
+      propertyId: whisperingPines.id,
+      userId: demoUsers[2].id, // Jordan
+      designation: 'primary',
+      title: 'Property Manager',
+      assignedByUserId: demoUsers[0].id, // Emily assigned them
+      demoCodeId,
+    });
+    // Emily is assigned to both communities as manager
+    await storage.createPropertyRepAssignment({
+      propertyId: markland.id,
+      userId: demoUsers[0].id, // Emily
+      designation: 'primary',
+      title: 'Account Manager',
+      assignedByUserId: demoUsers[0].id,
+      demoCodeId,
+    });
+    await storage.createPropertyRepAssignment({
+      propertyId: whisperingPines.id,
+      userId: demoUsers[0].id, // Emily
+      designation: 'backup',
+      title: 'Account Manager',
+      assignedByUserId: demoUsers[0].id,
+      demoCodeId,
+    });
+    console.log('✅ Created property rep assignments');
+
     // 5. Create Form Templates
     console.log('Creating form templates...');
     const formTemplates = await Promise.all([
@@ -169,6 +226,7 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         tenantId: markland.id,
         name: 'Structural Changes Application',
         description: 'For major modifications to property structure',
+        projectType: 'structural-changes',
         schema: MARKLAND_STRUCTURAL_SCHEMA,
         isActive: true,
         demoCodeId,
@@ -177,6 +235,7 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         tenantId: markland.id,
         name: 'Paint & Fence Request',
         description: 'For exterior paint changes and fence installations',
+        projectType: 'exterior-modifications',
         schema: createPaintFenceSchema(),
         isActive: true,
         demoCodeId,
@@ -186,6 +245,7 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         tenantId: whisperingPines.id,
         name: 'Landscaping Modification',
         description: 'For tree removal, planting, and landscape changes',
+        projectType: 'landscaping',
         schema: createLandscapingSchema(),
         isActive: true,
         demoCodeId,
@@ -194,6 +254,7 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         tenantId: whisperingPines.id,
         name: 'General Architectural Request',
         description: 'For all other architectural modifications',
+        projectType: 'general-architectural',
         schema: ARCH_REQUEST_FORM_SCHEMA,
         isActive: true,
         demoCodeId,
@@ -291,22 +352,57 @@ async function createSampleApplications(params: {
 
     if (!formTemplate) continue;
 
-    // Randomly assign some applications to board member/manager, most to resident
-    const submittedBy = i % 5 === 0 ? demoUsers[1] : demoUsers[2];
+    // All homeowner applications submitted by Sarah (board member who is also homeowner)
+    // since Jordan is a management rep, not a homeowner
+    const submittedBy = demoUsers[1]; // Sarah is the only homeowner now
 
-    const app = await storage.createApplication({
-      tenantId: tenant.id,
-      formTemplateId: formTemplate.id,
-      submittedByUserId: submittedBy.id,
-      formData: generateRealisticFormData(formTemplate.name, i),
-      status,
-      reviewedAt: status !== 'pending' ? new Date(submittedAt.getTime() + 86400000 * 2) : undefined,
-      reviewedByUserId: status !== 'pending' ? demoUsers[1].id : undefined, // Sarah reviews
-      reviewNotes: status !== 'pending' ? generateReviewNotes(status) : undefined,
-      demoCodeId,
-    });
+    const formData = generateRealisticFormData(formTemplate.name, i);
+    const year = submittedAt.getFullYear();
 
-    applications.push(app);
+    // Generate application number with retry for unique constraint violations
+    const tenantSuffix = tenant.id.slice(-4).toUpperCase();
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+    let app = null;
+    let retries = 3;
+    while (retries > 0 && !app) {
+      let randomPart = '';
+      for (let j = 0; j < 4; j++) {
+        randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const appNumber = `${tenantSuffix}-${year}-${randomPart}`;
+
+      try {
+        app = await storage.createApplication({
+          applicationNumber: appNumber,
+          tenantId: tenant.id,
+          projectType: formTemplate.projectType,
+          formTemplateId: formTemplate.id,
+          formTemplateVersion: formTemplate.version,
+          submittedByUserId: submittedBy.id,
+          title: formData.project_type || 'Architectural Request',
+          description: formData.project_description || 'Project modification request',
+          propertyAddress: formData.property_address || '123 Demo Street',
+          formData,
+          status,
+          reviewedAt: status !== 'pending' ? new Date(submittedAt.getTime() + 86400000 * 2) : undefined,
+          reviewedByUserId: status !== 'pending' ? demoUsers[1].id : undefined, // Sarah reviews
+          reviewNotes: status !== 'pending' ? generateReviewNotes(status) : undefined,
+          demoCodeId,
+        });
+      } catch (error: any) {
+        // Retry on unique constraint violation (duplicate application number)
+        if (error.code === '23505' && retries > 1) {
+          retries--;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (app) {
+      applications.push(app);
+    }
   }
 
   return applications;

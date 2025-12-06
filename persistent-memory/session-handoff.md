@@ -1,7 +1,55 @@
 # Session Handoff Document
 
 **Last Updated:** 2025-12-03
-**Current Session:** Stripe Billing Integration
+**Current Session:** Community Custom Landing Pages - COMPLETE
+
+---
+
+## IMMEDIATE NEXT STEPS FOR NEXT SESSION
+
+### 1. Test Community Landing Pages
+
+The new feature allows each community to have a custom public landing page accessible via subdomain.
+
+#### Testing Community Landing Page
+
+1. **Access via Query Parameter (for testing)**
+   - Go to `https://your-app.replit.app/?subdomain=markland`
+   - Should display the Markland POA community landing page
+   - Shows: Hero image, community name, description, next meeting, contact info, quick links
+
+2. **Test Different Communities**
+   - `?subdomain=markland` - Markland POA
+   - `?subdomain=whispering-pines` - Whispering Pines HOA
+
+3. **Verify Public API Endpoint**
+   ```bash
+   curl http://localhost:5000/api/public/markland/info
+   curl http://localhost:5000/api/public/whispering-pines/info
+   ```
+
+4. **Configure Hero Image (Optional)**
+   - Login as Emily (management_manager) or board member
+   - Go to Settings page
+   - Edit Community Settings
+   - Add Hero Image URL (any public image URL)
+   - Save and refresh the landing page
+
+#### Landing Page Features
+- **Hero Section**: Community name with custom or default hero image
+- **Next Meeting Card**: Shows upcoming scheduled event (if any)
+- **Contact Info Card**: Phone, email, hours, address from community settings
+- **Quick Links**: Submit Request, View Guidelines, Resident Portal, Community Website
+
+### 2. Test Hero Image Settings
+
+1. **Login as Emily or Sarah (board member)**
+2. **Go to Settings > Community Settings**
+3. **Edit Settings**
+   - New "Community Landing Page" section at top
+   - Enter Hero Image URL field
+   - Preview shows the image
+4. **Save and verify on landing page**
 
 ---
 
@@ -9,84 +57,70 @@
 
 ### Latest Session Summary (2025-12-03)
 
-**Session Goal:** Complete Stripe payment integration for billing system
+**Session Goal:** Implement Community Custom Landing Pages
 
-**Status:** IMPLEMENTATION COMPLETE
+**Status:** IMPLEMENTATION COMPLETE - READY FOR TESTING
 
 **Completed This Session:**
 
-1. **Stripe Backend Integration:**
-   - Installed `stripe` npm package
-   - Created `/server/services/stripeService.ts` with:
-     - Customer management (create, get, getOrCreate)
-     - Payment method management (SetupIntent, list, set default, remove)
-     - Invoice creation (auto-charge or send_invoice)
-     - Webhook handling (invoice.paid, payment_failed, payment_method.attached)
+1. **Database Schema (`shared/schema.ts`):**
+   - Added `heroImageUrl` field to tenants table
+   - Pushed migration via direct SQL (ALTER TABLE)
 
-2. **Schema Updates:**
-   - Added to `tenants` table:
-     - `contact_email` - Primary billing contact
-     - `stripe_customer_id` - Stripe Customer ID
-     - `auto_pay_enabled` - Auto-charge enabled flag
-     - `payment_terms_days` - Payment terms (default 30)
-     - `billing_status` - active/delinquent/suspended
-   - Added to `invoices` table:
-     - `stripe_hosted_invoice_url` - Stripe payment link
-   - Migration: `/db/migrations/011_add_tenant_billing_fields.sql`
+2. **Public API Endpoint (`server/routes.ts`):**
+   - `GET /api/public/:subdomain/info` - Returns community info without auth
+   - Returns: tenant (id, name, subdomain, heroImageUrl, designGuidelinesUrl, communitySettings)
+   - Returns: nextEvent (if any scheduled event exists)
+   - Only exposes community type tenants (not management companies)
 
-3. **API Endpoints Added (`server/routes.ts`):**
-   - `GET /api/billing/stripe-config` - Get Stripe publishable key
-   - `POST /api/billing/setup-intent` - Create SetupIntent for adding payment method
-   - `GET /api/billing/payment-methods/:tenantId` - List saved payment methods
-   - `POST /api/billing/payment-methods/:tenantId/default` - Set default payment method
-   - `DELETE /api/billing/payment-methods/:paymentMethodId` - Remove payment method
-   - `GET /api/billing/settings/:tenantId` - Get billing settings
-   - `PATCH /api/billing/settings/:tenantId` - Update billing settings
-   - `POST /api/webhooks/stripe` - Stripe webhook handler
+3. **CommunityLanding Page (`client/src/pages/CommunityLanding.tsx`):**
+   - New public landing page component
+   - Fetches data from public API endpoint
+   - Shows hero image (custom or default)
+   - Shows community name and description
+   - Next Meeting card with "Add to Calendar" button
+   - Contact Information card (phone, email, hours, address)
+   - Quick Links section (Submit Request, View Guidelines, Resident Portal)
+   - Footer with "Powered by POA Association"
 
-4. **Invoice Service Stripe Integration (`server/services/invoiceService.ts`):**
-   - `generateMonthlyInvoice()` now creates Stripe invoices alongside local records
-   - Auto-charge if tenant has `autoPayEnabled` and saved payment method
-   - Falls back to send_invoice with payment link if no auto-pay
-   - `finalizeInvoice()` syncs status to Stripe
-   - `voidInvoice()` voids in Stripe
+4. **App Router Updates (`client/src/App.tsx`):**
+   - Added subdomain detection via `/api/subdomain` endpoint
+   - Also supports `?subdomain=markland` query param for testing
+   - Shows CommunityLanding when subdomain detected and user not authenticated
+   - Normal landing page (marketing) shown when no subdomain
 
-5. **Frontend Payment UI:**
-   - Installed `@stripe/stripe-js` and `@stripe/react-stripe-js`
-   - Created `/client/src/components/billing/PaymentMethodForm.tsx` - Stripe Elements form
-   - Created `/client/src/pages/PaymentMethodsPage.tsx` - Payment method management
-   - Added route `/billing/payment-methods` in `App.tsx`
-   - Updated `ConsumptionDashboard.tsx`:
-     - Added "Payment Methods" button linking to new page
-     - Added "Pay Now" button for invoices with Stripe hosted URL
-   - Updated `InvoiceWithLineItems` type with Stripe fields
+5. **Settings Form Updates (`client/src/components/CommunitySettingsCard.tsx`):**
+   - Added "Community Landing Page" section
+   - Hero Image URL field with live preview
+   - Saves heroImageUrl to tenant record
 
-**Environment Variables Needed:**
-```
-STRIPE_SECRET_KEY=sk_xxx          # Stripe secret key
-STRIPE_PUBLISHABLE_KEY=pk_xxx     # Stripe publishable key (for frontend)
-STRIPE_WEBHOOK_SECRET=whsec_xxx   # Stripe webhook signing secret
-```
-
-**How Billing Works Now:**
-1. When a billing cycle ends (monthly cron job), `generatePendingInvoices()` runs
-2. For each billing entity, creates invoice with line items
-3. If Stripe configured:
-   - Creates Stripe Customer if not exists
-   - Creates Stripe Invoice with all line items
-   - If `autoPayEnabled` + saved payment method: auto-charges
-   - Otherwise: sends invoice email with payment link
-4. Webhook updates our invoice status when paid
+6. **API Types (`client/src/lib/api.ts`):**
+   - Added `heroImageUrl` to Tenant interface
 
 ---
 
-### Previous Session Completed (Earlier 2025-12-03)
+## Files Created/Modified This Session
 
-**Phases 1-4 of Billing System:**
-1. Phase 1: Billing scheduler with node-cron
-2. Phase 2: Authorization fixes for super_admin endpoints
-3. Phase 3: Invoice PDF generation
-4. Phase 4: Invoice email delivery
+### New Files:
+- `/client/src/pages/CommunityLanding.tsx` - Public community landing page
+
+### Modified Files:
+- `/shared/schema.ts` - Added heroImageUrl to tenants table
+- `/server/routes.ts` - Added GET /api/public/:subdomain/info endpoint
+- `/client/src/App.tsx` - Added subdomain routing to CommunityLanding
+- `/client/src/components/CommunitySettingsCard.tsx` - Added heroImageUrl field
+- `/client/src/lib/api.ts` - Added heroImageUrl to Tenant interface
+
+---
+
+## Demo Personas
+
+| Persona | Name | Role | Access |
+|---------|------|------|--------|
+| **Emily** | Emily Foster | management_manager, account_admin | Full access to all |
+| **Sarah** | Sarah Chen | poa_board_member, homeowner | Board + homeowner at Markland |
+| **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
+| **Alex** | Alex Rivera | poa_board_contributor | Contributor at Markland |
 
 ---
 
@@ -94,12 +128,14 @@ STRIPE_WEBHOOK_SECRET=whsec_xxx   # Stripe webhook signing secret
 
 **POA Association Portal** - A multi-tenant SaaS platform for HOA/POA community management with:
 - Multi-tenant architecture with subdomain isolation
-- Role-based access control (8 user roles)
+- Role-based access control (8 user roles including management_rep)
 - Dynamic JSON schema-driven forms with AI generation
 - Architectural review board (ARB) application workflows
 - AI-powered application analysis
 - Visual workflow designer
-- **Complete billing system with Stripe integration**
+- Complete billing system with Stripe integration
+- Property-rep assignment system
+- **Community custom landing pages** (NEW)
 
 ### Tech Stack
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 + shadcn/ui
@@ -115,66 +151,101 @@ STRIPE_WEBHOOK_SECRET=whsec_xxx   # Stripe webhook signing secret
 
 ## Feature Implementation Status
 
-### COMPLETE - Billing & Usage System
-
-**Overview:** Complete billing system with usage tracking and Stripe payment integration.
-
-**Pricing Tiers (door-based):**
-| Tier | Doors | Base Price | AI Credits | Overage Cost |
-|------|-------|------------|------------|--------------|
-| Small | 1-50 | $99/mo | 25 | $2.00/credit |
-| Medium | 51-150 | $199/mo | 75 | $1.75/credit |
-| Large | 151-300 | $349/mo | 150 | $1.50/credit |
-| XL | 301+ | $549/mo | 300 | $1.25/credit |
-
-**Billing Flow:**
-1. Usage tracked via `usageTrackingService` for all billable events
-2. Monthly cron job generates invoices (`billingScheduler`)
-3. Stripe creates invoice and either:
-   - Auto-charges saved payment method, OR
-   - Sends invoice email with payment link
-4. Webhooks update invoice status when paid
-
-**Payment Options:**
-- **Auto-pay:** Save card/bank account, charges automatically
-- **Manual pay:** Receive invoice, pay via Stripe hosted page
+### COMPLETE - Community Custom Landing Pages
 
 **Key Files:**
-- `/server/services/stripeService.ts` - Stripe API integration
-- `/server/services/invoiceService.ts` - Invoice management
-- `/server/services/billingScheduler.ts` - Cron job automation
-- `/server/services/consumptionDashboardService.ts` - Usage aggregation
-- `/server/services/usageTrackingService.ts` - Event tracking
-- `/server/services/invoicePdfService.ts` - PDF generation
-- `/client/src/pages/ConsumptionDashboard.tsx` - Usage dashboard
-- `/client/src/pages/PaymentMethodsPage.tsx` - Payment method management
+- `/shared/schema.ts` - heroImageUrl field on tenants
+- `/server/routes.ts` - GET /api/public/:subdomain/info endpoint
+- `/client/src/pages/CommunityLanding.tsx` - Landing page component
+- `/client/src/App.tsx` - Subdomain routing
+- `/client/src/components/CommunitySettingsCard.tsx` - Hero image settings
 
-**Database Tables:**
-- `community_tiers` - Tier definitions
-- `community_subscriptions` - Per-community subscriptions
-- `usage_events` - Billable event audit log
-- `invoices` + `invoice_line_items` - Invoice records
-- `tenants` - Extended with billing fields
+**Public API Response:**
+```json
+{
+  "tenant": {
+    "id": "uuid",
+    "name": "Markland POA",
+    "subdomain": "markland",
+    "heroImageUrl": null,
+    "designGuidelinesUrl": null,
+    "communitySettings": { ... }
+  },
+  "nextEvent": {
+    "id": "uuid",
+    "title": "Board Meeting",
+    "startDatetime": "2025-12-15T19:00:00Z",
+    "endDatetime": "2025-12-15T21:00:00Z",
+    "location": "Community Center",
+    "meetingUrl": null,
+    "eventType": { "name": "Board Meeting", "slug": "board_meeting" }
+  }
+}
+```
 
----
+### COMPLETE - Management Rep Property Assignment
 
-### COMPLETE - Premium AI-Powered Application Analysis
+**Key Files:**
+- `/shared/schema.ts` - propertyRepAssignments table
+- `/server/storage.ts` - 9 storage methods
+- `/server/routes.ts` - 11 API endpoints
+- `/server/provision.ts` - Demo data with Jordan + rep assignments
+- `/client/src/components/PropertyRepAssignmentModal.tsx` - Manager UI
+- `/client/src/components/RepContactCard.tsx` - Homeowner contact card
+- `/client/src/pages/Properties.tsx` - Rep column and manage action
+- `/client/src/pages/Dashboard.tsx` - Homeowner sidebar card
 
-[Previous content retained...]
+### COMPLETE - Billing & Usage System
 
----
+**Pricing Model:** Everyone gets ALL features. Premium operations cost Credits.
 
-### IN PROGRESS - Visual Workflow Designer (5/11 Phases Complete)
+**Pricing Tiers (door-based):**
+| Tier | Doors | Base Price | Included Credits | Overage Cost |
+|------|-------|------------|------------------|--------------|
+| Small | 1-50 | $29/mo | 10 | $2.00/credit |
+| Medium | 51-150 | $79/mo | 25 | $1.75/credit |
+| Large | 151-500 | $149/mo | 50 | $1.50/credit |
+| XL | 501+ | $299/mo | 100 | $1.25/credit |
 
-[Previous content retained...]
+**Credit Consumption:**
+| Operation | Credits |
+|-----------|---------|
+| Standard AI Analysis | 1 credit |
+| Full AI Analysis (+ mockup, research, breakdown) | 2 credits |
+| AI Form Generation | 1 credit |
+
+**All features included in every tier:**
+- Applications, workflows, calendar, compliance tracking
+- Custom branding, community landing pages
+- Document storage, e-signatures, QR upload
+- Unlimited users, role-based access
 
 ---
 
 ## API Endpoints Reference
 
+### Public Community Info (NEW)
+```
+GET    /api/public/:subdomain/info  # Get community info without auth
+```
+
+### Property Rep Assignment
+```
+GET    /api/properties/:propertyId/reps           # Get rep assignments
+GET    /api/properties/:propertyId/rep-info       # Get rep info (homeowner)
+POST   /api/properties/:propertyId/reps           # Assign rep
+PATCH  /api/property-rep-assignments/:id          # Update assignment
+DELETE /api/property-rep-assignments/:id          # Remove assignment
+POST   /api/reps/:userId/bulk-assign              # Bulk assign
+GET    /api/users/:userId/property-assignments    # Get user's properties
+GET    /api/management-companies/:id/default-rep  # Get default rep
+PUT    /api/management-companies/:id/default-rep  # Set default rep
+GET    /api/tenants/:tenantId/users               # Get tenant users
+```
+
 ### Billing & Stripe
 ```
-GET    /api/billing/stripe-config                    # Get Stripe publishable key
+GET    /api/billing/stripe-config                    # Get Stripe config
 POST   /api/billing/setup-intent                     # Create SetupIntent
 GET    /api/billing/payment-methods/:tenantId        # List payment methods
 POST   /api/billing/payment-methods/:tenantId/default# Set default
@@ -182,108 +253,72 @@ DELETE /api/billing/payment-methods/:paymentMethodId # Remove
 GET    /api/billing/settings/:tenantId               # Get billing settings
 PATCH  /api/billing/settings/:tenantId               # Update billing settings
 POST   /api/webhooks/stripe                          # Stripe webhook
-
 GET    /api/billing/consumption                      # Usage summary
 GET    /api/billing/usage-history                    # Historical usage
 GET    /api/billing/invoices                         # List invoices
-GET    /api/invoices/:id                             # Get invoice details
-GET    /api/invoices/:id/download                    # Download PDF
-POST   /api/invoices/:id/send                        # Send via email
-PATCH  /api/invoices/:id/finalize                    # Finalize invoice
-PATCH  /api/invoices/:id/paid                        # Mark as paid
-PATCH  /api/invoices/:id/void                        # Void invoice
 ```
 
 ---
 
-## Environment Variables Summary
+## Environment Variables
 
-```bash
-# Required
-DATABASE_URL=xxx                        # Neon PostgreSQL
-SESSION_SECRET=xxx                      # Express session
-ANTHROPIC_API_KEY=xxx                   # AI analysis
-GOOGLE_MAPS_API_KEY=xxx                 # Satellite imagery
-
-# Stripe Billing - Development (Test Mode)
-# Use these for testing - they use Stripe test mode
-STRIPE_SECRET_KEY_DEV=sk_test_xxx       # Stripe test secret key
-STRIPE_PUBLISHABLE_KEY_DEV=pk_test_xxx  # Stripe test publishable key
-STRIPE_WEBHOOK_SECRET_DEV=whsec_xxx     # Stripe test webhook secret
-
-# Stripe Billing - Production (Live Mode)
-# These are used when NODE_ENV=production
-STRIPE_SECRET_KEY=sk_live_xxx           # Stripe live secret key
-STRIPE_PUBLISHABLE_KEY=pk_live_xxx      # Stripe live publishable key
-STRIPE_WEBHOOK_SECRET=whsec_xxx         # Stripe live webhook secret
-
-# Optional
-AZURE_STORAGE_CONNECTION_STRING=xxx     # Document storage
-STABILITY_API_KEY=xxx                   # AI mockups (Gemini is default)
-SUPER_ADMIN_EMAILS=email1;email2        # Super admin access
-
-# Environment
-NODE_ENV=development                    # development or production
+### Stripe (Dev Keys):
+```
+STRIPE_SECRET_KEY_DEV=sk_test_xxx       # SET
+STRIPE_PUBLISHABLE_KEY_DEV=pk_test_xxx  # SET
+STRIPE_WEBHOOK_SECRET_DEV=              # NOT SET - need webhook
 ```
 
-### Stripe Key Selection Logic:
-- When `NODE_ENV !== 'production'`: Uses `*_DEV` keys (falls back to non-DEV if not set)
-- When `NODE_ENV === 'production'`: Uses non-DEV keys only
-- Test mode auto-detected from key prefix (`sk_test_` vs `sk_live_`)
-- UI shows "Test Mode" badge when using test keys
+### Stripe (Prod Keys - for later):
+```
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_PUBLISHABLE_KEY=pk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+```
 
 ---
 
-## Next Steps (Priority Order)
+## Important Conventions
 
-1. **Test Stripe Integration End-to-End**
-   - Set up Stripe test environment
-   - Test payment method saving
-   - Test invoice creation and payment
-   - Test webhook handling
+### Application Number Format
+**Format:** `{tenant-last-4-chars}-{year}-{random-4-alphanumeric}`
+**Example:** `A1B2-2025-XY9Z`
 
-2. **Implement Graceful Degradation for Delinquent Accounts**
-   - Residents can ALWAYS submit applications
-   - Board/management see "Application received" but no details when delinquent
-   - User-defined policy from planning session
+This is generated in:
+- `server/routes.ts` (line ~872) - for real applications
+- `server/provision.ts` (line ~335) - for demo applications
 
-3. **Complete Workflow Designer (Phases 6-11)**
-   - Condition builder UI
-   - Template management
-   - Validation & testing
-
-4. **Late Payment & Dunning (Phase 6 of Billing)**
-   - Detect overdue invoices
-   - Send reminder emails
-   - Service restrictions for 30+ days overdue
+**DO NOT** use old formats like `APP-2024-001` or similar sequential numbering.
 
 ---
 
 ## Known Issues
 
-### Homeowner Role Permissions (Priority: Medium)
-- James (homeowner) may see content he shouldn't access
-- Need to verify application visibility filtering
-- Add permission checks to components
+### Pre-existing TypeScript Errors (Low Priority)
+- Some TypeScript errors exist in provision.ts and other files
+- These are pre-existing and don't affect runtime
+- The new components compile cleanly
+
+### Subdomain Detection in Replit
+- Replit's hostname parsing may detect GUID as subdomain
+- Use `?subdomain=markland` query param for reliable testing
+- True subdomain routing works when deployed with custom domain
 
 ---
 
-## Uncommitted Changes
+## Future Enhancements
 
-Run `git status` to see full list. Key changes:
-- Stripe integration files
-- Payment methods page
-- Invoice service updates
-- Schema updates
-- Migration files
+### Community Landing Pages
+- Add events calendar section (show multiple upcoming events)
+- Add community announcements/news section
+- Add photo gallery
+- Social media links
 
----
+### Property-Level Permission Enforcement
+- Restrict ACTIONS on unassigned properties (not just visibility)
+- Show "read-only" badge on unassigned property pages
+- Block operations on applications for unassigned properties
 
-## Handoff Checklist
-
-Before ending a session, update this document with:
-- [ ] Summary of work completed
-- [ ] Any new blockers or issues discovered
-- [ ] Git status and any uncommitted changes
-- [ ] Recommendations for next session
-- [ ] Updated "Last Updated" timestamp at top
+### Default Fallback Rep UI
+- Add UI in ManagementSettingsModal to set default fallback rep
+- Storage method `setDefaultFallbackRep()` already exists

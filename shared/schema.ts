@@ -26,6 +26,7 @@ export const demoCodes = pgTable("demo_codes", {
   maxUses: integer("max_uses"), // null = unlimited
   currentUses: integer("current_uses").notNull().default(0),
   isProvisioned: boolean("is_provisioned").notNull().default(false),
+  provisioningError: text("provisioning_error"), // Error message if provisioning failed
   provisionedAt: timestamp("provisioned_at"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -86,6 +87,9 @@ export const managementCompanySettingsSchema = z.object({
   website: z.string().optional(),
   paymentInstructions: z.string().optional(),
   logoUrl: z.string().optional(),
+  // Default fallback rep for properties with no explicit assignment
+  defaultRepUserId: z.string().optional(),
+  defaultRepTitle: z.string().optional(), // e.g., "Community Manager", "Property Liaison"
 });
 
 export type ManagementCompanySettings = z.infer<typeof managementCompanySettingsSchema>;
@@ -126,6 +130,7 @@ export const tenants = pgTable("tenants", {
   managementCompanyId: varchar("management_company_id").references((): any => tenants.id),
   workflowTemplateId: varchar("workflow_template_id").references(() => workflowTemplates.id, { onDelete: "set null" }),
   designGuidelinesUrl: text("design_guidelines_url"), // URL to property's design guidelines/covenants
+  heroImageUrl: text("hero_image_url"), // Custom hero image for community landing page
   doorCount: integer("door_count").default(0), // Number of doors/units in the community
   settings: jsonb("settings").$type<ManagementCompanySettings>(), // Management company settings (address, payment instructions, etc.)
   communitySettings: jsonb("community_settings").$type<CommunitySettings>(), // Community-specific settings (legal entity, contact info, etc.)
@@ -156,6 +161,9 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
   role: text("role").notNull(), // 'super_admin', 'account_admin', etc.
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  isActive: boolean("is_active").default(true).notNull(), // Soft delete support
+  deactivatedAt: timestamp("deactivated_at"), // When user was removed from tenant
+  deactivatedByUserId: varchar("deactivated_by_user_id").references(() => users.id), // Who removed them
 }, (table) => ({
   userTenantIdx: uniqueIndex("user_tenant_idx").on(table.userId, table.tenantId, table.role),
 }));
@@ -163,10 +171,44 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
 export const insertUserTenantRoleSchema = createInsertSchema(userTenantRoles).omit({
   id: true,
   createdAt: true,
+  isActive: true,
+  deactivatedAt: true,
+  deactivatedByUserId: true,
 });
 
 export type InsertUserTenantRole = z.infer<typeof insertUserTenantRoleSchema>;
 export type UserTenantRole = typeof userTenantRoles.$inferSelect;
+
+// Property Rep Assignments - junction table linking users to properties as assigned reps
+export const propertyRepAssignments = pgTable("property_rep_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  designation: text("designation").notNull().default('primary'), // 'primary', 'backup', or custom string
+  title: text("title"), // Optional custom title like "Property Manager", "Community Liaison"
+  assignedByUserId: varchar("assigned_by_user_id").references(() => users.id),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"), // Optional internal notes about the assignment
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  propertyUserIdx: uniqueIndex("property_rep_assignments_property_user_idx").on(table.propertyId, table.userId),
+  propertyIdx: index("property_rep_assignments_property_idx").on(table.propertyId),
+  userIdx: index("property_rep_assignments_user_idx").on(table.userId),
+  activeIdx: index("property_rep_assignments_active_idx").on(table.isActive),
+}));
+
+export const insertPropertyRepAssignmentSchema = createInsertSchema(propertyRepAssignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  assignedAt: true,
+});
+
+export type InsertPropertyRepAssignment = z.infer<typeof insertPropertyRepAssignmentSchema>;
+export type PropertyRepAssignment = typeof propertyRepAssignments.$inferSelect;
 
 // Form Templates table
 export const formTemplates = pgTable("form_templates", {
@@ -203,7 +245,7 @@ export type FormTemplate = typeof formTemplates.$inferSelect;
 // Applications table
 export const applications = pgTable("applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  applicationNumber: text("application_number").notNull().unique(), // APP-2024-001
+  applicationNumber: text("application_number").notNull().unique(), // Format: {tenant-last-4}-{year}-{random-4} e.g. A1B2-2025-XY9Z
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   projectType: text("project_type").notNull(), // 'exterior-modifications', etc.
   formTemplateId: varchar("form_template_id").notNull().references(() => formTemplates.id),
@@ -908,8 +950,8 @@ export const communityTiers = pgTable("community_tiers", {
   maxDoors: integer("max_doors"), // NULL for XL (unlimited)
   basePriceMonthly: text("base_price_monthly").notNull(), // Stored as string for precision
   basePriceYearly: text("base_price_yearly").notNull(),
-  includedAiCredits: integer("included_ai_credits").notNull(),
-  defaultOverageCost: text("default_overage_cost").notNull().default("4.99"),
+  includedCredits: integer("included_credits").notNull(),
+  defaultOverageCost: text("default_overage_cost").notNull().default("2.00"),
   maxUsers: integer("max_users"),
   maxStorageGb: integer("max_storage_gb"),
   isActive: boolean("is_active").notNull().default(true),
@@ -946,7 +988,7 @@ export const communitySubscriptions = pgTable("community_subscriptions", {
   // Custom pricing overrides (NULL = use tier default)
   customPriceMonthly: text("custom_price_monthly"),
   customPriceYearly: text("custom_price_yearly"),
-  customAiCredits: integer("custom_ai_credits"),
+  customCredits: integer("custom_credits"),
   customOverageCost: text("custom_overage_cost"),
   pricingNote: text("pricing_note"),
   pricingSetByUserId: varchar("pricing_set_by_user_id").references(() => users.id),
@@ -958,7 +1000,7 @@ export const communitySubscriptions = pgTable("community_subscriptions", {
   currentPeriodEnd: timestamp("current_period_end").notNull(),
 
   // Current period usage
-  aiCreditsUsed: integer("ai_credits_used").notNull().default(0),
+  creditsUsed: integer("credits_used").notNull().default(0),
   applicationsThisMonth: integer("applications_this_month").notNull().default(0),
 
   // External billing (Stripe - future)

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import SubscriptionManagement from "@/components/SubscriptionManagement";
 import WorkflowSelector from "@/components/WorkflowSelector";
+import CommunitySettingsCard from "@/components/CommunitySettingsCard";
 
 export default function TenantSettings() {
   const { setCurrentPageTitle, currentTenant, currentUserRole } = useAppStore();
@@ -23,11 +24,14 @@ export default function TenantSettings() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Manage subscription and feature settings for {currentTenant?.name}
+          Manage settings for {currentTenant?.name}
         </p>
       </div>
 
-      {/* Workflow Settings - shown first for community tenants */}
+      {/* Community Settings - shown for community tenants */}
+      <CommunitySettingsCard />
+
+      {/* Workflow Settings - shown for community tenants */}
       {showWorkflowSelector && <WorkflowSelector />}
 
       {/* Subscription Management */}

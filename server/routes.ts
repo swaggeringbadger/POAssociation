@@ -40,6 +40,18 @@ function subdomainMiddleware(req: any, res: any, next: any) {
     return next();
   }
 
+  // Skip subdomain detection for known hosting platforms
+  // Replit uses: *.replit.dev, *.repl.co, *.replit.app
+  // Also skip localhost and other dev environments
+  const skipDomains = ['replit.dev', 'repl.co', 'replit.app', 'localhost', '127.0.0.1'];
+  const isHostingPlatform = skipDomains.some(domain => hostname.endsWith(domain) || hostname === domain);
+
+  if (isHostingPlatform) {
+    // No subdomain detection for hosting platforms - use ?subdomain= param instead
+    next();
+    return;
+  }
+
   // Check for actual subdomain in hostname
   // Example: markland.poassociation.com -> parts = ['markland', 'poassociation', 'com']
   if (parts.length >= 3) {
@@ -152,6 +164,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subdomain: req.subdomain || null,
       hostname: req.hostname,
     });
+  });
+
+  // Public community info endpoint - for community landing pages
+  // GET /api/public/:subdomain/info - Returns tenant info + next upcoming event without auth
+  app.get('/api/public/:subdomain/info', async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+
+      // Get tenant by subdomain
+      const tenant = await storage.getTenantBySubdomain(subdomain);
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Community not found' });
+      }
+
+      // Only expose communities, not management companies
+      if (tenant.type !== 'community') {
+        return res.status(404).json({ error: 'Community not found' });
+      }
+
+      // Get next upcoming scheduled event for this community
+      const now = new Date();
+      const upcomingEvents = await storage.listEvents({
+        tenantId: tenant.id,
+        status: 'scheduled',
+        startAfter: now,
+      });
+
+      // Get the first upcoming event (already ordered by startDatetime)
+      const nextEvent = upcomingEvents.length > 0 ? upcomingEvents[0] : null;
+
+      // Return sanitized public info (no internal IDs, settings, etc.)
+      res.json({
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          subdomain: tenant.subdomain,
+          heroImageUrl: tenant.heroImageUrl || null,
+          designGuidelinesUrl: tenant.designGuidelinesUrl || null,
+          communitySettings: tenant.communitySettings || null,
+        },
+        nextEvent: nextEvent ? {
+          id: nextEvent.id,
+          title: nextEvent.title,
+          startDatetime: nextEvent.startDatetime,
+          endDatetime: nextEvent.endDatetime,
+          location: nextEvent.location || null,
+          meetingUrl: nextEvent.meetingUrl || null,
+          eventType: nextEvent.eventType ? {
+            name: nextEvent.eventType.name,
+            slug: nextEvent.eventType.slug,
+          } : null,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error('Error fetching public community info:', error);
+      res.status(500).json({ error: 'Failed to fetch community info' });
+    }
   });
 
   // Check if current user is super admin
@@ -306,6 +376,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.name === "ZodError") {
         return res.status(400).json({ error: fromZodError(error).message });
       }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // PROPERTY REP ASSIGNMENT ROUTES
+  // ============================================
+
+  // Middleware to check if user can manage rep assignments (management_manager, account_admin, super_admin)
+  const requireRepManagementAccess = async (req: any, res: any, next: any) => {
+    const userId = req.session?.userId || req.user?.claims?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const userTenants = await storage.getUserTenants(userId);
+    const userRoles = userTenants.map(ut => ut.role);
+
+    const allowedRoles = ['management_manager', 'account_admin', 'super_admin'];
+
+    if (!allowedRoles.some(r => userRoles.includes(r))) {
+      return res.status(403).json({ error: 'Insufficient permissions to manage property rep assignments' });
+    }
+
+    req.userId = userId;
+    req.userTenants = userTenants;
+    next();
+  };
+
+  // Get rep assignments for a property
+  app.get('/api/properties/:propertyId/reps', isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const reps = await storage.getPropertyRepAssignments(propertyId);
+      res.json(reps);
+    } catch (error: any) {
+      console.error('Error fetching property reps:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get rep info for homeowner display (includes fallback)
+  app.get('/api/properties/:propertyId/rep-info', isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const repInfo = await storage.getPropertyRepInfo(propertyId);
+      res.json(repInfo);
+    } catch (error: any) {
+      console.error('Error fetching property rep info:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Assign rep to property
+  app.post('/api/properties/:propertyId/reps', isAuthenticated, requireRepManagementAccess, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const { userId, designation, title, notes } = req.body;
+      const assignedByUserId = req.userId;
+
+      // Get demo code from property if it has one
+      const property = await storage.getTenant(propertyId);
+
+      const assignment = await storage.createPropertyRepAssignment({
+        propertyId,
+        userId,
+        designation: designation || 'primary',
+        title,
+        notes,
+        assignedByUserId,
+        demoCodeId: property?.demoCodeId,
+      });
+
+      res.status(201).json(assignment);
+    } catch (error: any) {
+      console.error('Error assigning rep to property:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update rep assignment
+  app.patch('/api/property-rep-assignments/:id', isAuthenticated, requireRepManagementAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { designation, title, notes, isActive } = req.body;
+
+      const assignment = await storage.updatePropertyRepAssignment(id, {
+        designation,
+        title,
+        notes,
+        isActive,
+      });
+
+      res.json(assignment);
+    } catch (error: any) {
+      console.error('Error updating rep assignment:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove rep from property
+  app.delete('/api/property-rep-assignments/:id', isAuthenticated, requireRepManagementAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      await storage.removePropertyRepAssignment(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error removing rep assignment:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Bulk assign rep to multiple properties
+  app.post('/api/reps/:userId/bulk-assign', isAuthenticated, requireRepManagementAccess, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const { propertyIds, designation } = req.body;
+      const assignedByUserId = req.userId;
+
+      const assignments = await storage.bulkAssignRepToProperties(
+        userId,
+        propertyIds,
+        designation || 'primary',
+        assignedByUserId
+      );
+
+      res.json(assignments);
+    } catch (error: any) {
+      console.error('Error bulk assigning rep:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get properties assigned to a user
+  app.get('/api/users/:userId/property-assignments', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const assignments = await storage.getUserPropertyAssignments(userId);
+      res.json(assignments);
+    } catch (error: any) {
+      console.error('Error fetching user property assignments:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get default fallback rep for management company
+  app.get('/api/management-companies/:id/default-rep', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const tenant = await storage.getTenant(id);
+
+      let defaultRep = null;
+      if (tenant?.settings?.defaultRepUserId) {
+        defaultRep = await storage.getUser(tenant.settings.defaultRepUserId);
+      }
+
+      res.json({
+        defaultRepUserId: tenant?.settings?.defaultRepUserId || null,
+        defaultRepTitle: tenant?.settings?.defaultRepTitle || null,
+        defaultRep,
+      });
+    } catch (error: any) {
+      console.error('Error fetching default rep:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Set default fallback rep for management company
+  app.put('/api/management-companies/:id/default-rep', isAuthenticated, requireRepManagementAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, title } = req.body;
+
+      const tenant = await storage.setDefaultFallbackRep(id, userId, title);
+      res.json(tenant);
+    } catch (error: any) {
+      console.error('Error setting default rep:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if current user is assigned to a property (for frontend permission checks)
+  app.get('/api/properties/:propertyId/is-assigned', isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      if (!userId) {
+        return res.json({ isAssigned: false });
+      }
+
+      const isAssigned = await storage.isUserAssignedToProperty(userId, propertyId);
+      res.json({ isAssigned });
+    } catch (error: any) {
+      console.error('Error checking assignment:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -521,21 +786,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/applications/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/applications/:id", isAuthenticated, async (req: any, res) => {
     try {
       const application = await storage.getApplication(req.params.id);
       if (!application) {
         return res.status(404).json({ error: "Application not found" });
       }
+
+      // Check billing status for graceful degradation
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (userId) {
+        const { billingStatusService } = await import('./services/billingStatusService');
+        const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+        const primaryRole = userRoles[0]?.role || 'homeowner';
+        const isOwnApplication = application.submittedByUserId === userId;
+
+        const billingStatus = await billingStatusService.canViewApplicationDetails(
+          application.tenantId,
+          primaryRole,
+          isOwnApplication
+        );
+
+        if (!billingStatus.canViewApplicationDetails) {
+          // Return redacted application for delinquent accounts
+          const redacted = billingStatusService.redactApplicationDetails(application);
+          return res.json({
+            ...redacted,
+            _billingMessage: billingStatus.message,
+          });
+        }
+
+        // Include billing status warning for admin roles
+        if (billingStatus.isDelinquent || billingStatus.isSuspended) {
+          return res.json({
+            ...application,
+            _billingWarning: billingStatus.message,
+          });
+        }
+      }
+
       res.json(application);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/tenants/:tenantId/applications", isAuthenticated, async (req, res) => {
+  app.get("/api/tenants/:tenantId/applications", isAuthenticated, async (req: any, res) => {
     try {
-      const applications = await storage.listApplicationsForTenant(req.params.tenantId);
+      const tenantId = req.params.tenantId;
+      const applications = await storage.listApplicationsForTenant(tenantId);
+
+      // Check billing status for graceful degradation
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (userId) {
+        const { billingStatusService } = await import('./services/billingStatusService');
+        const userRoles = await storage.getUserRolesForTenant(userId, tenantId);
+        const primaryRole = userRoles[0]?.role || 'homeowner';
+
+        // Check if user should see redacted applications
+        const billingStatus = await billingStatusService.canViewApplicationDetails(
+          tenantId,
+          primaryRole,
+          false // Not checking own application for list view
+        );
+
+        if (!billingStatus.canViewApplicationDetails) {
+          // Return redacted applications for delinquent accounts
+          const redactedApplications = applications.map(app => {
+            // Residents can still see their own applications
+            if (app.submittedByUserId === userId) {
+              return app;
+            }
+            return billingStatusService.redactApplicationDetails(app);
+          });
+          return res.json(redactedApplications);
+        }
+      }
+
       res.json(applications);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1679,6 +2006,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create demo code and provision ecosystem
   app.post("/api/admin/demo-codes", isAuthenticated, requireSuperAdmin, async (req: any, res) => {
     try {
+      // Check if demo code already exists
+      const existingCode = await storage.getDemoCodeByCode(req.body.code?.toUpperCase());
+      if (existingCode) {
+        return res.status(409).json({ error: `Demo code "${req.body.code}" already exists` });
+      }
+
       // Convert date strings to Date objects before validation
       const bodyWithDates = {
         ...req.body,
@@ -1699,8 +2032,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .catch((error) => {
           console.error(`❌ Failed to provision demo ecosystem for code ${demoCode.code}:`, error);
-          // Mark demo code as inactive on failure
-          storage.updateDemoCode(demoCode.id, { isActive: false });
+          // Mark demo code as failed with error message
+          storage.updateDemoCode(demoCode.id, {
+            isActive: false,
+            provisioningError: error.message || 'Unknown provisioning error',
+          });
         });
 
       res.status(201).json({
@@ -1719,6 +2055,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update demo code
   app.patch("/api/admin/demo-codes/:id", isAuthenticated, requireSuperAdmin, async (req, res) => {
     try {
+      // Verify demo code exists first
+      const existing = await storage.getDemoCode(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Demo code not found' });
+      }
       const demoCode = await storage.updateDemoCode(req.params.id, req.body);
       res.json(demoCode);
     } catch (error: any) {
@@ -5312,12 +5653,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/billing/settings/:tenantId', isAuthenticated, async (req: any, res) => {
     try {
       const { tenantId } = req.params;
-      const { contactEmail, autoPayEnabled, paymentTermsDays } = req.body;
+      const { contactEmail, autoPayEnabled, paymentTermsDays, billingStatus } = req.body;
 
       const updateData: Record<string, any> = {};
       if (contactEmail !== undefined) updateData.contactEmail = contactEmail;
       if (autoPayEnabled !== undefined) updateData.autoPayEnabled = autoPayEnabled;
       if (paymentTermsDays !== undefined) updateData.paymentTermsDays = paymentTermsDays;
+
+      // Only super_admin can change billing status
+      if (billingStatus !== undefined) {
+        const userId = req.session?.userId || req.user?.claims?.sub;
+        const userRoles = await storage.getUserRoles(userId);
+        const isSuperAdmin = userRoles.some(r => r.role === 'super_admin');
+
+        if (!isSuperAdmin) {
+          return res.status(403).json({ error: 'Only super admins can change billing status' });
+        }
+
+        if (!['active', 'delinquent', 'suspended'].includes(billingStatus)) {
+          return res.status(400).json({ error: 'Invalid billing status' });
+        }
+
+        updateData.billingStatus = billingStatus;
+        console.log(`[Billing] Super admin ${userId} updating tenant ${tenantId} billing status to: ${billingStatus}`);
+      }
 
       await db
         .update(schema.tenants)

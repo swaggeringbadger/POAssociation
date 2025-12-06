@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Home, Users } from 'lucide-react';
+import { Building, ShieldCheck, Briefcase, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api, queryClient } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
@@ -33,17 +33,17 @@ const PERSONA_INFO = {
     ],
     gradient: 'from-purple-500 to-purple-600',
   },
-  'James': {
-    title: 'Homeowner / Resident',
-    icon: Home,
-    description: 'Submit applications for property modifications and track approval status',
+  'Jordan': {
+    title: 'Management Rep',
+    icon: Briefcase,
+    description: 'Handle day-to-day operations for assigned properties with limited access scope',
     features: [
-      'Submit modification requests',
-      'Track application status',
-      'View community guidelines',
-      'Upload supporting documents',
+      'View all managed properties',
+      'Full access to assigned properties only',
+      'Process applications for your communities',
+      'See restricted access on unassigned properties',
     ],
-    gradient: 'from-green-500 to-green-600',
+    gradient: 'from-teal-500 to-teal-600',
   },
   'Alex': {
     title: 'Board Contributor',

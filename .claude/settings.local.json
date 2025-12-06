@@ -63,7 +63,10 @@
       "Bash(xxd:*)",
       "WebSearch",
       "WebFetch(domain:support.relayfi.com)",
-      "WebFetch(domain:apitracker.io)"
+      "WebFetch(domain:apitracker.io)",
+      "Bash(yes:*)",
+      "Bash(printf:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

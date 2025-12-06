@@ -38,7 +38,7 @@ type ApplicationWithWorkflow = Application & {
 
 export default function Applications() {
   const { user } = useAuth();
-  const { currentUserRole, currentTenant } = useAppStore();
+  const { currentUserRole, currentTenant, selectedPropertyFilter } = useAppStore();
   const queryClient = useQueryClient();
   const legalEntityLabel = useLegalEntityLabel();
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,12 +48,20 @@ export default function Applications() {
   const [selectedAppToDelete, setSelectedAppToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // For management users, use selectedPropertyFilter if set, otherwise use currentTenant
+  // When selectedPropertyFilter is null (All Properties) and currentTenant is management company,
+  // the backend will return applications from all managed communities
+  const isManagementUser = currentUserRole === 'management_manager' || currentUserRole === 'management_rep' || currentUserRole === 'account_admin';
+  const effectiveTenantId = isManagementUser
+    ? (selectedPropertyFilter || currentTenant?.id)
+    : currentTenant?.id;
+
   const { data: applications, isLoading } = useQuery({
-    queryKey: ["/api/applications/list", currentUserRole, currentTenant?.id, user?.id],
+    queryKey: ["/api/applications/list", currentUserRole, effectiveTenantId, user?.id, selectedPropertyFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         role: currentUserRole || "homeowner",
-        tenantId: currentTenant?.id || "",
+        tenantId: effectiveTenantId || "",
         userId: user?.id || "",
       });
       const res = await fetch(`/api/applications/list?${params}`, { credentials: "include" });

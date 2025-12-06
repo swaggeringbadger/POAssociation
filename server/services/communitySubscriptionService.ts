@@ -22,9 +22,9 @@ import {
  */
 interface EffectiveSubscriptionValues {
   effectivePrice: number;
-  effectiveAiCredits: number;
+  effectiveCredits: number;
   effectiveOverageCost: number;
-  aiCreditsRemaining: number;
+  creditsRemaining: number;
   overageCreditsUsed: number;
   estimatedOverageCost: number;
 }
@@ -78,7 +78,7 @@ class CommunitySubscriptionService {
         maxDoors: defaults.maxDoors,
         basePriceMonthly: defaults.basePriceMonthly,
         basePriceYearly: defaults.basePriceYearly,
-        includedAiCredits: defaults.includedAiCredits,
+        includedCredits: defaults.includedCredits,
         defaultOverageCost: defaults.defaultOverageCost,
         maxUsers: null,
         maxStorageGb: null,
@@ -241,7 +241,7 @@ class CommunitySubscriptionService {
       .set({
         customPriceMonthly: pricing.customPriceMonthly?.toString() || null,
         customPriceYearly: pricing.customPriceYearly?.toString() || null,
-        customAiCredits: pricing.customAiCredits || null,
+        customCredits: pricing.customCredits || null,
         customOverageCost: pricing.customOverageCost?.toString() || null,
         pricingNote: pricing.pricingNote || null,
         pricingSetByUserId: setByUserId,
@@ -267,7 +267,7 @@ class CommunitySubscriptionService {
       .set({
         customPriceMonthly: null,
         customPriceYearly: null,
-        customAiCredits: null,
+        customCredits: null,
         customOverageCost: null,
         pricingNote: null,
         pricingSetByUserId: null,
@@ -308,7 +308,7 @@ class CommunitySubscriptionService {
       .set({
         currentPeriodStart: newPeriodStart,
         currentPeriodEnd: newPeriodEnd,
-        aiCreditsUsed: 0,
+        creditsUsed: 0,
         applicationsThisMonth: 0,
         updatedAt: new Date(),
       })
@@ -365,8 +365,8 @@ class CommunitySubscriptionService {
       };
     }
 
-    const effectiveCredits = subscription.effectiveAiCredits || 0;
-    const used = subscription.aiCreditsUsed;
+    const effectiveCredits = subscription.effectiveCredits || 0;
+    const used = subscription.creditsUsed;
     const remaining = Math.max(0, effectiveCredits - used);
     const isOverage = used >= effectiveCredits;
     const overageCost = subscription.effectiveOverageCost || 4.99;
@@ -392,15 +392,15 @@ class CommunitySubscriptionService {
       throw new Error(`No subscription found for community ${communityId}`);
     }
 
-    const newCreditsUsed = subscription.aiCreditsUsed + 1;
-    const effectiveCredits = subscription.effectiveAiCredits || 0;
+    const newCreditsUsed = subscription.creditsUsed + 1;
+    const effectiveCredits = subscription.effectiveCredits || 0;
     const wasOverage = newCreditsUsed > effectiveCredits;
     const overageCost = wasOverage ? subscription.effectiveOverageCost || 4.99 : null;
 
     await db
       .update(schema.communitySubscriptions)
       .set({
-        aiCreditsUsed: newCreditsUsed,
+        creditsUsed: newCreditsUsed,
         updatedAt: new Date(),
       })
       .where(eq(schema.communitySubscriptions.communityId, communityId));
@@ -437,23 +437,23 @@ class CommunitySubscriptionService {
       ? subscription.customPriceMonthly
       : (tier?.basePriceMonthly || 0);
 
-    const effectiveAiCredits = subscription.customAiCredits !== null
-      ? subscription.customAiCredits
-      : (tier?.includedAiCredits || 0);
+    const effectiveCredits = subscription.customCredits !== null
+      ? subscription.customCredits
+      : (tier?.includedCredits || 0);
 
     const effectiveOverageCost = subscription.customOverageCost !== null
       ? subscription.customOverageCost
       : (tier?.defaultOverageCost || 4.99);
 
-    const aiCreditsRemaining = Math.max(0, effectiveAiCredits - subscription.aiCreditsUsed);
-    const overageCreditsUsed = Math.max(0, subscription.aiCreditsUsed - effectiveAiCredits);
+    const creditsRemaining = Math.max(0, effectiveCredits - subscription.creditsUsed);
+    const overageCreditsUsed = Math.max(0, subscription.creditsUsed - effectiveCredits);
     const estimatedOverageCost = overageCreditsUsed * effectiveOverageCost;
 
     return {
       effectivePrice,
-      effectiveAiCredits,
+      effectiveCredits,
       effectiveOverageCost,
-      aiCreditsRemaining,
+      creditsRemaining,
       overageCreditsUsed,
       estimatedOverageCost,
     };
@@ -471,7 +471,7 @@ class CommunitySubscriptionService {
       maxDoors: tier.maxDoors,
       basePriceMonthly: parseFloat(tier.basePriceMonthly),
       basePriceYearly: parseFloat(tier.basePriceYearly),
-      includedAiCredits: tier.includedAiCredits,
+      includedCredits: tier.includedCredits,
       defaultOverageCost: parseFloat(tier.defaultOverageCost),
       maxUsers: tier.maxUsers,
       maxStorageGb: tier.maxStorageGb,
@@ -496,13 +496,13 @@ class CommunitySubscriptionService {
       status: sub.status as 'active' | 'trial' | 'canceled' | 'paused',
       customPriceMonthly: sub.customPriceMonthly ? parseFloat(sub.customPriceMonthly) : null,
       customPriceYearly: sub.customPriceYearly ? parseFloat(sub.customPriceYearly) : null,
-      customAiCredits: sub.customAiCredits,
+      customCredits: sub.customCredits,
       customOverageCost: sub.customOverageCost ? parseFloat(sub.customOverageCost) : null,
       pricingNote: sub.pricingNote,
       billingCycleDay: sub.billingCycleDay,
       currentPeriodStart: sub.currentPeriodStart.toISOString(),
       currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
-      aiCreditsUsed: sub.aiCreditsUsed,
+      creditsUsed: sub.creditsUsed,
       applicationsThisMonth: sub.applicationsThisMonth,
     };
   }

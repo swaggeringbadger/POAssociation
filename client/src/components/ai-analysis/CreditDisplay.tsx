@@ -84,7 +84,7 @@ export function CreditDisplay({ compact = false, showDetails = true }: CreditDis
             isLow ? 'text-amber-500' :
             'text-violet-500'
           }`} />
-          <span className="text-sm font-medium">AI Credits</span>
+          <span className="text-sm font-medium">Credits</span>
         </div>
         <Badge variant={isEmpty ? 'destructive' : isLow ? 'outline' : 'secondary'}>
           {credits.creditsRemaining} / {credits.monthlyAllowance}

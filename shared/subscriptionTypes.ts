@@ -128,84 +128,53 @@ export interface PlanComparison {
 }
 
 // ============================================
-// AI ANALYSIS CREDIT DEFAULTS BY TIER
+// LEGACY PLAN-BASED CREDIT DEFAULTS (DEPRECATED)
 // ============================================
 
 /**
- * Default AI Analysis credits per subscription tier.
- * These values are used when creating/updating tenant credit records.
- * Super admins can override these per-tenant for grandfathering or special deals.
+ * @deprecated Use COMMUNITY_TIER_DEFAULTS instead.
+ * Legacy credit defaults for old subscription plan types.
+ * Kept for backward compatibility during migration.
  */
 export const AI_ANALYSIS_TIER_DEFAULTS: Record<SubscriptionPlanType, {
   monthlyCredits: number;
   overageCost: string;
   hasAccess: boolean;
 }> = {
-  // Management Company Plans
-  management_free: {
-    monthlyCredits: 0,
-    overageCost: "0", // Not available
-    hasAccess: false,
-  },
-  management_starter: {
-    monthlyCredits: 10,
-    overageCost: "4.99",
-    hasAccess: true,
-  },
-  management_professional: {
-    monthlyCredits: 50,
-    overageCost: "2.99",
-    hasAccess: true,
-  },
-  management_enterprise: {
-    monthlyCredits: 200,
-    overageCost: "1.49",
-    hasAccess: true,
-  },
-
-  // Community Plans
-  community_free: {
-    monthlyCredits: 0,
-    overageCost: "0",
-    hasAccess: false,
-  },
-  community_basic: {
-    monthlyCredits: 5,
-    overageCost: "4.99",
-    hasAccess: true,
-  },
-  community_premium: {
-    monthlyCredits: 25,
-    overageCost: "2.99",
-    hasAccess: true,
-  },
-  community_enterprise: {
-    monthlyCredits: 100,
-    overageCost: "1.49",
-    hasAccess: true,
-  },
+  // Management Company Plans - deprecated, use community tiers
+  management_free: { monthlyCredits: 0, overageCost: "0", hasAccess: false },
+  management_starter: { monthlyCredits: 10, overageCost: "2.00", hasAccess: true },
+  management_professional: { monthlyCredits: 25, overageCost: "1.75", hasAccess: true },
+  management_enterprise: { monthlyCredits: 100, overageCost: "1.25", hasAccess: true },
+  // Community Plans - deprecated, use community tiers
+  community_free: { monthlyCredits: 0, overageCost: "0", hasAccess: false },
+  community_basic: { monthlyCredits: 10, overageCost: "2.00", hasAccess: true },
+  community_premium: { monthlyCredits: 25, overageCost: "1.75", hasAccess: true },
+  community_enterprise: { monthlyCredits: 100, overageCost: "1.25", hasAccess: true },
 };
 
 /**
- * Get AI Analysis credit defaults for a subscription plan type
+ * @deprecated Use getTierDefaultsByDoorCount instead.
  */
 export function getAiAnalysisTierDefaults(planType: SubscriptionPlanType) {
   return AI_ANALYSIS_TIER_DEFAULTS[planType] || AI_ANALYSIS_TIER_DEFAULTS.community_free;
 }
 
 /**
- * AI Analysis credit check result
+ * Credit check result for premium operations
  */
-export interface AiAnalysisCreditCheck {
-  hasAccess: boolean;            // Whether AI Analysis feature is available
+export interface CreditCheck {
   hasCredits: boolean;           // Whether there are credits remaining
   remaining: number;             // Remaining credits this month
   isOverage: boolean;            // Whether using overage credits
-  overageCost: string;           // Cost per additional analysis
+  overageCost: string;           // Cost per credit overage
   effectiveMonthlyCredits: number;  // Override or tier default
   effectiveOverageCost: string;     // Override or tier default
   reason?: string;               // Why access was denied
 }
+
+/** @deprecated Use CreditCheck instead */
+export type AiAnalysisCreditCheck = CreditCheck & { hasAccess: boolean };
 
 // ============================================
 // NEW SIMPLIFIED COMMUNITY TIER SYSTEM
@@ -227,7 +196,7 @@ export interface CommunityTierDef {
   maxDoors: number | null; // NULL for XL (unlimited)
   basePriceMonthly: number;
   basePriceYearly: number;
-  includedAiCredits: number;
+  includedCredits: number;
   defaultOverageCost: number;
   maxUsers: number | null;
   maxStorageGb: number | null;
@@ -249,7 +218,7 @@ export interface CommunitySubscriptionWithTier {
   // Custom overrides (null = use tier default)
   customPriceMonthly: number | null;
   customPriceYearly: number | null;
-  customAiCredits: number | null;
+  customCredits: number | null;
   customOverageCost: number | null;
   pricingNote: string | null;
 
@@ -259,14 +228,14 @@ export interface CommunitySubscriptionWithTier {
   currentPeriodEnd: string;
 
   // Usage
-  aiCreditsUsed: number;
+  creditsUsed: number;
   applicationsThisMonth: number;
 
   // Computed effective values (filled by service)
   effectivePrice?: number;
-  effectiveAiCredits?: number;
+  effectiveCredits?: number;
   effectiveOverageCost?: number;
-  aiCreditsRemaining?: number;
+  creditsRemaining?: number;
   overageCreditsUsed?: number;
   estimatedOverageCost?: number;
 }
@@ -286,10 +255,10 @@ export interface CommunityConsumption {
   effectivePrice: number;
   hasCustomPricing: boolean;
 
-  // AI Credits
-  aiCreditsIncluded: number;
-  aiCreditsUsed: number;
-  aiCreditsRemaining: number;
+  // Credits
+  creditsIncluded: number;
+  creditsUsed: number;
+  creditsRemaining: number;
   overageCredits: number;
   overageCostPerCredit: number;
   overageCost: number;
@@ -319,8 +288,8 @@ export interface BillingConsumptionSummary {
   totalBaseCharges: number;
   totalOverageCharges: number;
   totalProjectedCharges: number;
-  totalAiCreditsIncluded: number;
-  totalAiCreditsUsed: number;
+  totalCreditsIncluded: number;
+  totalCreditsUsed: number;
   totalOverageCredits: number;
   totalApplicationsThisMonth: number;
 
@@ -335,7 +304,7 @@ export interface BillingConsumptionSummary {
  */
 export interface UsageHistoryMonth {
   month: string; // 'YYYY-MM'
-  aiCreditsUsed: number;
+  creditsUsed: number;
   overageCredits: number;
   overageCost: number;
   applicationsSubmitted: number;
@@ -364,7 +333,7 @@ export interface OverageProjection {
 export interface CustomPricingInput {
   customPriceMonthly?: number;
   customPriceYearly?: number;
-  customAiCredits?: number;
+  customCredits?: number;
   customOverageCost?: number;
   pricingNote?: string;
 }
@@ -376,6 +345,13 @@ export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
 
 /**
  * Default tier definitions (for reference, actual values from DB)
+ *
+ * Pricing model: Everyone gets ALL features. Premium operations cost Credits.
+ * - Standard Analysis: 1 credit (compliance review + satellite)
+ * - Full Analysis: 2 credits (+ mockup + property research + breakdown)
+ * - AI Form Generation: 1 credit
+ *
+ * Overage costs are tiered by community size (volume discount).
  */
 export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
   name: string;
@@ -383,7 +359,7 @@ export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
   maxDoors: number | null;
   basePriceMonthly: number;
   basePriceYearly: number;
-  includedAiCredits: number;
+  includedCredits: number;
   defaultOverageCost: number;
 }> = {
   small: {
@@ -392,8 +368,8 @@ export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
     maxDoors: 50,
     basePriceMonthly: 29,
     basePriceYearly: 290,
-    includedAiCredits: 3,
-    defaultOverageCost: 4.99,
+    includedCredits: 10,
+    defaultOverageCost: 2.00,
   },
   medium: {
     name: 'Medium Community',
@@ -401,8 +377,8 @@ export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
     maxDoors: 150,
     basePriceMonthly: 79,
     basePriceYearly: 790,
-    includedAiCredits: 5,
-    defaultOverageCost: 4.99,
+    includedCredits: 25,
+    defaultOverageCost: 1.75,
   },
   large: {
     name: 'Large Community',
@@ -410,8 +386,8 @@ export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
     maxDoors: 500,
     basePriceMonthly: 149,
     basePriceYearly: 1490,
-    includedAiCredits: 10,
-    defaultOverageCost: 4.99,
+    includedCredits: 50,
+    defaultOverageCost: 1.50,
   },
   xl: {
     name: 'Extra Large Community',
@@ -419,9 +395,15 @@ export const COMMUNITY_TIER_DEFAULTS: Record<CommunityTierCode, {
     maxDoors: null,
     basePriceMonthly: 299,
     basePriceYearly: 2990,
-    includedAiCredits: 20,
-    defaultOverageCost: 4.99,
+    includedCredits: 100,
+    defaultOverageCost: 1.25,
   },
+};
+
+// Legacy alias for backward compatibility during migration
+/** @deprecated Use includedCredits instead */
+export type LegacyTierDefaults = typeof COMMUNITY_TIER_DEFAULTS & {
+  [K in CommunityTierCode]: { includedAiCredits: number };
 };
 
 /**

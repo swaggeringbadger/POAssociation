@@ -37,9 +37,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, MoreVertical, Edit, Trash2, TreePine, Building, Ticket } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Search, Plus, MoreVertical, Edit, Trash2, TreePine, Building, Ticket, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import EditPropertyModal from "@/components/EditPropertyModal";
+import PropertyRepAssignmentModal from "@/components/PropertyRepAssignmentModal";
 import { getLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 
 export default function Properties() {
@@ -48,6 +50,7 @@ export default function Properties() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [repModalOpen, setRepModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -110,6 +113,11 @@ export default function Properties() {
     setDeleteDialogOpen(true);
   };
 
+  const handleManageReps = (property: any) => {
+    setSelectedProperty(property);
+    setRepModalOpen(true);
+  };
+
   const getManagementCompanyName = (id: string | null) => {
     if (!id) return "None";
     return managementCompanies.find((mc: any) => mc.id === id)?.name || "Unknown";
@@ -157,6 +165,7 @@ export default function Properties() {
                 <TableHead>Name</TableHead>
                 <TableHead>Subdomain</TableHead>
                 <TableHead>Management Company</TableHead>
+                <TableHead>Assigned Reps</TableHead>
                 <TableHead>Entity</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
@@ -167,13 +176,13 @@ export default function Properties() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center">
+                  <TableCell colSpan={9} className="text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredProperties.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center">
+                  <TableCell colSpan={9} className="text-center">
                     {searchQuery ? "No properties found matching your search" : "No properties assigned to you yet"}
                   </TableCell>
                 </TableRow>
@@ -196,6 +205,9 @@ export default function Properties() {
                         <Building className="h-3 w-3 text-muted-foreground" />
                         {getManagementCompanyName(property.managementCompanyId)}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <PropertyRepAvatars propertyId={property.id} />
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
@@ -233,6 +245,10 @@ export default function Properties() {
                           <DropdownMenuItem onClick={() => handleEdit(property)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleManageReps(property)}>
+                            <Users className="mr-2 h-4 w-4" />
+                            Manage Reps
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
                             <Ticket className="mr-2 h-4 w-4" />
@@ -287,6 +303,62 @@ export default function Properties() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Property Rep Assignment Modal */}
+      {selectedProperty && (
+        <PropertyRepAssignmentModal
+          open={repModalOpen}
+          onOpenChange={setRepModalOpen}
+          propertyId={selectedProperty.id}
+          propertyName={selectedProperty.name}
+          managementCompanyId={selectedProperty.managementCompanyId || ""}
+        />
+      )}
+    </div>
+  );
+}
+
+// Helper component for displaying property rep avatars
+function PropertyRepAvatars({ propertyId }: { propertyId: string }) {
+  const { data: reps = [], isLoading } = useQuery({
+    queryKey: ["propertyReps", propertyId],
+    queryFn: () => api.getPropertyReps(propertyId),
+  });
+
+  if (isLoading) {
+    return <span className="text-xs text-muted-foreground">...</span>;
+  }
+
+  if (reps.length === 0) {
+    return <span className="text-xs text-muted-foreground">No reps assigned</span>;
+  }
+
+  const getInitials = (user: any) => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    return user?.email?.substring(0, 2).toUpperCase() || "?";
+  };
+
+  // Show max 3 avatars, then +N indicator
+  const displayReps = reps.slice(0, 3);
+  const remainingCount = reps.length - 3;
+
+  return (
+    <div className="flex items-center -space-x-2">
+      {displayReps.map((rep: any) => (
+        <Avatar key={rep.id} className="h-7 w-7 border-2 border-background">
+          <AvatarImage src={rep.user?.profileImageUrl || undefined} />
+          <AvatarFallback className="text-xs">
+            {getInitials(rep.user)}
+          </AvatarFallback>
+        </Avatar>
+      ))}
+      {remainingCount > 0 && (
+        <div className="h-7 w-7 rounded-full bg-muted border-2 border-background flex items-center justify-center">
+          <span className="text-xs text-muted-foreground">+{remainingCount}</span>
+        </div>
+      )}
     </div>
   );
 }

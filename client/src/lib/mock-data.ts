@@ -1,12 +1,13 @@
 
-import { Home, FileText, Settings, Users, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar, Receipt } from "lucide-react";
+import { Home, FileText, Settings, Users, Users2, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar, Receipt } from "lucide-react";
 
 // Types for our mockup
-export type Role = 
+export type Role =
   | 'super_admin'
   | 'account_admin'
   | 'management_rep'
   | 'management_manager'
+  | 'management_auxiliary'
   | 'poa_board_member'
   | 'poa_board_contributor'
   | 'homeowner'
@@ -46,13 +47,13 @@ export const NAV_ITEMS = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     href: '/dashboard',
-    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'management_auxiliary', 'account_admin', 'super_admin']
   },
   {
     label: 'Applications',
     icon: FileText,
     href: '/applications',
-    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'delegated_rep', 'management_rep', 'management_manager', 'management_auxiliary', 'account_admin', 'super_admin']
   },
   {
     label: 'Submit Request',
@@ -70,7 +71,13 @@ export const NAV_ITEMS = [
     label: 'Properties',
     icon: Building2,
     href: '/properties',
-    roles: ['management_rep', 'management_manager', 'account_admin', 'super_admin']
+    roles: ['management_rep', 'management_manager', 'management_auxiliary', 'account_admin', 'super_admin']
+  },
+  {
+    label: 'Team',
+    icon: Users2,
+    href: '/team',
+    roles: ['management_manager', 'super_admin']
   },
   {
     label: 'Compliance',

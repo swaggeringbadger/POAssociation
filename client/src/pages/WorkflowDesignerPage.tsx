@@ -474,7 +474,7 @@ export default function WorkflowDesignerPage() {
 
   const doCancel = () => {
     reset();
-    navigate('/workflow-templates');
+    navigate('/workflows');
   };
 
   // Handle drag over

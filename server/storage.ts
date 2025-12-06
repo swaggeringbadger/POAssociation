@@ -34,9 +34,24 @@ export interface IStorage {
   getUserTenants(userId: string): Promise<(schema.UserTenantRole & { tenant: schema.Tenant })[]>;
   getTenantUsers(tenantId: string): Promise<(schema.User & { roles: string[] })[]>;
   assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole>;
-  removeUserRole(userId: string, tenantId: string, role: string): Promise<void>;
-  removeUserFromTenant(userId: string, tenantId: string): Promise<void>;
-  
+  removeUserRole(userId: string, tenantId: string, role: string, deactivatedByUserId?: string): Promise<void>;
+  removeUserFromTenant(userId: string, tenantId: string, deactivatedByUserId?: string): Promise<void>;
+
+  // Property Rep Assignments
+  getPropertyRepAssignments(propertyId: string): Promise<(schema.PropertyRepAssignment & { user: schema.User })[]>;
+  getUserPropertyAssignments(userId: string): Promise<(schema.PropertyRepAssignment & { property: schema.Tenant })[]>;
+  isUserAssignedToProperty(userId: string, propertyId: string): Promise<boolean>;
+  createPropertyRepAssignment(assignment: schema.InsertPropertyRepAssignment): Promise<schema.PropertyRepAssignment>;
+  updatePropertyRepAssignment(id: string, updates: Partial<schema.InsertPropertyRepAssignment>): Promise<schema.PropertyRepAssignment>;
+  removePropertyRepAssignment(id: string): Promise<void>;
+  bulkAssignRepToProperties(userId: string, propertyIds: string[], designation: string, assignedByUserId: string, demoCodeId?: string): Promise<schema.PropertyRepAssignment[]>;
+  getPropertyRepInfo(propertyId: string): Promise<{
+    reps: (schema.PropertyRepAssignment & { user: schema.User })[];
+    fallbackRep: schema.User | null;
+    fallbackTitle: string | null;
+  }>;
+  setDefaultFallbackRep(managementCompanyId: string, userId: string | null, title?: string): Promise<schema.Tenant>;
+
   // Form Templates
   getFormTemplate(id: string): Promise<schema.FormTemplate | undefined>;
   getActiveFormTemplateForProjectType(tenantId: string, projectType: string): Promise<schema.FormTemplate | undefined>;
@@ -410,7 +425,8 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(schema.userTenantRoles.userId, userId),
-          eq(schema.userTenantRoles.tenantId, tenantId)
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.isActive, true)
         )
       );
   }
@@ -420,8 +436,13 @@ export class DbStorage implements IStorage {
       .select()
       .from(schema.userTenantRoles)
       .innerJoin(schema.tenants, eq(schema.userTenantRoles.tenantId, schema.tenants.id))
-      .where(eq(schema.userTenantRoles.userId, userId));
-    
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.isActive, true)
+        )
+      );
+
     return results.map(r => ({ ...r.user_tenant_roles, tenant: r.tenants }));
   }
 
@@ -431,12 +452,17 @@ export class DbStorage implements IStorage {
   }
 
   async getTenantUsers(tenantId: string): Promise<(schema.User & { roles: string[] })[]> {
-    // Get all user-role assignments for this tenant
+    // Get all active user-role assignments for this tenant
     const assignments = await db
       .select()
       .from(schema.userTenantRoles)
       .innerJoin(schema.users, eq(schema.userTenantRoles.userId, schema.users.id))
-      .where(eq(schema.userTenantRoles.tenantId, tenantId));
+      .where(
+        and(
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.isActive, true)
+        )
+      );
 
     // Group by user and aggregate roles
     const userMap = new Map<string, schema.User & { roles: string[] }>();
@@ -455,27 +481,202 @@ export class DbStorage implements IStorage {
     return Array.from(userMap.values());
   }
 
-  async removeUserRole(userId: string, tenantId: string, role: string): Promise<void> {
+  async removeUserRole(userId: string, tenantId: string, role: string, deactivatedByUserId?: string): Promise<void> {
+    // Soft delete - mark as inactive instead of deleting
     await db
-      .delete(schema.userTenantRoles)
+      .update(schema.userTenantRoles)
+      .set({
+        isActive: false,
+        deactivatedAt: new Date(),
+        deactivatedByUserId: deactivatedByUserId || null,
+      })
       .where(
         and(
           eq(schema.userTenantRoles.userId, userId),
           eq(schema.userTenantRoles.tenantId, tenantId),
-          eq(schema.userTenantRoles.role, role)
+          eq(schema.userTenantRoles.role, role),
+          eq(schema.userTenantRoles.isActive, true)
         )
       );
   }
 
-  async removeUserFromTenant(userId: string, tenantId: string): Promise<void> {
+  async removeUserFromTenant(userId: string, tenantId: string, deactivatedByUserId?: string): Promise<void> {
+    // Soft delete - mark all roles as inactive instead of deleting
     await db
-      .delete(schema.userTenantRoles)
+      .update(schema.userTenantRoles)
+      .set({
+        isActive: false,
+        deactivatedAt: new Date(),
+        deactivatedByUserId: deactivatedByUserId || null,
+      })
       .where(
         and(
           eq(schema.userTenantRoles.userId, userId),
-          eq(schema.userTenantRoles.tenantId, tenantId)
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.isActive, true)
         )
       );
+  }
+
+  // ============================================
+  // PROPERTY REP ASSIGNMENT METHODS
+  // ============================================
+
+  // Get all rep assignments for a property with user details
+  async getPropertyRepAssignments(propertyId: string): Promise<(schema.PropertyRepAssignment & { user: schema.User })[]> {
+    const results = await db
+      .select()
+      .from(schema.propertyRepAssignments)
+      .innerJoin(schema.users, eq(schema.propertyRepAssignments.userId, schema.users.id))
+      .where(
+        and(
+          eq(schema.propertyRepAssignments.propertyId, propertyId),
+          eq(schema.propertyRepAssignments.isActive, true)
+        )
+      )
+      .orderBy(schema.propertyRepAssignments.designation);
+
+    return results.map(r => ({
+      ...r.property_rep_assignments,
+      user: r.users,
+    }));
+  }
+
+  // Get all properties assigned to a user
+  async getUserPropertyAssignments(userId: string): Promise<(schema.PropertyRepAssignment & { property: schema.Tenant })[]> {
+    const results = await db
+      .select()
+      .from(schema.propertyRepAssignments)
+      .innerJoin(schema.tenants, eq(schema.propertyRepAssignments.propertyId, schema.tenants.id))
+      .where(
+        and(
+          eq(schema.propertyRepAssignments.userId, userId),
+          eq(schema.propertyRepAssignments.isActive, true)
+        )
+      );
+
+    return results.map(r => ({
+      ...r.property_rep_assignments,
+      property: r.tenants,
+    }));
+  }
+
+  // Check if user is assigned to a specific property
+  async isUserAssignedToProperty(userId: string, propertyId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.propertyRepAssignments)
+      .where(
+        and(
+          eq(schema.propertyRepAssignments.userId, userId),
+          eq(schema.propertyRepAssignments.propertyId, propertyId),
+          eq(schema.propertyRepAssignments.isActive, true)
+        )
+      );
+    return (result?.count || 0) > 0;
+  }
+
+  // Create a property rep assignment
+  async createPropertyRepAssignment(assignment: schema.InsertPropertyRepAssignment): Promise<schema.PropertyRepAssignment> {
+    const [result] = await db.insert(schema.propertyRepAssignments).values(assignment).returning();
+    return result;
+  }
+
+  // Update a property rep assignment
+  async updatePropertyRepAssignment(id: string, updates: Partial<schema.InsertPropertyRepAssignment>): Promise<schema.PropertyRepAssignment> {
+    const [result] = await db
+      .update(schema.propertyRepAssignments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.propertyRepAssignments.id, id))
+      .returning();
+    return result;
+  }
+
+  // Remove (deactivate) a property rep assignment
+  async removePropertyRepAssignment(id: string): Promise<void> {
+    await db
+      .update(schema.propertyRepAssignments)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(schema.propertyRepAssignments.id, id));
+  }
+
+  // Bulk assign rep to multiple properties
+  async bulkAssignRepToProperties(
+    userId: string,
+    propertyIds: string[],
+    designation: string,
+    assignedByUserId: string,
+    demoCodeId?: string
+  ): Promise<schema.PropertyRepAssignment[]> {
+    const assignments = propertyIds.map(propertyId => ({
+      propertyId,
+      userId,
+      designation,
+      assignedByUserId,
+      demoCodeId,
+    }));
+
+    const results = await db
+      .insert(schema.propertyRepAssignments)
+      .values(assignments)
+      .onConflictDoUpdate({
+        target: [schema.propertyRepAssignments.propertyId, schema.propertyRepAssignments.userId],
+        set: {
+          designation,
+          isActive: true,
+          assignedByUserId,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    return results;
+  }
+
+  // Get rep info for homeowner display (with fallback to default rep)
+  async getPropertyRepInfo(propertyId: string): Promise<{
+    reps: (schema.PropertyRepAssignment & { user: schema.User })[];
+    fallbackRep: schema.User | null;
+    fallbackTitle: string | null;
+  }> {
+    // Get assigned reps
+    const reps = await this.getPropertyRepAssignments(propertyId);
+
+    // Get management company for fallback
+    const property = await this.getTenant(propertyId);
+    let fallbackRep: schema.User | null = null;
+    let fallbackTitle: string | null = null;
+
+    if (property?.managementCompanyId) {
+      const mgmtCompany = await this.getTenant(property.managementCompanyId);
+      if (mgmtCompany?.settings?.defaultRepUserId) {
+        const rep = await this.getUser(mgmtCompany.settings.defaultRepUserId);
+        if (rep) {
+          fallbackRep = rep;
+          fallbackTitle = mgmtCompany.settings.defaultRepTitle || null;
+        }
+      }
+    }
+
+    return { reps, fallbackRep, fallbackTitle };
+  }
+
+  // Set default fallback rep for a management company
+  async setDefaultFallbackRep(managementCompanyId: string, userId: string | null, title?: string): Promise<schema.Tenant> {
+    const currentTenant = await this.getTenant(managementCompanyId);
+    const updatedSettings = {
+      ...currentTenant?.settings,
+      defaultRepUserId: userId,
+      defaultRepTitle: title,
+    };
+
+    const [result] = await db
+      .update(schema.tenants)
+      .set({ settings: updatedSettings })
+      .where(eq(schema.tenants.id, managementCompanyId))
+      .returning();
+
+    return result;
   }
 
   // Form Templates
@@ -575,7 +776,7 @@ export class DbStorage implements IStorage {
       applications = await db.select().from(schema.applications).where(eq(schema.applications.tenantId, tenantId));
     }
     // Management roles: see all applications for their managed tenants
-    else if (role === 'management_rep' || role === 'management_manager' || role === 'account_admin') {
+    else if (role === 'management_rep' || role === 'management_manager' || role === 'management_auxiliary' || role === 'account_admin') {
       // First check if the current tenant is a management company
       const tenant = await this.getTenant(tenantId);
       if (!tenant) return [];

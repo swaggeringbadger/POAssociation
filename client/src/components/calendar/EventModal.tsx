@@ -104,8 +104,14 @@ export default function EventModal({
     (t) => t.type === "management_company" || t.type === "community"
   );
 
-  // Reset form when event changes
+  // Get the first available tenant and event type IDs
+  const firstTenantId = availableTenants[0]?.id || "";
+  const firstEventTypeId = eventTypes[0]?.id || "";
+
+  // Reset form when event changes or dialog opens
   useEffect(() => {
+    if (!open) return; // Don't run when dialog is closed
+
     if (event) {
       setTenantId(event.tenantId);
       setEventTypeId(event.eventTypeId);
@@ -126,8 +132,8 @@ export default function EventModal({
     } else {
       // Reset to defaults for new event
       const defaultDate = initialDate || new Date();
-      setTenantId(availableTenants[0]?.id || "");
-      setEventTypeId(eventTypes[0]?.id || "");
+      setTenantId(firstTenantId);
+      setEventTypeId(firstEventTypeId);
       setTitle("");
       setDescription("");
       setStartDate(defaultDate);
@@ -141,7 +147,7 @@ export default function EventModal({
       setNoticeRequiredDays("");
     }
     setActiveTab("details");
-  }, [event, open, eventTypes, availableTenants, initialDate]);
+  }, [event, open, initialDate, firstTenantId, firstEventTypeId]);
 
   // Update end date when start date changes
   useEffect(() => {
@@ -194,6 +200,24 @@ export default function EventModal({
   });
 
   const handleSubmit = () => {
+    if (!tenantId) {
+      toast({
+        title: "Error",
+        description: "Please select a property or management company",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!eventTypeId) {
+      toast({
+        title: "Error",
+        description: "Please select an event type",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!startDate || !endDate) {
       toast({
         title: "Error",

@@ -90,8 +90,8 @@ class ConsumptionDashboardService {
       totalBaseCharges: totals.baseCharges,
       totalOverageCharges: totals.overageCharges,
       totalProjectedCharges: totals.baseCharges + totals.overageCharges,
-      totalAiCreditsIncluded: totals.aiCreditsIncluded,
-      totalAiCreditsUsed: totals.aiCreditsUsed,
+      totalCreditsIncluded: totals.creditsIncluded,
+      totalCreditsUsed: totals.creditsUsed,
       totalOverageCredits: totals.overageCredits,
       totalApplicationsThisMonth: totals.applications,
       currentPeriodStart: firstCommunity?.currentPeriodStart || now.toISOString(),
@@ -133,10 +133,10 @@ class ConsumptionDashboardService {
     const billingCycleProgress = Math.min(100, Math.round((daysElapsed / totalDays) * 100));
 
     // Calculate AI credits
-    const aiCreditsIncluded = subscription.effectiveAiCredits || tier?.includedAiCredits || 0;
-    const aiCreditsUsed = subscription.aiCreditsUsed;
-    const aiCreditsRemaining = Math.max(0, aiCreditsIncluded - aiCreditsUsed);
-    const overageCredits = Math.max(0, aiCreditsUsed - aiCreditsIncluded);
+    const creditsIncluded = subscription.effectiveCredits || tier?.includedCredits || 0;
+    const creditsUsed = subscription.creditsUsed;
+    const creditsRemaining = Math.max(0, creditsIncluded - creditsUsed);
+    const overageCredits = Math.max(0, creditsUsed - creditsIncluded);
     const overageCostPerCredit = subscription.effectiveOverageCost || tier?.defaultOverageCost || 4.99;
     const overageCost = overageCredits * overageCostPerCredit;
 
@@ -149,11 +149,11 @@ class ConsumptionDashboardService {
       basePrice: tier?.basePriceMonthly || 0,
       effectivePrice: subscription.effectivePrice || tier?.basePriceMonthly || 0,
       hasCustomPricing: subscription.customPriceMonthly !== null ||
-                        subscription.customAiCredits !== null ||
+                        subscription.customCredits !== null ||
                         subscription.customOverageCost !== null,
-      aiCreditsIncluded,
-      aiCreditsUsed,
-      aiCreditsRemaining,
+      creditsIncluded,
+      creditsUsed,
+      creditsRemaining,
       overageCredits,
       overageCostPerCredit,
       overageCost,
@@ -217,14 +217,14 @@ class ConsumptionDashboardService {
       for (const month of communityHistory) {
         const existing = aggregatedHistory.get(month.month);
         if (existing) {
-          existing.aiCreditsUsed += month.aiCreditsUsed;
+          existing.creditsUsed += month.creditsUsed;
           existing.overageCredits += month.overageCredits;
           existing.overageCost += month.overageCost;
           existing.applicationsSubmitted += month.applicationsSubmitted;
         } else {
           aggregatedHistory.set(month.month, {
             month: month.month,
-            aiCreditsUsed: month.aiCreditsUsed,
+            creditsUsed: month.creditsUsed,
             overageCredits: month.overageCredits,
             overageCost: month.overageCost,
             applicationsSubmitted: month.applicationsSubmitted,
@@ -283,8 +283,8 @@ class ConsumptionDashboardService {
     const daysElapsed = Math.max(1, Math.ceil((now.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)));
     const daysRemaining = Math.max(0, Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
-    const currentCreditsUsed = subscription.aiCreditsUsed;
-    const creditsIncluded = subscription.effectiveAiCredits || 0;
+    const currentCreditsUsed = subscription.creditsUsed;
+    const creditsIncluded = subscription.effectiveCredits || 0;
     const dailyUsageRate = currentCreditsUsed / daysElapsed;
     const projectedTotalUsage = Math.round(dailyUsageRate * totalDays);
     const projectedOverageCredits = Math.max(0, projectedTotalUsage - creditsIncluded);
@@ -371,8 +371,8 @@ class ConsumptionDashboardService {
   private calculateTotals(communities: CommunityConsumption[]): {
     baseCharges: number;
     overageCharges: number;
-    aiCreditsIncluded: number;
-    aiCreditsUsed: number;
+    creditsIncluded: number;
+    creditsUsed: number;
     overageCredits: number;
     applications: number;
   } {
@@ -380,16 +380,16 @@ class ConsumptionDashboardService {
       (acc, community) => ({
         baseCharges: acc.baseCharges + community.effectivePrice,
         overageCharges: acc.overageCharges + community.overageCost,
-        aiCreditsIncluded: acc.aiCreditsIncluded + community.aiCreditsIncluded,
-        aiCreditsUsed: acc.aiCreditsUsed + community.aiCreditsUsed,
+        creditsIncluded: acc.creditsIncluded + community.creditsIncluded,
+        creditsUsed: acc.creditsUsed + community.creditsUsed,
         overageCredits: acc.overageCredits + community.overageCredits,
         applications: acc.applications + community.applicationsThisMonth,
       }),
       {
         baseCharges: 0,
         overageCharges: 0,
-        aiCreditsIncluded: 0,
-        aiCreditsUsed: 0,
+        creditsIncluded: 0,
+        creditsUsed: 0,
         overageCredits: 0,
         applications: 0,
       }
@@ -413,9 +413,9 @@ class ConsumptionDashboardService {
       basePrice: 0,
       effectivePrice: 0,
       hasCustomPricing: false,
-      aiCreditsIncluded: 0,
-      aiCreditsUsed: 0,
-      aiCreditsRemaining: 0,
+      creditsIncluded: 0,
+      creditsUsed: 0,
+      creditsRemaining: 0,
       overageCredits: 0,
       overageCostPerCredit: 0,
       overageCost: 0,
