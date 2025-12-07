@@ -200,8 +200,15 @@ export default function DemoPersonaSelect() {
 
         {/* Footer */}
         <div className="text-center pt-4">
-          <Button variant="ghost" onClick={() => navigate('/demo')}>
-            ← Back to Demo Code Entry
+          <Button variant="ghost" onClick={() => {
+            // Clear stored demo code so user can enter a different one
+            localStorage.removeItem('poa-demo-code');
+            sessionStorage.removeItem('demoCodeId');
+            sessionStorage.removeItem('demoLabel');
+            sessionStorage.removeItem('demoPersonas');
+            navigate('/demo');
+          }}>
+            ← Use Different Demo Code
           </Button>
         </div>
       </div>

@@ -224,6 +224,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public contact form endpoint - sends to POA_CONTACT_EMAIL
+  // POST /api/public/contact - Submit contact form or demo request
+  app.post('/api/public/contact', async (req, res) => {
+    try {
+      const { mode, name, email, phone, company, communitySize, message, preferredTime } = req.body;
+
+      // Validate required fields
+      if (!name || !email) {
+        return res.status(400).json({ error: 'Name and email are required' });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      // Demo mode requires phone and company
+      if (mode === 'demo' && (!phone || !company)) {
+        return res.status(400).json({ error: 'Phone and company are required for demo requests' });
+      }
+
+      // Contact mode requires message
+      if (mode === 'contact' && !message) {
+        return res.status(400).json({ error: 'Message is required for contact form' });
+      }
+
+      // Get destination email from secret
+      const contactEmail = process.env.POA_CONTACT_EMAIL;
+      if (!contactEmail) {
+        console.error('POA_CONTACT_EMAIL not configured');
+        // Still return success to user but log the error
+        return res.json({ success: true, message: 'Thank you for your submission' });
+      }
+
+      // Send email
+      const { emailService } = await import('./emailService');
+      const { contactFormTemplate } = await import('./emailTemplates');
+
+      const html = contactFormTemplate(mode === 'demo' ? 'demo' : 'contact', {
+        name,
+        email,
+        phone,
+        company,
+        communitySize,
+        message,
+        preferredTime,
+      });
+
+      const result = await emailService.send({
+        to: contactEmail,
+        subject: mode === 'demo'
+          ? `[Demo Request] ${name} from ${company || 'Unknown'}`
+          : `[Contact Form] ${name}`,
+        html,
+        replyTo: email,
+      });
+
+      if (!result.success) {
+        console.error('Failed to send contact email:', result.error);
+        // Still return success to user - we don't want to expose internal errors
+      }
+
+      res.json({ success: true, message: 'Thank you for your submission' });
+    } catch (error: any) {
+      console.error('Error processing contact form:', error);
+      res.status(500).json({ error: 'Failed to process submission' });
+    }
+  });
+
   // Check if current user is super admin
   app.get('/api/auth/is-super-admin', isAuthenticated, async (req: any, res) => {
     try {
@@ -3752,8 +3822,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // EVENTS / CALENDAR ROUTES
   // ============================================
 
-  // Reuse the compliance access middleware for events (same role requirements)
-  const requireEventsAccess = requireComplianceAccess;
+  // Events access middleware - more permissive than compliance
+  // Board members, managers, and reps can all access calendar
+  const requireEventsAccess = async (req: any, res: any, next: any) => {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Get user's roles across all tenants
+    const userTenants = await storage.getUserTenants(userId);
+    const userRoles = userTenants.map(ut => ut.role);
+
+    // Full access roles can create/edit/delete events
+    const fullAccessRoles = ['management_manager', 'super_admin', 'poa_board_member', 'account_admin'];
+    // Read-only roles can view events
+    const readOnlyRoles = ['management_rep', 'poa_board_contributor', 'homeowner'];
+
+    if (fullAccessRoles.some(r => userRoles.includes(r))) {
+      req.eventsAccess = 'full';
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    if (req.method === 'GET' && readOnlyRoles.some(r => userRoles.includes(r))) {
+      req.eventsAccess = 'read';
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    // If user has any tenant access, allow read-only for events
+    if (req.method === 'GET' && userTenants.length > 0) {
+      req.eventsAccess = 'read';
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Insufficient permissions for calendar' });
+  };
 
   // List event types
   app.get('/api/events/types', requireEventsAccess, async (req: any, res) => {

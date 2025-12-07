@@ -620,3 +620,89 @@ export function paymentReceivedTemplate(
     `,
   });
 }
+
+/**
+ * Contact Form / Demo Request Template
+ * Sent to the sales/support team when someone submits a contact or demo request
+ */
+export function contactFormTemplate(
+  mode: 'contact' | 'demo',
+  formData: {
+    name: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    communitySize?: string;
+    message?: string;
+    preferredTime?: string;
+  }
+): string {
+  const isDemo = mode === 'demo';
+  const title = isDemo ? 'New Demo Request' : 'New Contact Form Submission';
+
+  const detailsHtml = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Name:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">${formData.name}</td>
+      </tr>
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Email:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><a href="mailto:${formData.email}">${formData.email}</a></td>
+      </tr>
+      ${formData.phone ? `
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">${formData.phone}</td>
+      </tr>
+      ` : ''}
+      ${formData.company ? `
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Organization:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">${formData.company}</td>
+      </tr>
+      ` : ''}
+      ${formData.communitySize ? `
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Community Size:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">${formData.communitySize}</td>
+      </tr>
+      ` : ''}
+      ${formData.preferredTime ? `
+      <tr>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;"><strong>Preferred Time:</strong></td>
+        <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">${formData.preferredTime}</td>
+      </tr>
+      ` : ''}
+    </table>
+  `;
+
+  return buildEmailTemplate({
+    title,
+    preheader: isDemo
+      ? `${formData.name} from ${formData.company || 'unknown organization'} wants a demo`
+      : `${formData.name} sent a message via the contact form`,
+    status: 'action',
+    mainContent: `
+      <p>A new ${isDemo ? 'demo request' : 'contact form submission'} has been received:</p>
+      <div class="highlight-box">
+        ${detailsHtml}
+      </div>
+      ${formData.message ? `
+        <p><strong>Message:</strong></p>
+        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+          <p style="margin: 0; white-space: pre-wrap;">${formData.message}</p>
+        </div>
+      ` : ''}
+    `,
+    actionButton: {
+      text: `Reply to ${formData.name}`,
+      url: `mailto:${formData.email}?subject=${encodeURIComponent(isDemo ? 'RE: Your POA Association Demo Request' : 'RE: Your POA Association Inquiry')}`,
+    },
+    secondaryContent: `
+      <strong>Response Time</strong><br>${isDemo
+        ? 'Demo requests should be responded to within 24 business hours.'
+        : 'Contact form submissions should be acknowledged within 48 hours.'}
+    `,
+  });
+}

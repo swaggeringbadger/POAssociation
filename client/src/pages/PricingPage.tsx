@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { ContactModal } from "@/components/ContactModal";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -561,7 +562,7 @@ function FAQSection() {
 }
 
 // Enterprise CTA
-function EnterpriseCTA() {
+function EnterpriseCTA({ onContactSales }: { onContactSales: () => void }) {
   return (
     <section className="py-16">
       <div className="max-w-4xl mx-auto px-4">
@@ -592,7 +593,7 @@ function EnterpriseCTA() {
                   </li>
                 </ul>
               </div>
-              <Button size="lg" className="shrink-0">
+              <Button size="lg" className="shrink-0" onClick={onContactSales}>
                 <Mail className="mr-2 h-4 w-4" />
                 Contact Sales
               </Button>
@@ -628,6 +629,7 @@ function Footer() {
 // Main Page Component
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -639,9 +641,15 @@ export default function PricingPage() {
         <CreditOperationsSection />
         <FreeFeaturesSection />
         <FAQSection />
-        <EnterpriseCTA />
+        <EnterpriseCTA onContactSales={() => setContactModalOpen(true)} />
       </main>
       <Footer />
+
+      <ContactModal
+        open={contactModalOpen}
+        onOpenChange={setContactModalOpen}
+        mode="contact"
+      />
     </div>
   );
 }
