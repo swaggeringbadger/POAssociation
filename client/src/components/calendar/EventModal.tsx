@@ -41,6 +41,8 @@ import {
   Users,
   FileText,
   Link2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { format, addHours, setHours, setMinutes, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -97,6 +99,7 @@ export default function EventModal({
   const [meetingUrl, setMeetingUrl] = useState("");
   const [reminderDays, setReminderDays] = useState<number[]>([7, 1]);
   const [noticeRequiredDays, setNoticeRequiredDays] = useState<string>("");
+  const [isPublic, setIsPublic] = useState(true);
   const [activeTab, setActiveTab] = useState("details");
 
   // Filter tenants (management companies and communities)
@@ -129,6 +132,7 @@ export default function EventModal({
       setMeetingUrl(event.meetingUrl || "");
       setReminderDays(event.reminderDays || [7, 1]);
       setNoticeRequiredDays(event.noticeRequiredDays?.toString() || "");
+      setIsPublic(event.isPublic ?? true);
     } else {
       // Reset to defaults for new event
       const defaultDate = initialDate || new Date();
@@ -145,6 +149,7 @@ export default function EventModal({
       setMeetingUrl("");
       setReminderDays([7, 1]);
       setNoticeRequiredDays("");
+      setIsPublic(true);
     }
     setActiveTab("details");
   }, [event, open, initialDate, firstTenantId, firstEventTypeId]);
@@ -264,6 +269,7 @@ export default function EventModal({
       meetingUrl: meetingUrl.trim() || undefined,
       reminderDays,
       noticeRequiredDays: noticeRequiredDays ? parseInt(noticeRequiredDays, 10) : undefined,
+      isPublic,
     };
 
     if (isCreating) {
@@ -560,6 +566,33 @@ export default function EventModal({
               />
               <p className="text-sm text-muted-foreground">
                 For compliance tracking - how many days notice is required before this event
+              </p>
+            </div>
+
+            {/* Visibility Toggle */}
+            <div className="space-y-3 pt-2 border-t">
+              <Label className="flex items-center gap-2">
+                {isPublic ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                Event Visibility
+              </Label>
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">
+                    {isPublic ? "Public to Community" : "Board & Staff Only"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {isPublic
+                      ? "All community members (homeowners) can see this event"
+                      : "Only board members, managers, and staff can see this event"}
+                  </div>
+                </div>
+                <Switch
+                  checked={isPublic}
+                  onCheckedChange={setIsPublic}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Use "Board & Staff Only" for internal events like inspections or executive sessions
               </p>
             </div>
           </TabsContent>

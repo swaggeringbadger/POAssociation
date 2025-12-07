@@ -772,6 +772,11 @@ export const events = pgTable("events", {
   // Status
   status: text("status").notNull().default('scheduled'),
 
+  // Visibility - controls who can see this event
+  // 'public' = visible to all community members (homeowners, board, etc.)
+  // 'board' = visible only to board members, managers, and staff
+  isPublic: boolean("is_public").default(true).notNull(),
+
   // Recurrence (iCal RRULE format for flexibility)
   recurrenceRule: text("recurrence_rule"), // e.g., "FREQ=MONTHLY;BYDAY=1TU"
   recurrenceEndDate: timestamp("recurrence_end_date"),

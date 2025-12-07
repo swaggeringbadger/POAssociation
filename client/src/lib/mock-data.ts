@@ -89,7 +89,7 @@ export const NAV_ITEMS = [
     label: 'Calendar',
     icon: Calendar,
     href: '/calendar',
-    roles: ['management_rep', 'management_manager', 'super_admin']
+    roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
   },
   {
     label: 'Form Wizard',

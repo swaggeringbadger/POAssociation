@@ -3834,26 +3834,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userTenants = await storage.getUserTenants(userId);
     const userRoles = userTenants.map(ut => ut.role);
 
-    // Full access roles can create/edit/delete events
+    // Full access roles can create/edit/delete events AND see all events (public + non-public)
     const fullAccessRoles = ['management_manager', 'super_admin', 'poa_board_member', 'account_admin'];
-    // Read-only roles can view events
-    const readOnlyRoles = ['management_rep', 'poa_board_contributor', 'homeowner'];
+    // Staff roles can view all events (public + non-public) but not create/edit
+    const staffRoles = ['management_rep', 'poa_board_contributor'];
+    // Member roles can only view public events
+    const memberRoles = ['homeowner'];
 
     if (fullAccessRoles.some(r => userRoles.includes(r))) {
       req.eventsAccess = 'full';
+      req.canSeeNonPublic = true; // Can see board-only events
       req.userTenants = userTenants;
       return next();
     }
 
-    if (req.method === 'GET' && readOnlyRoles.some(r => userRoles.includes(r))) {
+    if (req.method === 'GET' && staffRoles.some(r => userRoles.includes(r))) {
       req.eventsAccess = 'read';
+      req.canSeeNonPublic = true; // Staff can see board-only events
       req.userTenants = userTenants;
       return next();
     }
 
-    // If user has any tenant access, allow read-only for events
+    if (req.method === 'GET' && memberRoles.some(r => userRoles.includes(r))) {
+      req.eventsAccess = 'read';
+      req.canSeeNonPublic = false; // Members can only see public events
+      req.userTenants = userTenants;
+      return next();
+    }
+
+    // If user has any tenant access, allow read-only for public events only
     if (req.method === 'GET' && userTenants.length > 0) {
       req.eventsAccess = 'read';
+      req.canSeeNonPublic = false;
       req.userTenants = userTenants;
       return next();
     }
@@ -3901,8 +3913,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
 
       const events = await storage.listEvents(filters);
-      // Filter to accessible events
-      const accessibleEvents = events.filter(event => tenantIds.includes(event.tenantId));
+      // Filter to accessible events based on tenant AND visibility
+      const accessibleEvents = events.filter(event => {
+        // Must have access to the tenant
+        if (!tenantIds.includes(event.tenantId)) return false;
+        // If user can't see non-public events, filter to only public ones
+        if (!req.canSeeNonPublic && !event.isPublic) return false;
+        return true;
+      });
 
       res.json(accessibleEvents);
     } catch (error: any) {
@@ -3928,7 +3946,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Date(endDate as string)
       );
 
-      res.json(events);
+      // Filter based on visibility - homeowners can only see public events
+      const accessibleEvents = req.canSeeNonPublic
+        ? events
+        : events.filter(event => event.isPublic);
+
+      res.json(accessibleEvents);
     } catch (error: any) {
       console.error('Error getting calendar events:', error);
       res.status(500).json({ error: error.message });
@@ -3946,6 +3969,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check access
       const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
       if (!tenantIds.includes(event.tenantId)) {
+        return res.status(403).json({ error: 'Access denied to this event' });
+      }
+
+      // Check visibility - non-public events require staff/board access
+      if (!event.isPublic && !req.canSeeNonPublic) {
         return res.status(403).json({ error: 'Access denied to this event' });
       }
 

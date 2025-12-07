@@ -1116,6 +1116,7 @@ export interface CalendarEvent {
   reminderDays: number[] | null;
   noticeRequiredDays: number | null;
   noticeSentAt: string | null;
+  isPublic: boolean;
   createdByUserId: string | null;
   demoCodeId: string | null;
   createdAt: string;
