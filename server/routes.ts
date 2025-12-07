@@ -3825,10 +3825,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Events access middleware - more permissive than compliance
   // Board members, managers, and reps can all access calendar
   const requireEventsAccess = async (req: any, res: any, next: any) => {
-    const userId = req.userId;
+    const userId = req.session?.userId || req.user?.claims?.sub;
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
+    req.userId = userId; // Set for downstream handlers
 
     // Get user's roles across all tenants
     const userTenants = await storage.getUserTenants(userId);
