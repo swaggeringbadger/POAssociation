@@ -3874,7 +3874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // List event types
-  app.get('/api/events/types', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/types', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const types = await storage.listEventTypes();
       res.json(types);
@@ -3885,7 +3885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get event type by ID
-  app.get('/api/events/types/:id', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/types/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const eventType = await storage.getEventType(req.params.id);
       if (!eventType) {
@@ -3899,7 +3899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List events with filters
-  app.get('/api/events', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const filters = {
         tenantId: req.query.tenantId as string | undefined,
@@ -3930,7 +3930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get calendar events (for month/range view)
-  app.get('/api/events/calendar', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/calendar', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) {
@@ -3959,7 +3959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single event with attendees, documents, and applications
-  app.get('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const event = await storage.getEvent(req.params.id);
       if (!event) {
@@ -3985,7 +3985,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create event
-  app.post('/api/events', requireEventsAccess, async (req: any, res) => {
+  app.post('/api/events', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4009,7 +4009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update event
-  app.patch('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+  app.patch('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4024,7 +4024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete event
-  app.delete('/api/events/:id', requireEventsAccess, async (req: any, res) => {
+  app.delete('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4039,7 +4039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete event
-  app.post('/api/events/:id/complete', requireEventsAccess, async (req: any, res) => {
+  app.post('/api/events/:id/complete', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4054,7 +4054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cancel event
-  app.post('/api/events/:id/cancel', requireEventsAccess, async (req: any, res) => {
+  app.post('/api/events/:id/cancel', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4073,7 +4073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
 
   // List attendees for an event
-  app.get('/api/events/:eventId/attendees', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/:eventId/attendees', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const attendees = await storage.listEventAttendees(req.params.eventId);
       res.json(attendees);
@@ -4084,7 +4084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add attendee to event
-  app.post('/api/events/:eventId/attendees', requireEventsAccess, async (req: any, res) => {
+  app.post('/api/events/:eventId/attendees', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4102,7 +4102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update attendee (RSVP, attendance)
-  app.patch('/api/events/:eventId/attendees/:attendeeId', requireEventsAccess, async (req: any, res) => {
+  app.patch('/api/events/:eventId/attendees/:attendeeId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       // Allow users to update their own RSVP even with read-only access
       const attendee = await storage.getEventAttendee(req.params.attendeeId);
@@ -4129,7 +4129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Remove attendee from event
-  app.delete('/api/events/:eventId/attendees/:attendeeId', requireEventsAccess, async (req: any, res) => {
+  app.delete('/api/events/:eventId/attendees/:attendeeId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4148,7 +4148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
 
   // List documents for an event
-  app.get('/api/events/:eventId/documents', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/:eventId/documents', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const documents = await storage.listEventDocuments(req.params.eventId);
       res.json(documents);
@@ -4159,7 +4159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload document to event
-  app.post('/api/events/:eventId/documents', requireEventsAccess, upload.single('file'), async (req: any, res) => {
+  app.post('/api/events/:eventId/documents', isAuthenticated, requireEventsAccess, upload.single('file'), async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4204,7 +4204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Download event document
-  app.get('/api/events/documents/:id/download', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/documents/:id/download', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const doc = await storage.getEventDocument(req.params.id);
       if (!doc) {
@@ -4229,7 +4229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete event document
-  app.delete('/api/events/documents/:id', requireEventsAccess, async (req: any, res) => {
+  app.delete('/api/events/documents/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4253,7 +4253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
 
   // List applications linked to an event
-  app.get('/api/events/:eventId/applications', requireEventsAccess, async (req: any, res) => {
+  app.get('/api/events/:eventId/applications', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       const applications = await storage.listEventApplications(req.params.eventId);
       res.json(applications);
@@ -4264,7 +4264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Link application to event
-  app.post('/api/events/:eventId/applications', requireEventsAccess, async (req: any, res) => {
+  app.post('/api/events/:eventId/applications', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4285,7 +4285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update application link (order, notes, decision)
-  app.patch('/api/events/:eventId/applications/:linkId', requireEventsAccess, async (req: any, res) => {
+  app.patch('/api/events/:eventId/applications/:linkId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -4300,7 +4300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Unlink application from event
-  app.delete('/api/events/:eventId/applications/:linkId', requireEventsAccess, async (req: any, res) => {
+  app.delete('/api/events/:eventId/applications/:linkId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
