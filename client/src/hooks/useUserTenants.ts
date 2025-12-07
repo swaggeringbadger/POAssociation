@@ -67,8 +67,14 @@ export function useUserTenants() {
   // Update store when user tenants are loaded
   useEffect(() => {
     if (userTenants && userTenants.length > 0) {
-      // Extract unique tenants
-      const tenants = userTenants.map(ut => ut.tenant);
+      // Extract unique tenants (dedupe by id since user may have multiple roles per tenant)
+      const tenantsMap = new Map<string, typeof userTenants[0]['tenant']>();
+      userTenants.forEach(ut => {
+        if (!tenantsMap.has(ut.tenant.id)) {
+          tenantsMap.set(ut.tenant.id, ut.tenant);
+        }
+      });
+      const tenants = Array.from(tenantsMap.values());
       setAvailableTenants(tenants);
 
       // If no current tenant is set, set the first one

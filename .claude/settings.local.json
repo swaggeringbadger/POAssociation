@@ -70,7 +70,10 @@
       "Bash(git -C /home/runner/workspace diff --stat)",
       "Bash(git -C /home/runner/workspace diff server/routes.ts)",
       "Bash(git -C /home/runner/workspace diff server/emailTemplates.ts)",
-      "Bash(git -C /home/runner/workspace add -A)"
+      "Bash(git -C /home/runner/workspace add -A)",
+      "Bash(git -C /home/runner/workspace log --oneline -5)",
+      "Bash(git -C /home/runner/workspace commit -m \"$(cat <<''EOF''\nAdd public contact form and improve calendar permissions\n\nNew features:\n- Public contact form endpoint (POST /api/public/contact)\n- Contact form and demo request email templates\n- Sends to POA_CONTACT_EMAIL with proper formatting\n\nImprovements:\n- Calendar/events middleware now allows more roles to access\n- Board members, managers, reps can view calendar\n- Read-only access for homeowners and contributors\n- Updated DemoPersonaSelect styling\n- Updated PricingPage layout\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C /home/runner/workspace commit -m \"$(cat <<''EOF''\nFix duplicate tenants in community switcher dropdown\n\nWhen a user has multiple roles on the same tenant (e.g., both\nmanagement_manager and account_admin on Apex Management), the\ntenant was appearing multiple times in the dropdown.\n\nFixed by deduping tenants by ID before storing in availableTenants.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
