@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import {
   ArrowRight,
   Brain,
@@ -297,7 +297,6 @@ function PricingSection({ onContact }: { onContact: () => void }) {
       overageCost: "$2.00/credit",
       features: [
         "All features included",
-        "Unlimited users",
         "Custom workflows",
         "AI analysis & forms",
         "Compliance tracking",
@@ -314,7 +313,6 @@ function PricingSection({ onContact }: { onContact: () => void }) {
       overageCost: "$1.75/credit",
       features: [
         "All features included",
-        "Unlimited users",
         "Custom workflows",
         "AI analysis & forms",
         "Compliance tracking",
@@ -331,7 +329,6 @@ function PricingSection({ onContact }: { onContact: () => void }) {
       overageCost: "$1.50/credit",
       features: [
         "All features included",
-        "Unlimited users",
         "Custom workflows",
         "AI analysis & forms",
         "Compliance tracking",
@@ -348,7 +345,6 @@ function PricingSection({ onContact }: { onContact: () => void }) {
       overageCost: "$1.25/credit",
       features: [
         "All features included",
-        "Unlimited users",
         "Custom workflows",
         "AI analysis & forms",
         "Compliance tracking",
@@ -590,12 +586,15 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
             &copy; {new Date().getFullYear()} POA Association. All rights reserved.
           </p>
           <div className="flex gap-6">
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/legal?tab=privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Privacy Policy
-            </a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            </Link>
+            <Link href="/legal?tab=terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Terms of Service
-            </a>
+            </Link>
+            <Link href="/legal" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Legal
+            </Link>
           </div>
         </div>
       </div>

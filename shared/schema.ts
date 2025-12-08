@@ -778,9 +778,11 @@ export const events = pgTable("events", {
   isPublic: boolean("is_public").default(true).notNull(),
 
   // Recurrence (iCal RRULE format for flexibility)
-  recurrenceRule: text("recurrence_rule"), // e.g., "FREQ=MONTHLY;BYDAY=1TU"
+  recurrenceRule: text("recurrence_rule"), // e.g., "FREQ=MONTHLY;BYDAY=3TH" for 3rd Thursday
   recurrenceEndDate: timestamp("recurrence_end_date"),
   parentEventId: varchar("parent_event_id").references((): AnyPgColumn => events.id, { onDelete: "cascade" }),
+  exceptionDates: text("exception_dates"), // Comma-separated ISO dates of deleted occurrences
+  originalOccurrenceDate: text("original_occurrence_date"), // For exception events: the date this exception replaces
 
   // Reminders & Notices
   reminderDays: jsonb("reminder_days").$type<number[]>().default(sql`'[7, 1]'`),

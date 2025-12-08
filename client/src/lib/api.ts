@@ -1121,9 +1121,15 @@ export interface CalendarEvent {
   demoCodeId: string | null;
   createdAt: string;
   updatedAt: string;
+  exceptionDates: string | null;
+  originalOccurrenceDate: string | null;
   // Joined data
   eventType?: EventType;
   tenant?: { id: string; name: string };
+  // Recurrence instance metadata (added by server during expansion)
+  isRecurrenceInstance?: boolean;
+  originalDate?: string; // YYYY-MM-DD of this occurrence
+  seriesId?: string; // ID of the parent recurring event
 }
 
 export interface EventWithDetails extends CalendarEvent {
@@ -1186,6 +1192,11 @@ export interface EventFilters {
   status?: string;
   startAfter?: string;
   startBefore?: string;
+}
+
+// Get tenants user can create events for
+export async function getEventTenants(): Promise<Array<{ id: string; name: string; type: string }>> {
+  return apiRequest('GET', '/api/events/tenants');
 }
 
 // List all event types
@@ -1276,6 +1287,51 @@ export async function completeEvent(id: string): Promise<CalendarEvent> {
 // Cancel an event
 export async function cancelEvent(id: string): Promise<CalendarEvent> {
   return apiRequest('POST', `/api/events/${id}/cancel`);
+}
+
+// ============================================================
+// RECURRING EVENT OCCURRENCE API METHODS
+// ============================================================
+
+export type RecurrenceEditMode = 'single' | 'thisAndFuture' | 'all';
+
+// Edit a single occurrence of a recurring event
+export async function editEventOccurrence(
+  eventId: string,
+  originalDate: string,
+  editMode: RecurrenceEditMode,
+  updates: Partial<{
+    title: string;
+    description: string;
+    startDatetime: string;
+    endDatetime: string;
+    allDay: boolean;
+    location: string;
+    meetingUrl: string;
+    reminderDays: number[];
+    noticeRequiredDays: number;
+    isPublic: boolean;
+    recurrenceRule: string | null;
+    recurrenceEndDate: string | null;
+  }>
+): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/occurrence`, {
+    originalDate,
+    editMode,
+    ...updates,
+  });
+}
+
+// Delete occurrence(s) of a recurring event
+export async function deleteEventOccurrence(
+  eventId: string,
+  originalDate: string,
+  deleteMode: RecurrenceEditMode
+): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${eventId}/occurrence`, {
+    originalDate,
+    deleteMode,
+  });
 }
 
 // ============================================================

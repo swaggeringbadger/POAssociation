@@ -38,6 +38,7 @@ import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
 import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import PricingPage from "@/pages/PricingPage";
+import LegalPage from "@/pages/LegalPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -81,6 +82,9 @@ function Router() {
 
       {/* Public pricing page - accessible without auth */}
       <Route path="/pricing" component={PricingPage} />
+
+      {/* Public legal page - accessible without auth */}
+      <Route path="/legal" component={LegalPage} />
 
       {/* Community landing for subdomain access when not authenticated */}
       {showCommunityLanding && (

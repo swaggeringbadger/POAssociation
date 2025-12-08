@@ -3825,7 +3825,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Events access middleware - more permissive than compliance
   // Board members, managers, and reps can all access calendar
   const requireEventsAccess = async (req: any, res: any, next: any) => {
+    console.log('requireEventsAccess - session:', req.session);
+    console.log('requireEventsAccess - user:', req.user);
     const userId = req.session?.userId || req.user?.claims?.sub;
+    console.log('requireEventsAccess - userId:', userId);
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
@@ -3959,6 +3962,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get tenants user can create events for
+  // IMPORTANT: This must come BEFORE /api/events/:id to avoid route matching issues
+  app.get('/api/events/tenants', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      // Return tenants the user has access to for event creation
+      const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      const tenants = await Promise.all(
+        [...new Set(tenantIds)].map(async (id: string) => {
+          const tenant = await storage.getTenant(id);
+          return tenant;
+        })
+      );
+      // Filter out nulls and return with basic info
+      const validTenants = tenants.filter(Boolean).map(t => ({
+        id: t!.id,
+        name: t!.name,
+        type: t!.type,
+      }));
+      res.json(validTenants);
+    } catch (error: any) {
+      console.error('Error getting event tenants:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get single event with attendees, documents, and applications
   app.get('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
@@ -3988,7 +4016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create event
   app.post('/api/events', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -3998,10 +4026,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: 'No access to this tenant' });
       }
 
-      const event = await storage.createEvent({
+      // Convert date strings to Date objects for Drizzle timestamp fields
+      const eventData = {
         ...req.body,
         createdByUserId: req.userId,
-      });
+        startDatetime: req.body.startDatetime ? new Date(req.body.startDatetime) : undefined,
+        endDatetime: req.body.endDatetime ? new Date(req.body.endDatetime) : undefined,
+        recurrenceEndDate: req.body.recurrenceEndDate ? new Date(req.body.recurrenceEndDate) : undefined,
+      };
+
+      const event = await storage.createEvent(eventData);
       res.status(201).json(event);
     } catch (error: any) {
       console.error('Error creating event:', error);
@@ -4012,11 +4046,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update event
   app.patch('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
-      const event = await storage.updateEvent(req.params.id, req.body);
+      // Convert date strings to Date objects for Drizzle timestamp fields
+      const updates: any = { ...req.body };
+      if (updates.startDatetime) updates.startDatetime = new Date(updates.startDatetime);
+      if (updates.endDatetime) updates.endDatetime = new Date(updates.endDatetime);
+      if (updates.recurrenceEndDate) updates.recurrenceEndDate = new Date(updates.recurrenceEndDate);
+
+      const event = await storage.updateEvent(req.params.id, updates);
       res.json(event);
     } catch (error: any) {
       console.error('Error updating event:', error);
@@ -4027,7 +4067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete event
   app.delete('/api/events/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4042,7 +4082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete event
   app.post('/api/events/:id/complete', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4057,7 +4097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cancel event
   app.post('/api/events/:id/cancel', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4065,6 +4105,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(event);
     } catch (error: any) {
       console.error('Error cancelling event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // RECURRING EVENT OCCURRENCE ROUTES
+  // ============================================
+
+  // Edit a single occurrence of a recurring event
+  // editMode: 'single' (this occurrence), 'thisAndFuture' (this and all future), 'all' (entire series)
+  app.post('/api/events/:id/occurrence', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const { id } = req.params;
+      const { originalDate, editMode, ...updates } = req.body;
+
+      if (!originalDate) {
+        return res.status(400).json({ error: 'originalDate is required' });
+      }
+
+      if (!editMode || !['single', 'thisAndFuture', 'all'].includes(editMode)) {
+        return res.status(400).json({ error: 'editMode must be single, thisAndFuture, or all' });
+      }
+
+      // Extract user ID from session or auth
+      const userId = req.userId;
+
+      if (editMode === 'single') {
+        // Create an exception event for this occurrence
+        const exception = await storage.createEventException(id, originalDate, updates, userId);
+        res.json(exception);
+      } else if (editMode === 'thisAndFuture') {
+        // Split the series at this date
+        const result = await storage.splitRecurringSeries(id, originalDate, updates, userId);
+        res.json(result.newSeries);
+      } else {
+        // editMode === 'all' - update the base recurring event
+        const event = await storage.updateEvent(id, updates);
+        res.json(event);
+      }
+    } catch (error: any) {
+      console.error('Error editing event occurrence:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete occurrence(s) of a recurring event
+  // deleteMode: 'single' (this occurrence), 'thisAndFuture' (this and all future), 'all' (entire series)
+  app.delete('/api/events/:id/occurrence', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const { id } = req.params;
+      const { originalDate, deleteMode } = req.body;
+
+      if (!deleteMode || !['single', 'thisAndFuture', 'all'].includes(deleteMode)) {
+        return res.status(400).json({ error: 'deleteMode must be single, thisAndFuture, or all' });
+      }
+
+      if (deleteMode === 'single') {
+        if (!originalDate) {
+          return res.status(400).json({ error: 'originalDate is required for single deletion' });
+        }
+        // Add date to exception dates (marks this occurrence as deleted)
+        await storage.addEventExceptionDate(id, originalDate);
+        res.status(204).send();
+      } else if (deleteMode === 'thisAndFuture') {
+        if (!originalDate) {
+          return res.status(400).json({ error: 'originalDate is required for thisAndFuture deletion' });
+        }
+        // End the series the day before this date
+        const endDate = new Date(originalDate);
+        endDate.setDate(endDate.getDate() - 1);
+        await storage.endRecurringSeries(id, endDate);
+        res.status(204).send();
+      } else {
+        // deleteMode === 'all' - delete the entire series
+        await storage.deleteEvent(id);
+        res.status(204).send();
+      }
+    } catch (error: any) {
+      console.error('Error deleting event occurrence:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -4087,7 +4214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add attendee to event
   app.post('/api/events/:eventId/attendees', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4117,7 +4244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ['responseStatus', 'respondedAt'].includes(k)
       );
 
-      if (req.complianceAccess !== 'full' && !(isSelfUpdate && isRsvpOnlyUpdate)) {
+      if (req.eventsAccess !== 'full' && !(isSelfUpdate && isRsvpOnlyUpdate)) {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4132,7 +4259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove attendee from event
   app.delete('/api/events/:eventId/attendees/:attendeeId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4162,7 +4289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload document to event
   app.post('/api/events/:eventId/documents', isAuthenticated, requireEventsAccess, upload.single('file'), async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4232,7 +4359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete event document
   app.delete('/api/events/documents/:id', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4267,7 +4394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Link application to event
   app.post('/api/events/:eventId/applications', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4288,7 +4415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update application link (order, notes, decision)
   app.patch('/api/events/:eventId/applications/:linkId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 
@@ -4303,7 +4430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Unlink application from event
   app.delete('/api/events/:eventId/applications/:linkId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
-      if (req.complianceAccess !== 'full') {
+      if (req.eventsAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
       }
 

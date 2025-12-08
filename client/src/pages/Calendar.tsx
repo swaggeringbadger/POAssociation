@@ -4,14 +4,16 @@ import {
   listEventTypes,
   listEvents,
   getCalendarEvents,
+  getEventTenants,
   deleteEvent,
   completeEvent,
   cancelEvent,
+  deleteEventOccurrence,
   type CalendarEvent,
   type EventType,
   type EventFilters,
+  type RecurrenceEditMode,
 } from "@/lib/api";
-import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -77,9 +79,11 @@ import {
   Link2,
   ListChecks,
   Grid3X3,
+  Repeat,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import EventModal from "@/components/calendar/EventModal";
+import RecurrenceEditDialog from "@/components/calendar/RecurrenceEditDialog";
 import {
   format,
   startOfMonth,
@@ -153,6 +157,11 @@ export default function Calendar() {
   const [isCreating, setIsCreating] = useState(false);
   const [initialDate, setInitialDate] = useState<Date | null>(null);
 
+  // Recurrence dialog state
+  const [recurrenceDialogOpen, setRecurrenceDialogOpen] = useState(false);
+  const [recurrenceDialogMode, setRecurrenceDialogMode] = useState<'edit' | 'delete'>('edit');
+  const [pendingRecurrenceEvent, setPendingRecurrenceEvent] = useState<CalendarEvent | null>(null);
+
   // Calculate calendar range for the current month view
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -181,10 +190,10 @@ export default function Calendar() {
     enabled: viewMode === "list",
   });
 
-  // Fetch properties for display
-  const { data: properties = [] } = useQuery({
-    queryKey: ["managedProperties"],
-    queryFn: () => api.getManagedProperties(),
+  // Fetch tenants for event creation
+  const { data: eventTenants = [] } = useQuery({
+    queryKey: ["eventTenants"],
+    queryFn: () => getEventTenants(),
   });
 
   // Delete mutation
@@ -249,6 +258,29 @@ export default function Calendar() {
     },
   });
 
+  // Delete occurrence mutation (for recurring events)
+  const deleteOccurrenceMutation = useMutation({
+    mutationFn: ({ eventId, originalDate, deleteMode }: { eventId: string; originalDate: string; deleteMode: RecurrenceEditMode }) =>
+      deleteEventOccurrence(eventId, originalDate, deleteMode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["calendarEvents"] });
+      setRecurrenceDialogOpen(false);
+      setPendingRecurrenceEvent(null);
+      toast({
+        title: "Event deleted",
+        description: "The event occurrence has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Get all days in the calendar view
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
@@ -293,15 +325,73 @@ export default function Calendar() {
   };
 
   const handleEdit = (event: CalendarEvent) => {
-    setIsCreating(false);
-    setSelectedEvent(event);
-    setInitialDate(null);
-    setDialogOpen(true);
+    // Check if this is a recurring event instance
+    if (event.isRecurrenceInstance && event.seriesId) {
+      setPendingRecurrenceEvent(event);
+      setRecurrenceDialogMode('edit');
+      setRecurrenceDialogOpen(true);
+    } else {
+      setIsCreating(false);
+      setSelectedEvent(event);
+      setInitialDate(null);
+      setDialogOpen(true);
+    }
   };
 
   const handleDelete = (event: CalendarEvent) => {
-    setSelectedEvent(event);
-    setDeleteDialogOpen(true);
+    // Check if this is a recurring event instance
+    if (event.isRecurrenceInstance && event.seriesId) {
+      setPendingRecurrenceEvent(event);
+      setRecurrenceDialogMode('delete');
+      setRecurrenceDialogOpen(true);
+    } else {
+      setSelectedEvent(event);
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  // Handle recurrence dialog choice
+  const handleRecurrenceChoice = async (choice: RecurrenceEditMode) => {
+    if (!pendingRecurrenceEvent) return;
+
+    if (recurrenceDialogMode === 'edit') {
+      if (choice === 'all') {
+        // Edit the entire series - load the parent event
+        // For now, we'll just set up for editing with the series ID
+        setIsCreating(false);
+        // The seriesId points to the parent recurring event
+        setSelectedEvent({
+          ...pendingRecurrenceEvent,
+          id: pendingRecurrenceEvent.seriesId!,
+          isRecurrenceInstance: false,
+        });
+        setRecurrenceDialogOpen(false);
+        setPendingRecurrenceEvent(null);
+        setDialogOpen(true);
+      } else {
+        // For 'single' or 'thisAndFuture', we need special handling
+        // Pass metadata to the EventModal to indicate edit mode
+        setIsCreating(false);
+        setSelectedEvent({
+          ...pendingRecurrenceEvent,
+          // Add metadata for the modal to know how to save
+          _editMode: choice,
+        } as CalendarEvent & { _editMode?: RecurrenceEditMode });
+        setRecurrenceDialogOpen(false);
+        setPendingRecurrenceEvent(null);
+        setDialogOpen(true);
+      }
+    } else {
+      // Delete mode
+      const eventId = pendingRecurrenceEvent.seriesId!;
+      const originalDate = pendingRecurrenceEvent.originalDate!;
+
+      deleteOccurrenceMutation.mutate({
+        eventId,
+        originalDate,
+        deleteMode: choice,
+      });
+    }
   };
 
   const handleDateClick = (date: Date) => {
@@ -337,7 +427,7 @@ export default function Calendar() {
   };
 
   const getTenantName = (tenantId: string) => {
-    const tenant = properties.find((p) => p.id === tenantId);
+    const tenant = eventTenants.find((p) => p.id === tenantId);
     return tenant?.name || "Unknown";
   };
 
@@ -484,6 +574,7 @@ export default function Calendar() {
                             )}
                             title={event.title}
                           >
+                            {event.isRecurrenceInstance && <Repeat className="inline h-3 w-3 mr-0.5" />}
                             {event.allDay ? "" : format(parseISO(event.startDatetime), "h:mm a")} {event.title}
                           </div>
                         ))}
@@ -529,10 +620,11 @@ export default function Calendar() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
                               <p className={cn(
-                                "font-medium truncate",
+                                "font-medium truncate flex items-center gap-1",
                                 event.status === 'cancelled' && "line-through text-muted-foreground"
                               )}>
-                                {event.title}
+                                {event.isRecurrenceInstance && <Repeat className="h-3 w-3 flex-shrink-0" />}
+                                <span className="truncate">{event.title}</span>
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 {event.allDay
@@ -771,7 +863,7 @@ export default function Calendar() {
         isCreating={isCreating}
         initialDate={initialDate}
         eventTypes={eventTypes}
-        tenants={properties}
+        tenants={eventTenants}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -794,6 +886,15 @@ export default function Calendar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Recurrence Edit/Delete Dialog */}
+      <RecurrenceEditDialog
+        open={recurrenceDialogOpen}
+        onOpenChange={setRecurrenceDialogOpen}
+        mode={recurrenceDialogMode}
+        onChoice={handleRecurrenceChoice}
+        eventTitle={pendingRecurrenceEvent?.title}
+      />
     </div>
   );
 }

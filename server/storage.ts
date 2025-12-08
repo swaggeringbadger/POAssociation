@@ -1,8 +1,9 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, or, sql, inArray, desc, lt } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, lt, isNull, isNotNull } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { workflowEngine } from "./workflowEngine";
+import { expandRecurringEvents, type ExpandedEvent, type EventWithType } from "./recurrenceExpander";
 import ws from "ws";
 
 neonConfig.webSocketConstructor = ws;
@@ -242,8 +243,14 @@ export interface IStorage {
   updateEventApplication(id: string, updates: Partial<schema.InsertEventApplication>): Promise<schema.EventApplication>;
   removeEventApplication(id: string): Promise<void>;
 
-  // Calendar View
-  getCalendarEvents(tenantIds: string[], startDate: Date, endDate: Date): Promise<(schema.Event & { eventType: schema.EventType })[]>;
+  // Calendar View (with recurring event expansion)
+  getCalendarEvents(tenantIds: string[], startDate: Date, endDate: Date): Promise<ExpandedEvent[]>;
+
+  // Recurring Event Exception Handling
+  addEventExceptionDate(eventId: string, date: string): Promise<schema.Event>;
+  createEventException(parentId: string, originalDate: string, updates: Partial<schema.InsertEvent>, userId: string): Promise<schema.Event>;
+  splitRecurringSeries(parentId: string, splitDate: string, updates: Partial<schema.InsertEvent>, userId: string): Promise<{ original: schema.Event; newSeries: schema.Event }>;
+  endRecurringSeries(eventId: string, endDate: Date): Promise<schema.Event>;
 
   // AI Analysis Credits
   getAiAnalysisCredits(tenantId: string): Promise<schema.AiAnalysisCredits | undefined>;
@@ -2184,8 +2191,9 @@ export class DbStorage implements IStorage {
     await db.delete(schema.eventApplications).where(eq(schema.eventApplications.id, id));
   }
 
-  // Calendar View
-  async getCalendarEvents(tenantIds: string[], startDate: Date, endDate: Date): Promise<(schema.Event & { eventType: schema.EventType })[]> {
+  // Calendar View (with recurring event expansion)
+  async getCalendarEvents(tenantIds: string[], startDate: Date, endDate: Date): Promise<ExpandedEvent[]> {
+    // Query 1: Get non-recurring events in range + recurring base events that may have instances in range
     const events = await db
       .select({
         event: schema.events,
@@ -2195,15 +2203,211 @@ export class DbStorage implements IStorage {
       .leftJoin(schema.eventTypes, eq(schema.events.eventTypeId, schema.eventTypes.id))
       .where(and(
         inArray(schema.events.tenantId, tenantIds),
-        sql`${schema.events.startDatetime} >= ${startDate}`,
-        sql`${schema.events.startDatetime} <= ${endDate}`
+        isNull(schema.events.parentEventId), // Exclude exception events (handled separately)
+        or(
+          // Non-recurring events in range
+          and(
+            isNull(schema.events.recurrenceRule),
+            sql`${schema.events.startDatetime} >= ${startDate}`,
+            sql`${schema.events.startDatetime} <= ${endDate}`
+          ),
+          // Recurring events that might have instances in range
+          // (started before end of range, and either no end date or ends after start of range)
+          and(
+            isNotNull(schema.events.recurrenceRule),
+            sql`${schema.events.startDatetime} <= ${endDate}`,
+            or(
+              isNull(schema.events.recurrenceEndDate),
+              sql`${schema.events.recurrenceEndDate} >= ${startDate}`
+            )
+          )
+        )
       ))
       .orderBy(schema.events.startDatetime);
 
-    return events.map(row => ({
+    // Get the IDs of recurring events for exception lookup
+    const recurringEventIds = events
+      .filter(row => row.event.recurrenceRule)
+      .map(row => row.event.id);
+
+    // Query 2: Get exception events for the recurring events in range
+    let exceptionEvents: EventWithType[] = [];
+    if (recurringEventIds.length > 0) {
+      const exceptions = await db
+        .select({
+          event: schema.events,
+          eventType: schema.eventTypes,
+        })
+        .from(schema.events)
+        .leftJoin(schema.eventTypes, eq(schema.events.eventTypeId, schema.eventTypes.id))
+        .where(and(
+          inArray(schema.events.parentEventId, recurringEventIds),
+          sql`${schema.events.startDatetime} >= ${startDate}`,
+          sql`${schema.events.startDatetime} <= ${endDate}`
+        ));
+
+      exceptionEvents = exceptions.map(row => ({
+        ...row.event,
+        eventType: row.eventType,
+      }));
+    }
+
+    // Map events to EventWithType format
+    const eventsWithType: EventWithType[] = events.map(row => ({
       ...row.event,
-      eventType: row.eventType!,
+      eventType: row.eventType,
     }));
+
+    // Expand recurring events and merge with exceptions
+    return expandRecurringEvents(eventsWithType, exceptionEvents, startDate, endDate);
+  }
+
+  // ============================================
+  // RECURRING EVENT EXCEPTION HANDLING
+  // ============================================
+
+  // Add a date to the exception dates (marks an occurrence as deleted)
+  async addEventExceptionDate(eventId: string, date: string): Promise<schema.Event> {
+    const event = await this.getEvent(eventId);
+    if (!event) {
+      throw new Error('Event not found');
+    }
+
+    // Parse existing exception dates and add the new one
+    const existingDates = event.exceptionDates ? event.exceptionDates.split(',').filter(d => d) : [];
+    if (!existingDates.includes(date)) {
+      existingDates.push(date);
+    }
+    existingDates.sort();
+
+    const [updated] = await db
+      .update(schema.events)
+      .set({
+        exceptionDates: existingDates.join(','),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+
+    return updated;
+  }
+
+  // Create an exception event that overrides a specific occurrence
+  async createEventException(
+    parentId: string,
+    originalDate: string,
+    updates: Partial<schema.InsertEvent>,
+    userId: string
+  ): Promise<schema.Event> {
+    const parent = await this.getEvent(parentId);
+    if (!parent) {
+      throw new Error('Parent event not found');
+    }
+
+    // Create the exception event
+    const [exception] = await db
+      .insert(schema.events)
+      .values({
+        tenantId: parent.tenantId,
+        eventTypeId: parent.eventTypeId,
+        title: updates.title || parent.title,
+        description: updates.description !== undefined ? updates.description : parent.description,
+        startDatetime: updates.startDatetime ? new Date(updates.startDatetime as string) : parent.startDatetime,
+        endDatetime: updates.endDatetime ? new Date(updates.endDatetime as string) : parent.endDatetime,
+        allDay: updates.allDay !== undefined ? updates.allDay : parent.allDay,
+        location: updates.location !== undefined ? updates.location : parent.location,
+        meetingUrl: updates.meetingUrl !== undefined ? updates.meetingUrl : parent.meetingUrl,
+        status: updates.status || parent.status,
+        isPublic: updates.isPublic !== undefined ? updates.isPublic : parent.isPublic,
+        reminderDays: updates.reminderDays !== undefined ? updates.reminderDays : parent.reminderDays,
+        noticeRequiredDays: updates.noticeRequiredDays !== undefined ? updates.noticeRequiredDays : parent.noticeRequiredDays,
+        parentEventId: parentId,
+        originalOccurrenceDate: originalDate,
+        recurrenceRule: null, // Exception events don't recur
+        recurrenceEndDate: null,
+        createdByUserId: userId,
+        demoCodeId: parent.demoCodeId,
+      })
+      .returning();
+
+    // Add the original date to the parent's exception dates so we don't show duplicates
+    await this.addEventExceptionDate(parentId, originalDate);
+
+    return exception;
+  }
+
+  // Split a recurring series at a given date (for "edit this and future" operations)
+  async splitRecurringSeries(
+    parentId: string,
+    splitDate: string,
+    updates: Partial<schema.InsertEvent>,
+    userId: string
+  ): Promise<{ original: schema.Event; newSeries: schema.Event }> {
+    const parent = await this.getEvent(parentId);
+    if (!parent || !parent.recurrenceRule) {
+      throw new Error('Parent event not found or is not recurring');
+    }
+
+    // End the original series the day before the split date
+    const endDate = new Date(splitDate);
+    endDate.setDate(endDate.getDate() - 1);
+
+    const [original] = await db
+      .update(schema.events)
+      .set({
+        recurrenceEndDate: endDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, parentId))
+      .returning();
+
+    // Create a new recurring event starting from the split date
+    const splitDateTime = new Date(splitDate);
+    // Preserve the original time
+    splitDateTime.setHours(parent.startDatetime.getHours());
+    splitDateTime.setMinutes(parent.startDatetime.getMinutes());
+
+    const duration = parent.endDatetime.getTime() - parent.startDatetime.getTime();
+    const newEndDateTime = new Date(splitDateTime.getTime() + duration);
+
+    const [newSeries] = await db
+      .insert(schema.events)
+      .values({
+        tenantId: parent.tenantId,
+        eventTypeId: updates.eventTypeId || parent.eventTypeId,
+        title: updates.title || parent.title,
+        description: updates.description !== undefined ? updates.description : parent.description,
+        startDatetime: splitDateTime,
+        endDatetime: newEndDateTime,
+        allDay: updates.allDay !== undefined ? updates.allDay : parent.allDay,
+        location: updates.location !== undefined ? updates.location : parent.location,
+        meetingUrl: updates.meetingUrl !== undefined ? updates.meetingUrl : parent.meetingUrl,
+        status: updates.status || parent.status,
+        isPublic: updates.isPublic !== undefined ? updates.isPublic : parent.isPublic,
+        recurrenceRule: updates.recurrenceRule !== undefined ? updates.recurrenceRule : parent.recurrenceRule,
+        recurrenceEndDate: parent.recurrenceEndDate, // Inherit original end date
+        reminderDays: updates.reminderDays !== undefined ? updates.reminderDays : parent.reminderDays,
+        noticeRequiredDays: updates.noticeRequiredDays !== undefined ? updates.noticeRequiredDays : parent.noticeRequiredDays,
+        createdByUserId: userId,
+        demoCodeId: parent.demoCodeId,
+      })
+      .returning();
+
+    return { original, newSeries };
+  }
+
+  // End a recurring series at a given date (for "delete this and future" operations)
+  async endRecurringSeries(eventId: string, endDate: Date): Promise<schema.Event> {
+    const [updated] = await db
+      .update(schema.events)
+      .set({
+        recurrenceEndDate: endDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+
+    return updated;
   }
 
   // ============================================

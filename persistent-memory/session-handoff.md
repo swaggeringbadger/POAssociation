@@ -1,115 +1,163 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-03
-**Current Session:** Community Custom Landing Pages - COMPLETE
+**Last Updated:** 2025-12-08
+**Current Session:** Calendar Event Creation Fixes
+
+---
+
+## SESSION SUMMARY (2025-12-08)
+
+### Fixed Issues:
+
+1. **Property/Tenant Dropdown Empty** - The calendar event modal was using `getManagedProperties()` which only returns tenants for `account_admin` role. Created new endpoint `GET /api/events/tenants` that returns all tenants the user has access to based on their roles.
+
+2. **Event Creation Permission Error** - All event routes were checking `req.complianceAccess` instead of `req.eventsAccess`. Fixed all event-related routes to check the correct permission property.
+
+3. **rrule ESM Import Fix** - Updated `shared/recurrence.ts` to use default import style for rrule library to fix ESM/CommonJS interop issue.
+
+### Changes Made:
+
+**Server (`server/routes.ts`):**
+- Added `GET /api/events/tenants` endpoint
+- Changed all `req.complianceAccess` to `req.eventsAccess` in event routes
+
+**Client (`client/src/pages/Calendar.tsx`):**
+- Changed from `api.getManagedProperties()` to `getEventTenants()`
+
+**Client (`client/src/lib/api.ts`):**
+- Added `getEventTenants()` function
+
+**Shared (`shared/recurrence.ts`):**
+- Fixed rrule import for ESM compatibility
 
 ---
 
 ## IMMEDIATE NEXT STEPS FOR NEXT SESSION
 
-### 1. Test Community Landing Pages
+### 1. Test Recurring Events Feature
 
-The new feature allows each community to have a custom public landing page accessible via subdomain.
+The new recurring events feature allows scheduling events that repeat on patterns like "every 3rd Thursday".
 
-#### Testing Community Landing Page
+#### Testing Recurring Events
 
-1. **Access via Query Parameter (for testing)**
-   - Go to `https://your-app.replit.app/?subdomain=markland`
-   - Should display the Markland POA community landing page
-   - Shows: Hero image, community name, description, next meeting, contact info, quick links
-
-2. **Test Different Communities**
-   - `?subdomain=markland` - Markland POA
-   - `?subdomain=whispering-pines` - Whispering Pines HOA
-
-3. **Verify Public API Endpoint**
-   ```bash
-   curl http://localhost:5000/api/public/markland/info
-   curl http://localhost:5000/api/public/whispering-pines/info
-   ```
-
-4. **Configure Hero Image (Optional)**
+1. **Create a Recurring Event**
    - Login as Emily (management_manager) or board member
-   - Go to Settings page
-   - Edit Community Settings
-   - Add Hero Image URL (any public image URL)
-   - Save and refresh the landing page
+   - Go to Calendar page
+   - Click "New Event"
+   - Fill in event details (title, type, date/time)
+   - Go to "Repeat" tab
+   - Select frequency: Daily, Weekly, Monthly, or Yearly
+   - For "3rd Thursday" pattern: Select Monthly > "On the Third Thursday"
+   - Set end option: Never, After N occurrences, or On specific date
+   - Preview shows next 5 occurrences
+   - Save the event
 
-#### Landing Page Features
-- **Hero Section**: Community name with custom or default hero image
-- **Next Meeting Card**: Shows upcoming scheduled event (if any)
-- **Contact Info Card**: Phone, email, hours, address from community settings
-- **Quick Links**: Submit Request, View Guidelines, Resident Portal, Community Website
+2. **View Recurring Events on Calendar**
+   - Recurring event instances show a repeat icon
+   - Each occurrence appears on its respective date
+   - Events expand dynamically (no pre-created DB rows)
 
-### 2. Test Hero Image Settings
+3. **Edit/Delete Recurring Events**
+   - Click on a recurring event instance
+   - Dialog asks: "This occurrence only", "This and all future", or "All occurrences"
+   - "This occurrence only" creates an exception for that specific date
+   - "This and all future" splits the series
+   - "All occurrences" modifies/deletes the entire series
 
-1. **Login as Emily or Sarah (board member)**
-2. **Go to Settings > Community Settings**
-3. **Edit Settings**
-   - New "Community Landing Page" section at top
-   - Enter Hero Image URL field
-   - Preview shows the image
-4. **Save and verify on landing page**
+#### Recurrence Patterns Supported
+- **Daily**: Every N days
+- **Weekly**: Every N weeks on specific days (Mon, Wed, Fri, etc.)
+- **Monthly by date**: Every N months on day X (e.g., 15th of every month)
+- **Monthly by weekday**: Every N months on Nth weekday (e.g., 3rd Thursday)
+- **Yearly**: Every N years on same date
+
+#### End Options
+- **Never**: Repeats indefinitely
+- **After N occurrences**: Stops after N repeats
+- **On date**: Stops on specific end date
 
 ---
 
 ## Current Status
 
-### Latest Session Summary (2025-12-03)
+### Latest Session Summary (2025-12-07)
 
-**Session Goal:** Implement Community Custom Landing Pages
+**Session Goal:** Add Recurring Events Feature to Calendar
 
 **Status:** IMPLEMENTATION COMPLETE - READY FOR TESTING
 
 **Completed This Session:**
 
 1. **Database Schema (`shared/schema.ts`):**
-   - Added `heroImageUrl` field to tenants table
-   - Pushed migration via direct SQL (ALTER TABLE)
+   - Added `exceptionDates` field (comma-separated deleted dates)
+   - Added `originalOccurrenceDate` field (for exception events)
+   - Existing fields: `recurrenceRule`, `recurrenceEndDate`, `parentEventId`
 
-2. **Public API Endpoint (`server/routes.ts`):**
-   - `GET /api/public/:subdomain/info` - Returns community info without auth
-   - Returns: tenant (id, name, subdomain, heroImageUrl, designGuidelinesUrl, communitySettings)
-   - Returns: nextEvent (if any scheduled event exists)
-   - Only exposes community type tenants (not management companies)
+2. **Shared Utilities (`shared/recurrence.ts`):**
+   - `configToRRule()` - Convert UI config to iCal RRULE format
+   - `rruleToConfig()` - Parse RRULE back to UI config
+   - `describeRecurrence()` - Human-readable description
+   - `getNextOccurrences()` - Preview next N dates
+   - `getOccurrencesInRange()` - Expand within date range
 
-3. **CommunityLanding Page (`client/src/pages/CommunityLanding.tsx`):**
-   - New public landing page component
-   - Fetches data from public API endpoint
-   - Shows hero image (custom or default)
-   - Shows community name and description
-   - Next Meeting card with "Add to Calendar" button
-   - Contact Information card (phone, email, hours, address)
-   - Quick Links section (Submit Request, View Guidelines, Resident Portal)
-   - Footer with "Powered by POA Association"
+3. **Server Recurrence Expander (`server/recurrenceExpander.ts`):**
+   - `expandRecurringEvents()` - Expand recurring events within range
+   - Applies exception dates (deleted occurrences)
+   - Applies exception events (modified occurrences)
+   - Returns virtual instances with metadata
 
-4. **App Router Updates (`client/src/App.tsx`):**
-   - Added subdomain detection via `/api/subdomain` endpoint
-   - Also supports `?subdomain=markland` query param for testing
-   - Shows CommunityLanding when subdomain detected and user not authenticated
-   - Normal landing page (marketing) shown when no subdomain
+4. **Storage Layer Updates (`server/storage.ts`):**
+   - Modified `getCalendarEvents()` to expand recurring events
+   - Added `addEventExceptionDate()` - Mark occurrence as deleted
+   - Added `createEventException()` - Create modified occurrence
+   - Added `splitRecurringSeries()` - Split series for "this and future"
+   - Added `endRecurringSeries()` - End series at date
 
-5. **Settings Form Updates (`client/src/components/CommunitySettingsCard.tsx`):**
-   - Added "Community Landing Page" section
-   - Hero Image URL field with live preview
-   - Saves heroImageUrl to tenant record
+5. **API Endpoints (`server/routes.ts`):**
+   - `POST /api/events/:id/occurrence` - Edit single occurrence
+   - `DELETE /api/events/:id/occurrence` - Delete occurrence(s)
+   - editMode/deleteMode: 'single', 'thisAndFuture', 'all'
 
-6. **API Types (`client/src/lib/api.ts`):**
-   - Added `heroImageUrl` to Tenant interface
+6. **RecurrenceSelector Component:**
+   - User-friendly recurrence pattern selector
+   - Frequency, interval, weekday selection
+   - Monthly "On day X" vs "On Nth weekday" toggle
+   - End options with preview of next occurrences
+
+7. **RecurrenceEditDialog Component:**
+   - Dialog for choosing edit/delete scope
+   - Options: "This occurrence", "This and future", "All occurrences"
+
+8. **EventModal Updates:**
+   - New "Repeat" tab with RecurrenceSelector
+   - Loads existing recurrence config when editing
+   - Generates RRULE on save
+
+9. **Calendar Page Updates:**
+   - Handles recurring event instances
+   - Shows RecurrenceEditDialog when editing/deleting
+   - Repeat icon on recurring event instances
 
 ---
 
 ## Files Created/Modified This Session
 
 ### New Files:
-- `/client/src/pages/CommunityLanding.tsx` - Public community landing page
+- `/shared/recurrence.ts` - Recurrence utility functions
+- `/server/recurrenceExpander.ts` - Server-side expansion logic
+- `/client/src/components/calendar/RecurrenceSelector.tsx` - UI component
+- `/client/src/components/calendar/RecurrenceEditDialog.tsx` - Edit/delete dialog
 
 ### Modified Files:
-- `/shared/schema.ts` - Added heroImageUrl to tenants table
-- `/server/routes.ts` - Added GET /api/public/:subdomain/info endpoint
-- `/client/src/App.tsx` - Added subdomain routing to CommunityLanding
-- `/client/src/components/CommunitySettingsCard.tsx` - Added heroImageUrl field
-- `/client/src/lib/api.ts` - Added heroImageUrl to Tenant interface
+- `/shared/schema.ts` - Added exceptionDates, originalOccurrenceDate fields
+- `/server/storage.ts` - Recurrence expansion and exception handling
+- `/server/routes.ts` - Occurrence edit/delete endpoints
+- `/client/src/components/calendar/EventModal.tsx` - Recurrence tab
+- `/client/src/pages/Calendar.tsx` - Recurring event handling
+- `/client/src/lib/api.ts` - New types and API functions
+
+### Dependencies Added:
+- `rrule` - RFC 5545 recurrence rule library
 
 ---
 
@@ -135,7 +183,8 @@ The new feature allows each community to have a custom public landing page acces
 - Visual workflow designer
 - Complete billing system with Stripe integration
 - Property-rep assignment system
-- **Community custom landing pages** (NEW)
+- Community custom landing pages
+- **Recurring events support** (NEW)
 
 ### Tech Stack
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 + shadcn/ui
@@ -146,10 +195,30 @@ The new feature allows each community to have a custom public landing page acces
 - **Storage:** Azure Blob Storage
 - **Maps:** Google Maps API (geocoding + satellite imagery)
 - **Payments:** Stripe (customers, invoices, payment methods)
+- **Recurrence:** rrule.js (RFC 5545)
 
 ---
 
 ## Feature Implementation Status
+
+### COMPLETE - Recurring Events
+
+**Key Files:**
+- `/shared/recurrence.ts` - RRULE utilities
+- `/server/recurrenceExpander.ts` - Event expansion
+- `/server/storage.ts` - getCalendarEvents with expansion
+- `/server/routes.ts` - Occurrence edit/delete endpoints
+- `/client/src/components/calendar/RecurrenceSelector.tsx` - UI
+- `/client/src/components/calendar/EventModal.tsx` - Recurrence tab
+
+**RRULE Examples:**
+| Pattern | RRULE |
+|---------|-------|
+| Daily every 2 days | `FREQ=DAILY;INTERVAL=2` |
+| Weekly Mon/Wed/Fri | `FREQ=WEEKLY;BYDAY=MO,WE,FR` |
+| Monthly on 15th | `FREQ=MONTHLY;BYMONTHDAY=15` |
+| Monthly 3rd Thursday | `FREQ=MONTHLY;BYDAY=TH;BYSETPOS=3` |
+| Yearly | `FREQ=YEARLY` |
 
 ### COMPLETE - Community Custom Landing Pages
 
@@ -160,71 +229,21 @@ The new feature allows each community to have a custom public landing page acces
 - `/client/src/App.tsx` - Subdomain routing
 - `/client/src/components/CommunitySettingsCard.tsx` - Hero image settings
 
-**Public API Response:**
-```json
-{
-  "tenant": {
-    "id": "uuid",
-    "name": "Markland POA",
-    "subdomain": "markland",
-    "heroImageUrl": null,
-    "designGuidelinesUrl": null,
-    "communitySettings": { ... }
-  },
-  "nextEvent": {
-    "id": "uuid",
-    "title": "Board Meeting",
-    "startDatetime": "2025-12-15T19:00:00Z",
-    "endDatetime": "2025-12-15T21:00:00Z",
-    "location": "Community Center",
-    "meetingUrl": null,
-    "eventType": { "name": "Board Meeting", "slug": "board_meeting" }
-  }
-}
-```
-
 ### COMPLETE - Management Rep Property Assignment
 
-**Key Files:**
-- `/shared/schema.ts` - propertyRepAssignments table
-- `/server/storage.ts` - 9 storage methods
-- `/server/routes.ts` - 11 API endpoints
-- `/server/provision.ts` - Demo data with Jordan + rep assignments
-- `/client/src/components/PropertyRepAssignmentModal.tsx` - Manager UI
-- `/client/src/components/RepContactCard.tsx` - Homeowner contact card
-- `/client/src/pages/Properties.tsx` - Rep column and manage action
-- `/client/src/pages/Dashboard.tsx` - Homeowner sidebar card
-
 ### COMPLETE - Billing & Usage System
-
-**Pricing Model:** Everyone gets ALL features. Premium operations cost Credits.
-
-**Pricing Tiers (door-based):**
-| Tier | Doors | Base Price | Included Credits | Overage Cost |
-|------|-------|------------|------------------|--------------|
-| Small | 1-50 | $29/mo | 10 | $2.00/credit |
-| Medium | 51-150 | $79/mo | 25 | $1.75/credit |
-| Large | 151-500 | $149/mo | 50 | $1.50/credit |
-| XL | 501+ | $299/mo | 100 | $1.25/credit |
-
-**Credit Consumption:**
-| Operation | Credits |
-|-----------|---------|
-| Standard AI Analysis | 1 credit |
-| Full AI Analysis (+ mockup, research, breakdown) | 2 credits |
-| AI Form Generation | 1 credit |
-
-**All features included in every tier:**
-- Applications, workflows, calendar, compliance tracking
-- Custom branding, community landing pages
-- Document storage, e-signatures, QR upload
-- Unlimited users, role-based access
 
 ---
 
 ## API Endpoints Reference
 
-### Public Community Info (NEW)
+### Recurring Events
+```
+POST   /api/events/:id/occurrence    # Edit occurrence (body: { originalDate, editMode, ...updates })
+DELETE /api/events/:id/occurrence    # Delete occurrence (body: { originalDate, deleteMode })
+```
+
+### Public Community Info
 ```
 GET    /api/public/:subdomain/info  # Get community info without auth
 ```
@@ -232,48 +251,8 @@ GET    /api/public/:subdomain/info  # Get community info without auth
 ### Property Rep Assignment
 ```
 GET    /api/properties/:propertyId/reps           # Get rep assignments
-GET    /api/properties/:propertyId/rep-info       # Get rep info (homeowner)
 POST   /api/properties/:propertyId/reps           # Assign rep
-PATCH  /api/property-rep-assignments/:id          # Update assignment
 DELETE /api/property-rep-assignments/:id          # Remove assignment
-POST   /api/reps/:userId/bulk-assign              # Bulk assign
-GET    /api/users/:userId/property-assignments    # Get user's properties
-GET    /api/management-companies/:id/default-rep  # Get default rep
-PUT    /api/management-companies/:id/default-rep  # Set default rep
-GET    /api/tenants/:tenantId/users               # Get tenant users
-```
-
-### Billing & Stripe
-```
-GET    /api/billing/stripe-config                    # Get Stripe config
-POST   /api/billing/setup-intent                     # Create SetupIntent
-GET    /api/billing/payment-methods/:tenantId        # List payment methods
-POST   /api/billing/payment-methods/:tenantId/default# Set default
-DELETE /api/billing/payment-methods/:paymentMethodId # Remove
-GET    /api/billing/settings/:tenantId               # Get billing settings
-PATCH  /api/billing/settings/:tenantId               # Update billing settings
-POST   /api/webhooks/stripe                          # Stripe webhook
-GET    /api/billing/consumption                      # Usage summary
-GET    /api/billing/usage-history                    # Historical usage
-GET    /api/billing/invoices                         # List invoices
-```
-
----
-
-## Environment Variables
-
-### Stripe (Dev Keys):
-```
-STRIPE_SECRET_KEY_DEV=sk_test_xxx       # SET
-STRIPE_PUBLISHABLE_KEY_DEV=pk_test_xxx  # SET
-STRIPE_WEBHOOK_SECRET_DEV=              # NOT SET - need webhook
-```
-
-### Stripe (Prod Keys - for later):
-```
-STRIPE_SECRET_KEY=sk_live_xxx
-STRIPE_PUBLISHABLE_KEY=pk_live_xxx
-STRIPE_WEBHOOK_SECRET=whsec_xxx
 ```
 
 ---
@@ -284,12 +263,6 @@ STRIPE_WEBHOOK_SECRET=whsec_xxx
 **Format:** `{tenant-last-4-chars}-{year}-{random-4-alphanumeric}`
 **Example:** `A1B2-2025-XY9Z`
 
-This is generated in:
-- `server/routes.ts` (line ~872) - for real applications
-- `server/provision.ts` (line ~335) - for demo applications
-
-**DO NOT** use old formats like `APP-2024-001` or similar sequential numbering.
-
 ---
 
 ## Known Issues
@@ -299,26 +272,18 @@ This is generated in:
 - These are pre-existing and don't affect runtime
 - The new components compile cleanly
 
-### Subdomain Detection in Replit
-- Replit's hostname parsing may detect GUID as subdomain
-- Use `?subdomain=markland` query param for reliable testing
-- True subdomain routing works when deployed with custom domain
-
 ---
 
 ## Future Enhancements
 
+### Recurring Events
+- Email notifications for recurring event reminders
+- Holiday exclusion support
+- Business day calculations
+
 ### Community Landing Pages
 - Add events calendar section (show multiple upcoming events)
 - Add community announcements/news section
-- Add photo gallery
-- Social media links
 
 ### Property-Level Permission Enforcement
 - Restrict ACTIONS on unassigned properties (not just visibility)
-- Show "read-only" badge on unassigned property pages
-- Block operations on applications for unassigned properties
-
-### Default Fallback Rep UI
-- Add UI in ManagementSettingsModal to set default fallback rep
-- Storage method `setDefaultFallbackRep()` already exists

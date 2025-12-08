@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ContactModal } from "@/components/ContactModal";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -344,10 +344,6 @@ function TierCards({ isAnnual }: { isAnnual: boolean }) {
                     </li>
                     <li className="flex items-center gap-2 text-sm">
                       <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      Unlimited users
-                    </li>
-                    <li className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                       Custom workflows
                     </li>
                     <li className="flex items-center gap-2 text-sm">
@@ -617,8 +613,9 @@ function Footer() {
           </span>
         </div>
         <div className="flex items-center gap-6 text-sm text-muted-foreground">
-          <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
-          <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+          <Link href="/legal?tab=privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+          <Link href="/legal?tab=terms" className="hover:text-foreground transition-colors">Terms</Link>
+          <Link href="/legal" className="hover:text-foreground transition-colors">Legal</Link>
           <a href="#" className="hover:text-foreground transition-colors">Contact</a>
         </div>
       </div>

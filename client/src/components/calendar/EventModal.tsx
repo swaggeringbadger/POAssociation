@@ -43,9 +43,16 @@ import {
   Link2,
   Eye,
   EyeOff,
+  Repeat,
 } from "lucide-react";
 import { format, addHours, setHours, setMinutes, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import RecurrenceSelector from "./RecurrenceSelector";
+import {
+  type RecurrenceConfig,
+  configToRRule,
+  rruleToConfig,
+} from "@shared/recurrence";
 
 interface EventModalProps {
   open: boolean;
@@ -100,6 +107,7 @@ export default function EventModal({
   const [reminderDays, setReminderDays] = useState<number[]>([7, 1]);
   const [noticeRequiredDays, setNoticeRequiredDays] = useState<string>("");
   const [isPublic, setIsPublic] = useState(true);
+  const [recurrenceConfig, setRecurrenceConfig] = useState<RecurrenceConfig | null>(null);
   const [activeTab, setActiveTab] = useState("details");
 
   // Filter tenants (management companies and communities)
@@ -133,6 +141,13 @@ export default function EventModal({
       setReminderDays(event.reminderDays || [7, 1]);
       setNoticeRequiredDays(event.noticeRequiredDays?.toString() || "");
       setIsPublic(event.isPublic ?? true);
+      // Load recurrence config if event has a recurrence rule
+      if (event.recurrenceRule) {
+        const start = parseISO(event.startDatetime);
+        setRecurrenceConfig(rruleToConfig(event.recurrenceRule, start));
+      } else {
+        setRecurrenceConfig(null);
+      }
     } else {
       // Reset to defaults for new event
       const defaultDate = initialDate || new Date();
@@ -150,6 +165,7 @@ export default function EventModal({
       setReminderDays([7, 1]);
       setNoticeRequiredDays("");
       setIsPublic(true);
+      setRecurrenceConfig(null);
     }
     setActiveTab("details");
   }, [event, open, initialDate, firstTenantId, firstEventTypeId]);
@@ -257,6 +273,19 @@ export default function EventModal({
       return;
     }
 
+    // Generate recurrence rule if configured
+    const recurrenceRule = recurrenceConfig
+      ? configToRRule(recurrenceConfig, startDatetime)
+      : undefined;
+    // Handle endDate which could be a Date object or string
+    let recurrenceEndDate: string | undefined;
+    if (recurrenceConfig?.endDate) {
+      const endDate = recurrenceConfig.endDate instanceof Date
+        ? recurrenceConfig.endDate
+        : new Date(recurrenceConfig.endDate);
+      recurrenceEndDate = endDate.toISOString();
+    }
+
     const data = {
       tenantId,
       eventTypeId,
@@ -270,6 +299,8 @@ export default function EventModal({
       reminderDays,
       noticeRequiredDays: noticeRequiredDays ? parseInt(noticeRequiredDays, 10) : undefined,
       isPublic,
+      recurrenceRule: recurrenceRule || undefined,
+      recurrenceEndDate: recurrenceEndDate || undefined,
     };
 
     if (isCreating) {
@@ -309,7 +340,7 @@ export default function EventModal({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details" className="flex items-center gap-2">
               <CalendarIcon className="h-4 w-4" />
               Details
@@ -318,9 +349,13 @@ export default function EventModal({
               <MapPin className="h-4 w-4" />
               Location
             </TabsTrigger>
+            <TabsTrigger value="recurrence" className="flex items-center gap-2">
+              <Repeat className="h-4 w-4" />
+              Repeat
+            </TabsTrigger>
             <TabsTrigger value="reminders" className="flex items-center gap-2">
               <Bell className="h-4 w-4" />
-              Reminders
+              More
             </TabsTrigger>
           </TabsList>
 
@@ -527,6 +562,14 @@ export default function EventModal({
                 Add a Zoom, Google Meet, or Teams link for virtual attendance
               </p>
             </div>
+          </TabsContent>
+
+          <TabsContent value="recurrence" className="space-y-4 mt-4">
+            <RecurrenceSelector
+              value={recurrenceConfig}
+              onChange={setRecurrenceConfig}
+              startDate={startDate}
+            />
           </TabsContent>
 
           <TabsContent value="reminders" className="space-y-4 mt-4">
