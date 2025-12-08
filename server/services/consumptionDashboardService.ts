@@ -149,7 +149,7 @@ class ConsumptionDashboardService {
       basePrice: tier?.basePriceMonthly || 0,
       effectivePrice: subscription.effectivePrice || tier?.basePriceMonthly || 0,
       hasCustomPricing: subscription.customPriceMonthly !== null ||
-                        subscription.customCredits !== null ||
+                        subscription.customAiCredits !== null ||
                         subscription.customOverageCost !== null,
       creditsIncluded,
       creditsUsed,

@@ -22,6 +22,7 @@ import {
 import heroImage from "@assets/generated_images/modern_suburban_homes_with_green_lawns_and_blue_sky.png";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import { ContactModal } from "@/components/ContactModal";
+import { CommunitySearch } from "@/components/CommunitySearch";
 
 // Navigation Component
 function Navbar({ onScheduleDemo }: { onScheduleDemo: () => void }) {
@@ -32,7 +33,7 @@ function Navbar({ onScheduleDemo }: { onScheduleDemo: () => void }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src={logoImage} alt="Logo" className="h-8 w-8 rounded" />
-          <span className="text-xl font-bold text-primary font-heading">POA Association</span>
+          <span className="text-xl font-bold text-primary font-heading">POAssociation</span>
         </div>
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
@@ -444,7 +445,7 @@ function CTASection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
           Ready to modernize your community management?
         </h2>
         <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-          Join hundreds of communities already using POA Association to streamline their operations.
+          Join hundreds of communities already using POAssociation to streamline their operations.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
@@ -479,7 +480,7 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <img src={logoImage} alt="Logo" className="h-8 w-8 rounded" />
-              <span className="font-bold text-primary">POA Association</span>
+              <span className="font-bold text-primary">POAssociation</span>
             </div>
             <p className="text-sm text-muted-foreground">
               Modern community management for HOAs and POAs.
@@ -583,7 +584,7 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
 
         <div className="border-t mt-12 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} POA Association. All rights reserved.
+            &copy; {new Date().getFullYear()} POAssociation. All rights reserved.
           </p>
           <div className="flex gap-6">
             <Link href="/legal?tab=privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -621,6 +622,7 @@ export default function Landing() {
     <div className="min-h-screen bg-background font-sans">
       <Navbar onScheduleDemo={openDemoModal} />
       <HeroSection onScheduleDemo={openDemoModal} />
+      <CommunitySearch onSignupClick={openDemoModal} />
       <SocialProofBar />
       <FeaturesSection />
       <SolutionsSection />

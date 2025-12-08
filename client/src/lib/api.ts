@@ -1107,6 +1107,7 @@ export interface CalendarEvent {
   startDatetime: string;
   endDatetime: string;
   allDay: boolean;
+  timezone: string | null; // IANA timezone for DST-aware recurring events
   location: string | null;
   meetingUrl: string | null;
   status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
@@ -1806,7 +1807,7 @@ export interface CommunitySubscriptionWithTier {
   status: 'active' | 'trial' | 'canceled' | 'paused';
   customPriceMonthly: number | null;
   customPriceYearly: number | null;
-  customCredits: number | null;
+  customAiCredits: number | null;
   customOverageCost: number | null;
   pricingNote: string | null;
   billingCycleDay: number;
@@ -1959,7 +1960,7 @@ export async function setCustomPricing(
   pricing: {
     customPriceMonthly?: number;
     customPriceYearly?: number;
-    customCredits?: number;
+    customAiCredits?: number;
     customOverageCost?: number;
     pricingNote?: string;
   }

@@ -8,6 +8,82 @@ import {
 } from '../shared/recurrence';
 import type { Event, EventType } from '@shared/schema';
 
+/**
+ * Convert a UTC date to local time components in a specific timezone
+ */
+function getLocalTimeComponents(utcDate: Date, timezone: string): { hours: number; minutes: number; seconds: number } {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(utcDate);
+  const hours = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const minutes = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  const seconds = parseInt(parts.find(p => p.type === 'second')?.value || '0', 10);
+
+  return { hours, minutes, seconds };
+}
+
+/**
+ * Create a date with specific local time in a timezone, returning UTC
+ * This handles DST correctly - if you want "9am in New York", it gives you the correct UTC
+ * whether New York is in EST or EDT
+ */
+function createDateInTimezone(year: number, month: number, day: number, hours: number, minutes: number, seconds: number, timezone: string): Date {
+  // Create an ISO string that represents the local time
+  const localDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+  // Use Intl.DateTimeFormat to find the UTC offset for this specific date/time in the timezone
+  const testDate = new Date(localDateStr + 'Z'); // Start with assuming UTC
+
+  // Get what hour it would be in the target timezone if this were UTC
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  // Binary search to find the correct UTC time
+  // We want to find UTC time T such that when T is displayed in `timezone`, it shows our target local time
+  let low = testDate.getTime() - 24 * 60 * 60 * 1000; // -24 hours
+  let high = testDate.getTime() + 24 * 60 * 60 * 1000; // +24 hours
+
+  for (let i = 0; i < 20; i++) { // Binary search iterations
+    const mid = Math.floor((low + high) / 2);
+    const midDate = new Date(mid);
+    const parts = formatter.formatToParts(midDate);
+
+    const tzHours = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const tzMinutes = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+    const tzDay = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const tzMonth = parseInt(parts.find(p => p.type === 'month')?.value || '0', 10) - 1;
+    const tzYear = parseInt(parts.find(p => p.type === 'year')?.value || '0', 10);
+
+    // Compare as total minutes from epoch-ish
+    const targetTotal = year * 525600 + month * 43800 + day * 1440 + hours * 60 + minutes;
+    const currentTotal = tzYear * 525600 + tzMonth * 43800 + tzDay * 1440 + tzHours * 60 + tzMinutes;
+
+    if (currentTotal < targetTotal) {
+      low = mid;
+    } else if (currentTotal > targetTotal) {
+      high = mid;
+    } else {
+      return midDate;
+    }
+  }
+
+  return new Date(Math.floor((low + high) / 2));
+}
+
 // Extended event type that includes recurrence instance metadata
 export interface ExpandedEvent extends Omit<Event, 'startDatetime' | 'endDatetime'> {
   eventType: EventType | null;
@@ -121,14 +197,24 @@ export function expandRecurringEvents(
         continue;
       }
 
-      // Generate virtual instance
-      const instanceEnd = addDuration(occurrence, duration);
+      // Generate virtual instance with timezone-aware time handling
+      // This ensures that "9am America/New_York" stays 9am regardless of DST
+      const timezone = event.timezone || 'America/New_York';
 
-      // Preserve the time from the original event
-      const instanceStart = new Date(occurrence);
-      instanceStart.setHours(eventStartDate.getHours());
-      instanceStart.setMinutes(eventStartDate.getMinutes());
-      instanceStart.setSeconds(eventStartDate.getSeconds());
+      // Get the local time (in the event's timezone) from the original event
+      const localTime = getLocalTimeComponents(eventStartDate, timezone);
+
+      // Create the instance start time for this occurrence date, preserving the local time
+      // This handles DST: 9am EST and 9am EDT will have different UTC times
+      const instanceStart = createDateInTimezone(
+        occurrence.getFullYear(),
+        occurrence.getMonth(),
+        occurrence.getDate(),
+        localTime.hours,
+        localTime.minutes,
+        localTime.seconds,
+        timezone
+      );
 
       const adjustedInstanceEnd = addDuration(instanceStart, duration);
 

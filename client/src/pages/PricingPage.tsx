@@ -218,7 +218,7 @@ function Navbar() {
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
           <img src={logoImage} alt="Logo" className="h-8 w-8 rounded" />
-          <span className="text-xl font-bold text-primary font-heading">POA Association</span>
+          <span className="text-xl font-bold text-primary font-heading">POAssociation</span>
         </button>
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={() => navigate("/")}>
@@ -609,7 +609,7 @@ function Footer() {
         <div className="flex items-center gap-2">
           <img src={logoImage} alt="Logo" className="h-6 w-6 rounded" />
           <span className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} POA Association. All rights reserved.
+            © {new Date().getFullYear()} POAssociation. All rights reserved.
           </span>
         </div>
         <div className="flex items-center gap-6 text-sm text-muted-foreground">

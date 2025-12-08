@@ -218,7 +218,7 @@ export interface CommunitySubscriptionWithTier {
   // Custom overrides (null = use tier default)
   customPriceMonthly: number | null;
   customPriceYearly: number | null;
-  customCredits: number | null;
+  customAiCredits: number | null;
   customOverageCost: number | null;
   pricingNote: string | null;
 
@@ -333,7 +333,7 @@ export interface OverageProjection {
 export interface CustomPricingInput {
   customPriceMonthly?: number;
   customPriceYearly?: number;
-  customCredits?: number;
+  customAiCredits?: number;
   customOverageCost?: number;
   pricingNote?: string;
 }

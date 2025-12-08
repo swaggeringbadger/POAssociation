@@ -442,11 +442,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <>
                     <span className="font-medium text-foreground">{subdomain}.poassociation.com</span>
                   </>
-                ) : (
+                ) : currentTenant ? (
                   <>
                     Context: <span className="font-medium ml-1 text-foreground">{currentTenant.name}</span>
                   </>
-                )}
+                ) : null}
               </div>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
                 <UserIcon className="h-5 w-5" />

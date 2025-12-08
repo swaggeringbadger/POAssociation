@@ -764,6 +764,7 @@ export const events = pgTable("events", {
   startDatetime: timestamp("start_datetime").notNull(),
   endDatetime: timestamp("end_datetime").notNull(),
   allDay: boolean("all_day").default(false).notNull(),
+  timezone: text("timezone").default('America/New_York'), // IANA timezone for recurring events (DST-aware)
 
   // Location
   location: text("location"), // Physical address or "Virtual"
@@ -995,7 +996,7 @@ export const communitySubscriptions = pgTable("community_subscriptions", {
   // Custom pricing overrides (NULL = use tier default)
   customPriceMonthly: text("custom_price_monthly"),
   customPriceYearly: text("custom_price_yearly"),
-  customCredits: integer("custom_credits"),
+  customAiCredits: integer("custom_ai_credits"),
   customOverageCost: text("custom_overage_cost"),
   pricingNote: text("pricing_note"),
   pricingSetByUserId: varchar("pricing_set_by_user_id").references(() => users.id),
@@ -1007,7 +1008,7 @@ export const communitySubscriptions = pgTable("community_subscriptions", {
   currentPeriodEnd: timestamp("current_period_end").notNull(),
 
   // Current period usage
-  creditsUsed: integer("credits_used").notNull().default(0),
+  aiCreditsUsed: integer("ai_credits_used").notNull().default(0),
   applicationsThisMonth: integer("applications_this_month").notNull().default(0),
 
   // External billing (Stripe - future)

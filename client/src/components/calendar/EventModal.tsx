@@ -108,6 +108,7 @@ export default function EventModal({
   const [noticeRequiredDays, setNoticeRequiredDays] = useState<string>("");
   const [isPublic, setIsPublic] = useState(true);
   const [recurrenceConfig, setRecurrenceConfig] = useState<RecurrenceConfig | null>(null);
+  const [timezone, setTimezone] = useState("America/New_York");
   const [activeTab, setActiveTab] = useState("details");
 
   // Filter tenants (management companies and communities)
@@ -141,6 +142,7 @@ export default function EventModal({
       setReminderDays(event.reminderDays || [7, 1]);
       setNoticeRequiredDays(event.noticeRequiredDays?.toString() || "");
       setIsPublic(event.isPublic ?? true);
+      setTimezone(event.timezone || "America/New_York");
       // Load recurrence config if event has a recurrence rule
       if (event.recurrenceRule) {
         const start = parseISO(event.startDatetime);
@@ -165,6 +167,7 @@ export default function EventModal({
       setReminderDays([7, 1]);
       setNoticeRequiredDays("");
       setIsPublic(true);
+      setTimezone("America/New_York");
       setRecurrenceConfig(null);
     }
     setActiveTab("details");
@@ -299,6 +302,7 @@ export default function EventModal({
       reminderDays,
       noticeRequiredDays: noticeRequiredDays ? parseInt(noticeRequiredDays, 10) : undefined,
       isPublic,
+      timezone, // For DST-aware recurring events
       recurrenceRule: recurrenceRule || undefined,
       recurrenceEndDate: recurrenceEndDate || undefined,
     };
@@ -570,6 +574,34 @@ export default function EventModal({
               onChange={setRecurrenceConfig}
               startDate={startDate}
             />
+
+            {/* Timezone selector for recurring events */}
+            {recurrenceConfig && recurrenceConfig.frequency !== 'none' && (
+              <div className="space-y-2 pt-4 border-t">
+                <Label htmlFor="timezone">
+                  <Clock className="inline h-4 w-4 mr-2" />
+                  Event Timezone
+                </Label>
+                <Select value={timezone} onValueChange={setTimezone}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/New_York">Eastern (ET)</SelectItem>
+                    <SelectItem value="America/Chicago">Central (CT)</SelectItem>
+                    <SelectItem value="America/Denver">Mountain (MT)</SelectItem>
+                    <SelectItem value="America/Los_Angeles">Pacific (PT)</SelectItem>
+                    <SelectItem value="America/Anchorage">Alaska (AKT)</SelectItem>
+                    <SelectItem value="Pacific/Honolulu">Hawaii (HT)</SelectItem>
+                    <SelectItem value="UTC">UTC</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Recurring events will always occur at the specified time in this timezone,
+                  even during Daylight Saving Time changes.
+                </p>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="reminders" className="space-y-4 mt-4">

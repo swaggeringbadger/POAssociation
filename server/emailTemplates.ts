@@ -1,5 +1,5 @@
 /**
- * Modern Email Templates for POA Association
+ * Modern Email Templates for POAssociation
  * Vibrant, engaging design for all transactional emails
  */
 
@@ -291,7 +291,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
             <!-- Header -->
             <tr>
               <td class="header">
-                <h1 class="header-title">${communityName || 'POA Association'}</h1>
+                <h1 class="header-title">${communityName || 'POAssociation'}</h1>
                 <p class="header-subtitle">${title}</p>
               </td>
             </tr>
@@ -322,7 +322,7 @@ export function buildEmailTemplate(props: EmailTemplateProps): string {
             <!-- Footer -->
             <tr>
               <td class="footer">
-                <div class="footer-brand">POA Association</div>
+                <div class="footer-brand">POAssociation</div>
                 <p class="footer-text">
                   You're receiving this email because you have an account with your community association.
                 </p>
@@ -697,7 +697,7 @@ export function contactFormTemplate(
     `,
     actionButton: {
       text: `Reply to ${formData.name}`,
-      url: `mailto:${formData.email}?subject=${encodeURIComponent(isDemo ? 'RE: Your POA Association Demo Request' : 'RE: Your POA Association Inquiry')}`,
+      url: `mailto:${formData.email}?subject=${encodeURIComponent(isDemo ? 'RE: Your POAssociation Demo Request' : 'RE: Your POAssociation Inquiry')}`,
     },
     secondaryContent: `
       <strong>Response Time</strong><br>${isDemo

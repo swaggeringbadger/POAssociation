@@ -378,7 +378,7 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              POA Association
+              POAssociation
             </a>
           </p>
         </div>

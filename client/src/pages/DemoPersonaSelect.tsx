@@ -120,11 +120,11 @@ export default function DemoPersonaSelect() {
         {/* Header */}
         <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src={logoImage} className="w-16 h-16 rounded-lg" alt="POA Association" />
+            <img src={logoImage} className="w-16 h-16 rounded-lg" alt="POAssociation" />
           </div>
           <h1 className="text-4xl font-bold tracking-tight">Choose Your Perspective</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Experience POA Association from different roles. Each persona shows unique features and workflows.
+            Experience POAssociation from different roles. Each persona shows unique features and workflows.
           </p>
           {demoLabel && (
             <p className="text-sm text-primary font-medium">

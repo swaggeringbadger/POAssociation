@@ -116,10 +116,10 @@ export default function DemoCodeEntry() {
       <Card className="w-full max-w-2xl shadow-2xl">
         <CardHeader className="text-center space-y-4 pb-8">
           <div className="flex justify-center">
-            <img src={logoImage} className="w-20 h-20 rounded-lg" alt="POA Association" />
+            <img src={logoImage} className="w-20 h-20 rounded-lg" alt="POAssociation" />
           </div>
           <CardTitle className="text-4xl font-bold tracking-tight">
-            Welcome to POA Association
+            Welcome to POAssociation
           </CardTitle>
           <CardDescription className="text-lg">
             Experience the future of community management

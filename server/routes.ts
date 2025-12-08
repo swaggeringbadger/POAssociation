@@ -118,6 +118,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/auth/logout-redirect - Force logout and redirect to home
+  // Usage: Just navigate to /logout in your browser (client redirects here)
+  app.get('/api/auth/logout-redirect', async (req: any, res) => {
+    try {
+      req.session.destroy((err: any) => {
+        if (err) {
+          console.error('Error destroying session:', err);
+        }
+        // Clear the session cookie
+        res.clearCookie('connect.sid');
+        // Redirect to home page
+        res.redirect('/');
+      });
+    } catch (error: any) {
+      console.error('Error during logout:', error);
+      res.redirect('/');
+    }
+  });
+
   // Switch current user role in session
   app.post('/api/auth/switch-role', isAuthenticated, async (req: any, res) => {
     try {
@@ -221,6 +240,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error fetching public community info:', error);
       res.status(500).json({ error: 'Failed to fetch community info' });
+    }
+  });
+
+  // Public management company info endpoint - for management landing pages
+  // GET /api/public/management/:subdomain/info - Returns management company info + managed communities
+  app.get('/api/public/management/:subdomain/info', async (req, res) => {
+    try {
+      const { subdomain } = req.params;
+
+      // Get tenant by subdomain
+      const tenant = await storage.getTenantBySubdomain(subdomain);
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Management company not found' });
+      }
+
+      // Only expose management companies
+      if (tenant.type !== 'management_company') {
+        return res.status(404).json({ error: 'Management company not found' });
+      }
+
+      // Get communities managed by this management company
+      const managedCommunities = await storage.getTenantsByManagementCompany(tenant.id);
+
+      // Return sanitized public info
+      res.json({
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          subdomain: tenant.subdomain,
+          heroImageUrl: tenant.heroImageUrl || null,
+          communitySettings: tenant.communitySettings || null,
+        },
+        managedCommunities: managedCommunities.map(c => ({
+          id: c.id,
+          name: c.name,
+          subdomain: c.subdomain,
+        })),
+      });
+    } catch (error: any) {
+      console.error('Error fetching public management info:', error);
+      res.status(500).json({ error: 'Failed to fetch management company info' });
+    }
+  });
+
+  // Public search endpoint - search for communities and management companies
+  // GET /api/public/search?q=searchterm
+  app.get('/api/public/search', async (req, res) => {
+    try {
+      const query = (req.query.q as string || '').trim().toLowerCase();
+
+      if (!query || query.length < 2) {
+        return res.json({ results: [] });
+      }
+
+      // Get all active tenants
+      const allTenants = await storage.listTenants();
+
+      // Filter by name or subdomain containing the search query
+      // Exclude demo accounts (tenants with a demoCodeId)
+      const results = allTenants
+        .filter(t =>
+          !t.demoCodeId &&
+          (t.name.toLowerCase().includes(query) ||
+          t.subdomain.toLowerCase().includes(query))
+        )
+        .slice(0, 10) // Limit to 10 results
+        .map(t => ({
+          id: t.id,
+          name: t.name,
+          subdomain: t.subdomain,
+          type: t.type,
+        }));
+
+      res.json({ results });
+    } catch (error: any) {
+      console.error('Error searching tenants:', error);
+      res.status(500).json({ error: 'Search failed' });
     }
   });
 
@@ -4451,7 +4548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const icalLines: string[] = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//POA Association//Calendar//EN',
+      'PRODID:-//POAssociation//Calendar//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       `X-WR-CALNAME:${calendarName}`,

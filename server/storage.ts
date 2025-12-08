@@ -26,6 +26,7 @@ export interface IStorage {
   listTenants(): Promise<schema.Tenant[]>;
   listAllTenants(): Promise<schema.Tenant[]>;
   getManagedProperties(userId: string): Promise<schema.Tenant[]>;
+  getTenantsByManagementCompany(managementCompanyId: string): Promise<schema.Tenant[]>;
   createTenant(tenant: schema.InsertTenant): Promise<schema.Tenant>;
   updateTenant(id: string, updates: Partial<schema.InsertTenant>): Promise<schema.Tenant>;
   deleteTenant(id: string): Promise<void>;
@@ -342,6 +343,19 @@ export class DbStorage implements IStorage {
 
   async listAllTenants(): Promise<schema.Tenant[]> {
     return db.select().from(schema.tenants);
+  }
+
+  async getTenantsByManagementCompany(managementCompanyId: string): Promise<schema.Tenant[]> {
+    return db
+      .select()
+      .from(schema.tenants)
+      .where(
+        and(
+          eq(schema.tenants.managementCompanyId, managementCompanyId),
+          eq(schema.tenants.isActive, true),
+          eq(schema.tenants.type, 'community')
+        )
+      );
   }
 
   async createTenant(insertTenant: schema.InsertTenant): Promise<schema.Tenant> {

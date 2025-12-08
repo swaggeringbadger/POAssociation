@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useParams } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import CommunityLanding from "@/pages/CommunityLanding";
+import ManagementLanding from "@/pages/ManagementLanding";
 import Dashboard from "@/pages/Dashboard";
 import FormBuilder from "@/pages/FormBuilder";
 import ApplicationSubmit from "@/pages/ApplicationSubmit";
@@ -43,6 +44,20 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
+// Wrapper component for path-based community landing
+function CommunityLandingByPath() {
+  const { subdomain } = useParams<{ subdomain: string }>();
+  if (!subdomain) return null;
+  return <CommunityLanding subdomain={subdomain} />;
+}
+
+// Wrapper component for path-based management landing
+function ManagementLandingByPath() {
+  const { subdomain } = useParams<{ subdomain: string }>();
+  if (!subdomain) return null;
+  return <ManagementLanding subdomain={subdomain} />;
+}
+
 function Router() {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   const { isAuthenticated, isLoading } = useAuth();
@@ -73,6 +88,14 @@ function Router() {
 
   return (
     <Switch>
+      {/* Logout route - redirects to server endpoint */}
+      <Route path="/logout">
+        {() => {
+          window.location.href = '/api/auth/logout-redirect';
+          return null;
+        }}
+      </Route>
+
       {/* Demo routes - accessible without auth */}
       <Route path="/demo" component={DemoCodeEntry} />
       <Route path="/demo/personas" component={DemoPersonaSelect} />
@@ -85,6 +108,10 @@ function Router() {
 
       {/* Public legal page - accessible without auth */}
       <Route path="/legal" component={LegalPage} />
+
+      {/* Path-based community/management landing pages - accessible without auth */}
+      <Route path="/community/:subdomain" component={CommunityLandingByPath} />
+      <Route path="/management/:subdomain" component={ManagementLandingByPath} />
 
       {/* Community landing for subdomain access when not authenticated */}
       {showCommunityLanding && (

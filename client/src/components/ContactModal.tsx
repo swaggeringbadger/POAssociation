@@ -177,7 +177,7 @@ export function ContactModal({ open, onOpenChange, mode = "contact" }: ContactMo
               </DialogTitle>
               <DialogDescription className="text-sm">
                 {isDemo
-                  ? "See how POA Association can transform your community management"
+                  ? "See how POAssociation can transform your community management"
                   : "Have questions? We'd love to hear from you"}
               </DialogDescription>
             </div>

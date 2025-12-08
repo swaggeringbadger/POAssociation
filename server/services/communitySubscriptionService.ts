@@ -241,7 +241,7 @@ class CommunitySubscriptionService {
       .set({
         customPriceMonthly: pricing.customPriceMonthly?.toString() || null,
         customPriceYearly: pricing.customPriceYearly?.toString() || null,
-        customCredits: pricing.customCredits || null,
+        customAiCredits: pricing.customAiCredits || null,
         customOverageCost: pricing.customOverageCost?.toString() || null,
         pricingNote: pricing.pricingNote || null,
         pricingSetByUserId: setByUserId,
@@ -267,7 +267,7 @@ class CommunitySubscriptionService {
       .set({
         customPriceMonthly: null,
         customPriceYearly: null,
-        customCredits: null,
+        customAiCredits: null,
         customOverageCost: null,
         pricingNote: null,
         pricingSetByUserId: null,
@@ -308,7 +308,7 @@ class CommunitySubscriptionService {
       .set({
         currentPeriodStart: newPeriodStart,
         currentPeriodEnd: newPeriodEnd,
-        creditsUsed: 0,
+        aiCreditsUsed: 0,
         applicationsThisMonth: 0,
         updatedAt: new Date(),
       })
@@ -366,7 +366,7 @@ class CommunitySubscriptionService {
     }
 
     const effectiveCredits = subscription.effectiveCredits || 0;
-    const used = subscription.creditsUsed;
+    const used = subscription.aiCreditsUsed;
     const remaining = Math.max(0, effectiveCredits - used);
     const isOverage = used >= effectiveCredits;
     const overageCost = subscription.effectiveOverageCost || 4.99;
@@ -392,7 +392,7 @@ class CommunitySubscriptionService {
       throw new Error(`No subscription found for community ${communityId}`);
     }
 
-    const newCreditsUsed = subscription.creditsUsed + 1;
+    const newCreditsUsed = subscription.aiCreditsUsed + 1;
     const effectiveCredits = subscription.effectiveCredits || 0;
     const wasOverage = newCreditsUsed > effectiveCredits;
     const overageCost = wasOverage ? subscription.effectiveOverageCost || 4.99 : null;
@@ -400,7 +400,7 @@ class CommunitySubscriptionService {
     await db
       .update(schema.communitySubscriptions)
       .set({
-        creditsUsed: newCreditsUsed,
+        aiCreditsUsed: newCreditsUsed,
         updatedAt: new Date(),
       })
       .where(eq(schema.communitySubscriptions.communityId, communityId));
@@ -437,16 +437,16 @@ class CommunitySubscriptionService {
       ? subscription.customPriceMonthly
       : (tier?.basePriceMonthly || 0);
 
-    const effectiveCredits = subscription.customCredits !== null
-      ? subscription.customCredits
+    const effectiveCredits = subscription.customAiCredits !== null
+      ? subscription.customAiCredits
       : (tier?.includedCredits || 0);
 
     const effectiveOverageCost = subscription.customOverageCost !== null
       ? subscription.customOverageCost
       : (tier?.defaultOverageCost || 4.99);
 
-    const creditsRemaining = Math.max(0, effectiveCredits - subscription.creditsUsed);
-    const overageCreditsUsed = Math.max(0, subscription.creditsUsed - effectiveCredits);
+    const creditsRemaining = Math.max(0, effectiveCredits - subscription.aiCreditsUsed);
+    const overageCreditsUsed = Math.max(0, subscription.aiCreditsUsed - effectiveCredits);
     const estimatedOverageCost = overageCreditsUsed * effectiveOverageCost;
 
     return {
@@ -496,13 +496,13 @@ class CommunitySubscriptionService {
       status: sub.status as 'active' | 'trial' | 'canceled' | 'paused',
       customPriceMonthly: sub.customPriceMonthly ? parseFloat(sub.customPriceMonthly) : null,
       customPriceYearly: sub.customPriceYearly ? parseFloat(sub.customPriceYearly) : null,
-      customCredits: sub.customCredits,
+      customAiCredits: sub.customAiCredits,
       customOverageCost: sub.customOverageCost ? parseFloat(sub.customOverageCost) : null,
       pricingNote: sub.pricingNote,
       billingCycleDay: sub.billingCycleDay,
       currentPeriodStart: sub.currentPeriodStart.toISOString(),
       currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
-      creditsUsed: sub.creditsUsed,
+      creditsUsed: sub.aiCreditsUsed,
       applicationsThisMonth: sub.applicationsThisMonth,
     };
   }

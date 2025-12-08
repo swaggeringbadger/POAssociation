@@ -1,6 +1,6 @@
 /**
  * SMTP2GO Email Service
- * Handles sending transactional emails for POA Association
+ * Handles sending transactional emails for POAssociation
  */
 
 import {
@@ -26,7 +26,7 @@ export class EmailService {
   private apiKey: string;
   private apiUrl = 'https://api.smtp2go.com/v3/email/send';
   private fromEmail = 'noreply@poassociation.com';
-  private fromName = 'POA Association';
+  private fromName = 'POAssociation';
 
   constructor() {
     this.apiKey = process.env.SMTP2GO_API_KEY || '';

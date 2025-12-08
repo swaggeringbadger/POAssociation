@@ -123,7 +123,7 @@ export default function LegalPage() {
     retry: false,
   });
 
-  const companyName = tenant?.name || "POA Association";
+  const companyName = tenant?.name || "POAssociation";
 
   return (
     <div className="min-h-screen bg-background">
