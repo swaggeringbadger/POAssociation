@@ -89,7 +89,12 @@
       "Bash(git -C /home/runner/workspace diff client/src/hooks/useUserTenants.ts)",
       "Bash(git -C /home/runner/workspace diff client/src/pages/JoinCommunity.tsx)",
       "Bash(git -C /home/runner/workspace diff server/storage.ts)",
-      "Bash(git -C /home/runner/workspace diff shared/schema.ts)"
+      "Bash(git -C /home/runner/workspace diff shared/schema.ts)",
+      "Bash(git -C /home/runner/workspace commit -m \"$(cat <<''EOF''\nAdd self-service community join and homeowner verification\n\nFeatures:\n- Self-service community registration: users can search for communities\n  with allowPublicApplications=true and join as unverified homeowners\n- Homeowner verification system: track isVerified, verifiedAt, and\n  verifiedByApplicationId on user roles\n- New JoinCommunity page for browsing and joining communities\n- SuperAdminDashboard component for system-wide admin views\n\nSchema changes:\n- tenants: added allowPublicApplications flag (default true)\n- userTenantRoles: added isVerified, verifiedAt, verifiedByApplicationId\n- communityTiers: renamed includedCredits to includedAiCredits\n\nAPI changes:\n- GET /api/public/search now filters by allowPublicApplications\n- POST /api/public/communities/:tenantId/join - join as unverified homeowner\n- storage.searchPublicCommunities() - search joinable communities\n- storage.selfServiceJoinCommunity() - create unverified homeowner role\n- storage.verifyHomeowner() / isHomeownerVerified() - verification helpers\n- storage.getUserEffectiveRole() - get user''s effective role at tenant\n- storage.getPropertiesByRole() - get properties by specific role\n\nImprovements:\n- getManagedProperties() now properly handles management_rep role\n- Expanded role-based access for workflow designer and templates\n- Updated SubscriptionManagement with improved UI\n- ProfileSettings enhancements\n- Community settings card updates\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C /home/runner/workspace log --oneline -20)",
+      "Bash(git -C /home/runner/workspace show --stat 911656f)",
+      "Bash(git -C /home/runner/workspace log --all --oneline --graph)",
+      "Bash(git -C /home/runner/workspace log --since=\"2 weeks ago\" --oneline)"
     ],
     "deny": [],
     "ask": []

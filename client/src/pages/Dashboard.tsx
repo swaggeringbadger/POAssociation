@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
 import RepContactCard from "@/components/RepContactCard";
 import { SuperAdminDashboard } from "@/components/SuperAdminDashboard";
+import { HomeHubCard } from "@/components/HomeHubCard";
 import { api } from "@/lib/api";
 
 export default function Dashboard() {
@@ -714,6 +715,9 @@ function HomeownerDashboard() {
           {currentTenant?.id && (
             <RepContactCard propertyId={currentTenant.id} />
           )}
+
+          {/* HomeHub SSO Card */}
+          <HomeHubCard />
 
           <Card>
             <CardHeader>

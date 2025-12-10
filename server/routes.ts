@@ -6117,6 +6117,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // HomeHub SSO Integration
+  // ============================================
+
+  // Generate SSO redirect URL for HomeHub
+  app.get('/api/homehub/sso', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      if (!user?.email) {
+        return res.status(400).json({ error: 'User email is required for SSO' });
+      }
+
+      const ssoSecret = process.env.HOMEHUB_SSO_SECRET;
+      if (!ssoSecret) {
+        return res.status(503).json({ error: 'HomeHub SSO is not configured' });
+      }
+
+      const crypto = await import('crypto');
+
+      const payload = {
+        email: user.email,
+        appId: "hoa_app",
+        timestamp: Date.now(),
+        nonce: crypto.randomUUID(),
+        displayName: user.name || user.email.split('@')[0]
+      };
+
+      const signature = crypto
+        .createHmac("sha256", ssoSecret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+
+      const token = Buffer.from(JSON.stringify({ payload, signature }))
+        .toString("base64url");
+
+      const homeHubUrl = process.env.HOMEHUB_URL || "https://homehub.replit.app";
+      const redirectUrl = `${homeHubUrl}/sso-callback?token=${token}`;
+
+      res.json({ redirectUrl });
+    } catch (error: any) {
+      console.error('Error generating HomeHub SSO URL:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if HomeHub SSO is configured
+  app.get('/api/homehub/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const configured = !!process.env.HOMEHUB_SSO_SECRET;
+      res.json({
+        configured,
+        homeHubUrl: process.env.HOMEHUB_URL || "https://homehub.replit.app"
+      });
+    } catch (error: any) {
+      console.error('Error checking HomeHub status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
