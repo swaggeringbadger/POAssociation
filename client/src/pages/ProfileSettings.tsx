@@ -15,6 +15,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
 import { getCalendarFeedToken, regenerateCalendarFeedToken, type CalendarFeedToken } from "@/lib/api";
+import QRCode from "qrcode";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -133,11 +134,26 @@ export default function ProfileSettings() {
   // Calendar feed state
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
   const { data: feedToken, isLoading: feedLoading } = useQuery({
     queryKey: ['calendarFeedToken'],
     queryFn: getCalendarFeedToken,
   });
+
+  // Generate QR code when feed URL is available
+  useEffect(() => {
+    if (feedToken?.feedUrl) {
+      QRCode.toDataURL(feedToken.feedUrl, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      }).then(setQrCodeDataUrl).catch(console.error);
+    }
+  }, [feedToken?.feedUrl]);
 
   const regenerateMutation = useMutation({
     mutationFn: regenerateCalendarFeedToken,
@@ -371,31 +387,50 @@ export default function ProfileSettings() {
                 </div>
               ) : feedToken ? (
                 <>
-                  {/* Feed URL */}
-                  <div className="space-y-2">
-                    <Label>Your Calendar Feed URL</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={feedToken.feedUrl}
-                        readOnly
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => copyToClipboard(feedToken.feedUrl)}
-                        title="Copy to clipboard"
-                      >
-                        {copied ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
+                  {/* Feed URL and QR Code */}
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex-1 space-y-2">
+                      <Label>Your Calendar Feed URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={feedToken.feedUrl}
+                          readOnly
+                          className="font-mono text-xs"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => copyToClipboard(feedToken.feedUrl)}
+                          title="Copy to clipboard"
+                        >
+                          {copied ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This URL is unique to you. Keep it private and don't share it.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      This URL is unique to you. Keep it private and don't share it.
-                    </p>
+
+                    {/* QR Code */}
+                    {qrCodeDataUrl && (
+                      <div className="flex flex-col items-center gap-2">
+                        <Label className="text-center">Scan to Subscribe</Label>
+                        <div className="p-2 bg-white rounded-lg border">
+                          <img
+                            src={qrCodeDataUrl}
+                            alt="Calendar Feed QR Code"
+                            className="w-32 h-32"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground text-center">
+                          Scan with your phone's camera
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Instructions */}

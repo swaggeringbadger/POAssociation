@@ -149,11 +149,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="text-center max-w-md p-8">
           <h2 className="text-2xl font-bold mb-4">No Communities Assigned</h2>
           <p className="text-muted-foreground mb-4">
-            You don't have access to any communities yet. Please contact your administrator to get access.
+            You don't have access to any communities yet. You can search for and join your community, or contact your administrator for access.
           </p>
-          <Button onClick={handleLogout}>
-            Sign Out
-          </Button>
+          <div className="flex gap-4 justify-center flex-wrap">
+            <Button asChild>
+              <a href="/join">Find & Join Community</a>
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              Sign Out
+            </Button>
+          </div>
         </div>
       </div>
     );

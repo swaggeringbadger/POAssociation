@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Play, AlertCircle, Lock, Copy, X, Wand2 } from 'lucide-react';
+import { Save, Play, AlertCircle, Lock, Copy, X, Wand2, Undo2 } from 'lucide-react';
 import { useWorkflowDesignerStore } from '@/stores/workflowDesignerStore';
 import { StartNode, StepNode, DecisionNode, EndNode } from '@/components/workflow-designer/nodes';
 import { StepPropertiesPanel } from '@/components/workflow-designer/StepPropertiesPanel';
@@ -152,16 +152,27 @@ export default function WorkflowDesignerPage() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const prevStepCountRef = useRef(template?.steps?.length || 0);
+
+  // Store positions before beautify for undo functionality
+  const [preBeautifyPositions, setPreBeautifyPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
 
   // Auto-layout function - arranges nodes in a clean top-to-bottom flow
   const autoLayout = useCallback(() => {
     if (!template?.steps || template.steps.length === 0) return;
 
+    // Save current positions before beautifying (for undo)
+    const currentPositions: Record<string, { x: number; y: number }> = {};
+    template.steps.forEach(step => {
+      if (step.position) {
+        currentPositions[step.id] = { ...step.position };
+      }
+    });
+    setPreBeautifyPositions(currentPositions);
+
     const nodeWidth = 200;
     const nodeHeight = 80;
-    const verticalSpacing = 100;
-    const branchSpacing = 280; // Horizontal spacing between parallel branches
+    const verticalSpacing = 180; // Vertical gap between rows (increased for readability)
+    const branchSpacing = 350; // Horizontal spacing between parallel branches (increased for readability)
 
     // Build adjacency map from transitions
     const adjacencyMap = new Map<string, string[]>();
@@ -263,9 +274,33 @@ export default function WorkflowDesignerPage() {
 
     toast({
       title: 'Layout applied',
-      description: 'Nodes have been automatically arranged.',
+      description: 'Nodes have been automatically arranged. Click Undo to revert.',
     });
   }, [template?.steps, updateStepPositions, setNodes, toast]);
+
+  // Undo beautification - restore previous positions
+  const undoBeautify = useCallback(() => {
+    if (!preBeautifyPositions) return;
+
+    // Restore positions in store
+    updateStepPositions(preBeautifyPositions);
+
+    // Update local nodes state immediately for visual feedback
+    setNodes(currentNodes =>
+      currentNodes.map(node => ({
+        ...node,
+        position: preBeautifyPositions[node.id] || node.position,
+      }))
+    );
+
+    // Clear the saved positions
+    setPreBeautifyPositions(null);
+
+    toast({
+      title: 'Layout reverted',
+      description: 'Node positions have been restored.',
+    });
+  }, [preBeautifyPositions, updateStepPositions, setNodes, toast]);
 
   // Sync node positions back to store when dragging ends
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -285,28 +320,18 @@ export default function WorkflowDesignerPage() {
         }
       });
       updateStepPositions(positions);
+
+      // Clear undo state when user manually moves nodes
+      setPreBeautifyPositions(null);
     }
   }, [onNodesChange, updateStepPositions]);
 
-  // Update nodes/edges when template changes, but preserve positions during edits
+  // Update nodes/edges when template changes - preserve user positions, no auto-layout
   useEffect(() => {
-    const currentStepCount = template?.steps?.length || 0;
-    const prevStepCount = prevStepCountRef.current;
-
-    // Check if a new step was added
-    if (currentStepCount > prevStepCount) {
-      // New node added - run auto-layout after a short delay to let React Flow update
-      setTimeout(() => {
-        autoLayout();
-      }, 100);
-    }
-
-    prevStepCountRef.current = currentStepCount;
-
-    // Always sync nodes from template
+    // Sync nodes from template (positions are saved as the user drags them)
     setNodes(initialNodes);
     setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges, autoLayout, template?.steps?.length]);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   // Handle node selection
   const onNodeClick = useCallback(
@@ -557,6 +582,12 @@ export default function WorkflowDesignerPage() {
             <Button variant="outline" size="sm" onClick={autoLayout}>
               <Wand2 className="h-4 w-4 mr-2" />
               Beautify
+            </Button>
+          )}
+          {!isReadOnly && preBeautifyPositions && (
+            <Button variant="outline" size="sm" onClick={undoBeautify}>
+              <Undo2 className="h-4 w-4 mr-2" />
+              Undo
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={handleTest}>

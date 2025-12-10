@@ -40,6 +40,7 @@ import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import PricingPage from "@/pages/PricingPage";
 import LegalPage from "@/pages/LegalPage";
+import JoinCommunity from "@/pages/JoinCommunity";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -135,6 +136,13 @@ function Router() {
               <DashboardLayout>
                 <Dashboard />
               </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          {/* Join Community - requires auth but not tenant membership */}
+          <Route path="/join">
+            <ProtectedRoute>
+              <JoinCommunity />
             </ProtectedRoute>
           </Route>
 

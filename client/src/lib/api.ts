@@ -112,8 +112,11 @@ class ApiClient {
     return response.json();
   }
 
-  async getManagedProperties(): Promise<Tenant[]> {
-    const response = await fetch(`${this.baseUrl}/properties`);
+  async getManagedProperties(role?: string): Promise<Tenant[]> {
+    const url = role
+      ? `${this.baseUrl}/properties?role=${encodeURIComponent(role)}`
+      : `${this.baseUrl}/properties`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch managed properties");
     return response.json();
   }

@@ -285,39 +285,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Public search endpoint - search for communities and management companies
+  // Public search endpoint - search for communities that allow self-service registration
   // GET /api/public/search?q=searchterm
   app.get('/api/public/search', async (req, res) => {
     try {
-      const query = (req.query.q as string || '').trim().toLowerCase();
+      const query = (req.query.q as string || '').trim();
 
       if (!query || query.length < 2) {
         return res.json({ results: [] });
       }
 
-      // Get all active tenants
-      const allTenants = await storage.listTenants();
+      // Use storage method that filters by allowPublicApplications
+      const communities = await storage.searchPublicCommunities(query);
 
-      // Filter by name or subdomain containing the search query
-      // Exclude demo accounts (tenants with a demoCodeId)
-      const results = allTenants
-        .filter(t =>
-          !t.demoCodeId &&
-          (t.name.toLowerCase().includes(query) ||
-          t.subdomain.toLowerCase().includes(query))
-        )
-        .slice(0, 10) // Limit to 10 results
-        .map(t => ({
-          id: t.id,
-          name: t.name,
-          subdomain: t.subdomain,
-          type: t.type,
-        }));
+      const results = communities.map(t => ({
+        id: t.id,
+        name: t.name,
+        subdomain: t.subdomain,
+        type: t.type,
+        heroImageUrl: t.heroImageUrl,
+        communitySettings: t.communitySettings ? {
+          description: t.communitySettings.description,
+          legalEntityType: t.communitySettings.legalEntityType,
+        } : undefined,
+      }));
 
       res.json({ results });
     } catch (error: any) {
       console.error('Error searching tenants:', error);
       res.status(500).json({ error: 'Search failed' });
+    }
+  });
+
+  // Self-service community join endpoint
+  // POST /api/public/communities/:tenantId/join - Join a community as an unverified homeowner
+  app.post('/api/public/communities/:tenantId/join', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { tenantId } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      // Use storage method which validates and creates the role
+      const role = await storage.selfServiceJoinCommunity(userId, tenantId);
+
+      // Get tenant info for response
+      const tenant = await storage.getTenant(tenantId);
+
+      res.json({
+        success: true,
+        message: 'Successfully joined community as homeowner. Submit an application to get verified.',
+        role,
+        tenant: tenant ? {
+          id: tenant.id,
+          name: tenant.name,
+          subdomain: tenant.subdomain,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error('Error joining community:', error);
+      res.status(400).json({ error: error.message || 'Failed to join community' });
     }
   });
 
@@ -436,14 +465,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get properties/communities managed by current user (account_admin role)
+  // Get properties/communities managed by current user
+  // Optional ?role= query param to filter by specific role context
   app.get("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session?.userId || req.user?.claims?.sub;
       if (!userId) {
         return res.status(401).json({ error: "User not authenticated" });
       }
-      const properties = await storage.getManagedProperties(userId);
+
+      const role = req.query.role as string | undefined;
+
+      let properties;
+      if (role) {
+        // Filter properties by specific role
+        properties = await storage.getPropertiesByRole(userId, role);
+      } else {
+        // Return all properties user has access to
+        properties = await storage.getManagedProperties(userId);
+      }
+
       res.json(properties);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1217,12 +1258,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/applications/:id/status", isAuthenticated, async (req, res) => {
     try {
       const { status, reviewedByUserId, reviewNotes } = req.body;
+      const applicationId = req.params.id;
+
+      // Get current application to check submitter
+      const currentApplication = await storage.getApplication(applicationId);
+
       const application = await storage.updateApplicationStatus(
-        req.params.id,
+        applicationId,
         status,
         reviewedByUserId,
         reviewNotes
       );
+
+      // Auto-verify homeowner when their first application is approved
+      if (status === 'approved' && currentApplication) {
+        try {
+          const verifiedRole = await storage.verifyHomeowner(
+            currentApplication.submittedByUserId,
+            currentApplication.tenantId,
+            applicationId
+          );
+          if (verifiedRole) {
+            console.log(`[Auto-Verify] Homeowner ${currentApplication.submittedByUserId} verified via application ${applicationId}`);
+          }
+        } catch (verifyError) {
+          console.error('[Auto-Verify] Error:', verifyError);
+          // Don't fail the status update if verification fails
+        }
+      }
+
       res.json(application);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2279,16 +2343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.getTenantBySubdomain(req.subdomain);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-      // Check if tenant has access to Custom Workflows feature
-      const featureAccess = await storage.checkFeatureAccess(tenant.id, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan",
-          requiredPlan: featureAccess.requiredPlan,
-          currentPlan: featureAccess.currentPlan
-        });
-      }
-
+      // Custom workflows are now free for everyone - no feature gating
       const templates = await storage.listWorkflowTemplatesForTenant(tenant.id);
       res.json(templates);
     } catch (error: any) {
@@ -2306,15 +2361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const app = await storage.getApplication(applicationId);
       if (!app) return res.status(404).json({ error: "Application not found" });
 
-      // Check if tenant has access to Custom Workflows feature
-      const featureAccess = await storage.checkFeatureAccess(app.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan",
-          requiredPlan: featureAccess.requiredPlan,
-          currentPlan: featureAccess.currentPlan
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       const existing = await storage.getApplicationWorkflow(applicationId);
       if (existing) return res.status(400).json({ error: "Workflow already exists" });
@@ -2337,15 +2384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const application = await storage.getApplication(req.params.applicationId);
       if (!application) return res.status(404).json({ error: "Application not found" });
 
-      // Check if tenant has access to Custom Workflows feature
-      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan",
-          requiredPlan: featureAccess.requiredPlan,
-          currentPlan: featureAccess.currentPlan
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
       if (!workflow) return res.status(404).json({ error: "Workflow not found" });
@@ -2369,15 +2408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const application = await storage.getApplication(applicationId);
       if (!application) return res.status(404).json({ error: "Application not found" });
 
-      // Check if tenant has access to Custom Workflows feature
-      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan",
-          requiredPlan: featureAccess.requiredPlan,
-          currentPlan: featureAccess.currentPlan
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       // Get workflow and template to check role requirements
       const workflow = await storage.getApplicationWorkflow(applicationId);
@@ -2427,15 +2458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const application = await storage.getApplication(req.params.applicationId);
       if (!application) return res.status(404).json({ error: "Application not found" });
 
-      // Check if tenant has access to Custom Workflows feature
-      const featureAccess = await storage.checkFeatureAccess(application.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan",
-          requiredPlan: featureAccess.requiredPlan,
-          currentPlan: featureAccess.currentPlan
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       const workflow = await storage.getApplicationWorkflow(req.params.applicationId);
       if (!workflow) return res.status(404).json({ error: "Workflow not found" });
@@ -2505,36 +2528,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Access denied to target tenant" });
         }
 
-        // Get custom templates for this tenant (always fetch to check for locked ones)
-        const allCustomTemplates = await storage.listCustomWorkflowTemplatesForTenant(targetTenantId);
+        // Get custom templates for this tenant
+        customTemplates = await storage.listCustomWorkflowTemplatesForTenant(targetTenantId);
 
-        // Check if target tenant has custom_workflows feature
-        const featureAccess = await storage.checkFeatureAccess(targetTenantId, 'custom_workflows');
-        console.log('[workflow-templates] featureAccess for', targetTenantId, ':', featureAccess);
-        hasCustomWorkflows = featureAccess.hasAccess;
-        canClone = featureAccess.hasAccess;
-
-        // Get current plan name and determine required plan for the modal
-        const subscription = await storage.getTenantSubscription(targetTenantId);
-        currentPlan = subscription?.plan?.name || 'Free';
-
-        // Determine required plan based on tenant type (from plan_type prefix)
-        const planType = subscription?.plan?.planType || '';
-        if (planType.startsWith('management_')) {
-          requiredPlan = 'Starter'; // Management companies need Starter+
-        } else {
-          requiredPlan = 'Premium'; // Communities need Premium+
-        }
-
-        if (hasCustomWorkflows) {
-          // User has access - show all custom templates
-          customTemplates = allCustomTemplates;
-        } else {
-          // User downgraded - custom templates are locked
-          lockedWorkflowCount = allCustomTemplates.length;
-          customTemplates = []; // Don't show them, they're locked
-          cloneDisabledReason = `Upgrade to ${requiredPlan} or higher to clone and customize workflows`;
-        }
+        // Custom workflows are now free for everyone - no feature gating
+        hasCustomWorkflows = true;
+        canClone = true;
       } else {
         // No tenant selected ("All Properties") - can view but not clone
         canClone = false;
@@ -2571,14 +2570,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // NOTE: Viewing blueprints is available for all admin users.
-      // Include feature access info so frontend knows if user can edit
-      let hasCustomWorkflows = true;
-      if (process.env.NODE_ENV !== 'development') {
-        const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
-        hasCustomWorkflows = featureAccess.hasAccess;
-      }
-
-      res.json({ ...template, hasCustomWorkflows });
+      // Custom workflows are now free for everyone
+      res.json({ ...template, hasCustomWorkflows: true });
     } catch (error: any) {
       console.error("Error fetching template:", error);
       res.status(500).json({ error: error.message });
@@ -2612,13 +2605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied to target property" });
       }
 
-      // Check feature access on the TARGET tenant (not the source)
-      const featureAccess = await storage.checkFeatureAccess(targetTenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in this property's subscription plan. Upgrade to Professional or Enterprise."
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       // Create cloned template in the target tenant
       const clonedTemplate = await storage.cloneWorkflowTemplate(
@@ -2653,13 +2640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Cannot edit blueprint templates. Clone it first." });
       }
 
-      // Check feature access
-      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan"
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       // Validate workflow structure
       if (steps) {
@@ -2698,13 +2679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Template not found" });
       }
 
-      // Check feature access
-      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan"
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       // Validate workflow structure
       if (steps) {
@@ -2776,16 +2751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ error: "Workflow template not found" });
         }
         newWorkflowName = template.name;
-
-        // If it's a custom template, verify the property has access to custom workflows
-        if (!template.isBlueprint) {
-          const featureAccess = await storage.checkFeatureAccess(propertyId, 'custom_workflows');
-          if (!featureAccess.hasAccess) {
-            return res.status(403).json({
-              error: "Custom workflows are not available in this property's subscription plan"
-            });
-          }
-        }
+        // Custom workflows are now free for everyone - no feature gating
       }
 
       // Get previous workflow name for email
@@ -2886,13 +2852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Cannot delete blueprint templates" });
       }
 
-      // Check feature access
-      const featureAccess = await storage.checkFeatureAccess(template.tenantId, 'custom_workflows');
-      if (!featureAccess.hasAccess) {
-        return res.status(403).json({
-          error: "Custom Workflows are not available in your subscription plan"
-        });
-      }
+      // Custom workflows are now free for everyone - no feature gating
 
       await storage.deleteWorkflowTemplate(req.params.id);
       res.json({ message: "Template deleted successfully" });
@@ -4622,7 +4582,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get or create calendar feed token for authenticated user
   app.get('/api/calendar-feed/token', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.userId;
+      // Get userId from session (demo users) or OAuth claims (Replit auth users)
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'User ID not found' });
+      }
 
       // Check if user already has a token
       let feedToken = await storage.getCalendarFeedTokenByUserId(userId);
@@ -4659,7 +4623,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Regenerate calendar feed token
   app.post('/api/calendar-feed/regenerate', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.userId;
+      // Get userId from session (demo users) or OAuth claims (Replit auth users)
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'User ID not found' });
+      }
 
       // Revoke existing token
       const existingToken = await storage.getCalendarFeedTokenByUserId(userId);

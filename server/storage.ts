@@ -26,6 +26,7 @@ export interface IStorage {
   listTenants(): Promise<schema.Tenant[]>;
   listAllTenants(): Promise<schema.Tenant[]>;
   getManagedProperties(userId: string): Promise<schema.Tenant[]>;
+  getPropertiesByRole(userId: string, role: string): Promise<schema.Tenant[]>;
   getTenantsByManagementCompany(managementCompanyId: string): Promise<schema.Tenant[]>;
   createTenant(tenant: schema.InsertTenant): Promise<schema.Tenant>;
   updateTenant(id: string, updates: Partial<schema.InsertTenant>): Promise<schema.Tenant>;
@@ -34,6 +35,12 @@ export interface IStorage {
   // User-Tenant-Roles
   getUserRolesForTenant(userId: string, tenantId: string): Promise<schema.UserTenantRole[]>;
   getUserTenants(userId: string): Promise<(schema.UserTenantRole & { tenant: schema.Tenant })[]>;
+  getUserEffectiveRole(userId: string, tenantId: string): Promise<{
+    role: string | null;
+    allRoles: string[];
+    isFromManagementCompany: boolean;
+    managementCompanyId: string | null;
+  }>;
   getTenantUsers(tenantId: string): Promise<(schema.User & { roles: string[] })[]>;
   assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole>;
   removeUserRole(userId: string, tenantId: string, role: string, deactivatedByUserId?: string): Promise<void>;
@@ -285,6 +292,14 @@ export interface IStorage {
   // Application Events (audit log)
   createApplicationEvent(event: schema.InsertApplicationEvent): Promise<schema.ApplicationEvent>;
   getApplicationEvents(applicationId: string): Promise<schema.ApplicationEvent[]>;
+
+  // Self-Service Community Join
+  searchPublicCommunities(query: string): Promise<schema.Tenant[]>;
+  selfServiceJoinCommunity(userId: string, tenantId: string): Promise<schema.UserTenantRole>;
+
+  // Homeowner Verification
+  verifyHomeowner(userId: string, tenantId: string, applicationId: string): Promise<schema.UserTenantRole | undefined>;
+  isHomeownerVerified(userId: string, tenantId: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -381,32 +396,51 @@ export class DbStorage implements IStorage {
   }
 
   async getManagedProperties(userId: string): Promise<schema.Tenant[]> {
-    // Get all tenants where user has account_admin role
-    const adminRoles = await db
+    // Get all user's roles with their tenants
+    const userRoles = await db
       .select()
       .from(schema.userTenantRoles)
       .innerJoin(schema.tenants, eq(schema.userTenantRoles.tenantId, schema.tenants.id))
       .where(
         and(
           eq(schema.userTenantRoles.userId, userId),
-          eq(schema.userTenantRoles.role, 'account_admin')
+          eq(schema.userTenantRoles.isActive, true)
         )
       );
 
     // Collect community IDs and management company IDs
     const communityIds = new Set<string>();
     const managementCompanyIds = new Set<string>();
+    const userRoleNames = userRoles.map(r => r.user_tenant_roles.role);
 
-    for (const role of adminRoles) {
-      const tenant = role.tenants;
+    // Check if user has management_manager or account_admin at any management company
+    const hasManagerOrAdminAtMgmtCompany = userRoles.some(
+      r => r.tenants.type === 'management_company' &&
+           (r.user_tenant_roles.role === 'management_manager' || r.user_tenant_roles.role === 'account_admin')
+    );
+
+    // Check if user is only a management_rep (no manager/admin role)
+    const isOnlyManagementRep = userRoles.some(
+      r => r.tenants.type === 'management_company' && r.user_tenant_roles.role === 'management_rep'
+    ) && !hasManagerOrAdminAtMgmtCompany;
+
+    for (const roleData of userRoles) {
+      const tenant = roleData.tenants;
+      const role = roleData.user_tenant_roles.role;
+
       if (tenant.type === 'community') {
+        // Direct community access
         communityIds.add(tenant.id);
       } else if (tenant.type === 'management_company') {
-        managementCompanyIds.add(tenant.id);
+        // management_manager or account_admin at mgmt company = access to all managed communities
+        if (role === 'management_manager' || role === 'account_admin') {
+          managementCompanyIds.add(tenant.id);
+        }
+        // management_rep at mgmt company = handled via property assignments below
       }
     }
 
-    // Get all communities managed by the management companies
+    // For management_manager/account_admin: Get all communities under their management companies
     if (managementCompanyIds.size > 0) {
       const managedCommunities = await db
         .select()
@@ -420,6 +454,86 @@ export class DbStorage implements IStorage {
 
       for (const community of managedCommunities) {
         communityIds.add(community.id);
+      }
+    }
+
+    // For management_rep: Only get properties they're assigned to
+    if (isOnlyManagementRep) {
+      const propertyAssignments = await this.getUserPropertyAssignments(userId);
+      for (const assignment of propertyAssignments) {
+        communityIds.add(assignment.propertyId);
+      }
+    }
+
+    // Fetch all unique tenants (both management companies and communities)
+    const allTenantIds = [...Array.from(managementCompanyIds), ...Array.from(communityIds)];
+
+    if (allTenantIds.length === 0) {
+      return [];
+    }
+
+    const tenants = await db
+      .select()
+      .from(schema.tenants)
+      .where(inArray(schema.tenants.id, allTenantIds));
+
+    return tenants;
+  }
+
+  async getPropertiesByRole(userId: string, role: string): Promise<schema.Tenant[]> {
+    // Get user's roles filtered by the specific role
+    const userRoles = await db
+      .select()
+      .from(schema.userTenantRoles)
+      .innerJoin(schema.tenants, eq(schema.userTenantRoles.tenantId, schema.tenants.id))
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.role, role),
+          eq(schema.userTenantRoles.isActive, true)
+        )
+      );
+
+    const communityIds = new Set<string>();
+    const managementCompanyIds = new Set<string>();
+
+    for (const roleData of userRoles) {
+      const tenant = roleData.tenants;
+
+      if (tenant.type === 'community') {
+        // Direct community access with this specific role
+        communityIds.add(tenant.id);
+      } else if (tenant.type === 'management_company') {
+        // For account_admin or management_manager at mgmt company, get all managed communities
+        if (role === 'management_manager' || role === 'account_admin') {
+          managementCompanyIds.add(tenant.id);
+        }
+        // For management_rep, handled via property assignments below
+      }
+    }
+
+    // For management_manager/account_admin at mgmt company: Get all communities under their management companies
+    if (managementCompanyIds.size > 0) {
+      const managedCommunities = await db
+        .select()
+        .from(schema.tenants)
+        .where(
+          and(
+            eq(schema.tenants.type, 'community'),
+            inArray(schema.tenants.managementCompanyId, Array.from(managementCompanyIds))
+          )
+        );
+
+      for (const community of managedCommunities) {
+        communityIds.add(community.id);
+      }
+    }
+
+    // For management_rep: Only get properties they're assigned to
+    if (role === 'management_rep') {
+      const propertyAssignments = await this.getUserPropertyAssignments(userId);
+      for (const assignment of propertyAssignments) {
+        communityIds.add(assignment.propertyId);
       }
     }
 
@@ -465,6 +579,99 @@ export class DbStorage implements IStorage {
       );
 
     return results.map(r => ({ ...r.user_tenant_roles, tenant: r.tenants }));
+  }
+
+  // Role hierarchy for determining effective role (highest privilege first)
+  private readonly ROLE_HIERARCHY = [
+    'super_admin',
+    'account_admin',
+    'management_manager',
+    'management_rep',
+    'poa_board_member',
+    'poa_board_contributor',
+    'delegated_rep',
+    'homeowner',
+  ];
+
+  private getHighestPrivilegeRole(roles: string[]): string | null {
+    for (const hierarchyRole of this.ROLE_HIERARCHY) {
+      if (roles.includes(hierarchyRole)) {
+        return hierarchyRole;
+      }
+    }
+    return roles[0] || null;
+  }
+
+  /**
+   * Get the effective role for a user on a specific tenant.
+   * This considers role inheritance from management company:
+   * - If tenant is a community and user has management_manager at the management company,
+   *   they inherit that role for the community.
+   * - If user has management_rep at management company, they only get access if assigned to this property.
+   */
+  async getUserEffectiveRole(userId: string, tenantId: string): Promise<{
+    role: string | null;
+    allRoles: string[];
+    isFromManagementCompany: boolean;
+    managementCompanyId: string | null;
+  }> {
+    // Get the target tenant
+    const tenant = await this.getTenant(tenantId);
+    if (!tenant) {
+      return { role: null, allRoles: [], isFromManagementCompany: false, managementCompanyId: null };
+    }
+
+    // Get user's direct roles on this tenant
+    const directRoles = await this.getUserRolesForTenant(userId, tenantId);
+    const directRoleNames = directRoles.map(r => r.role);
+
+    // If tenant is a community with a management company, check inherited roles
+    let inheritedRoles: string[] = [];
+    let isFromManagementCompany = false;
+    const managementCompanyId = tenant.managementCompanyId;
+
+    if (tenant.type === 'community' && managementCompanyId) {
+      // Get user's roles at the management company
+      const mgmtRoles = await this.getUserRolesForTenant(userId, managementCompanyId);
+      const mgmtRoleNames = mgmtRoles.map(r => r.role);
+
+      // management_manager at mgmt company inherits to all communities
+      if (mgmtRoleNames.includes('management_manager')) {
+        inheritedRoles.push('management_manager');
+        isFromManagementCompany = true;
+      }
+
+      // account_admin at mgmt company inherits to all communities
+      if (mgmtRoleNames.includes('account_admin')) {
+        inheritedRoles.push('account_admin');
+        isFromManagementCompany = true;
+      }
+
+      // management_rep at mgmt company only inherits if assigned to this property
+      if (mgmtRoleNames.includes('management_rep') && !mgmtRoleNames.includes('management_manager')) {
+        const isAssigned = await this.isUserAssignedToProperty(userId, tenantId);
+        if (isAssigned) {
+          inheritedRoles.push('management_rep');
+          isFromManagementCompany = true;
+        }
+      }
+    }
+
+    // Combine direct and inherited roles
+    const allRoles = Array.from(new Set([...directRoleNames, ...inheritedRoles]));
+    const effectiveRole = this.getHighestPrivilegeRole(allRoles);
+
+    // Determine if the effective role came from management company
+    const roleIsFromMgmtCompany = effectiveRole !== null &&
+      inheritedRoles.includes(effectiveRole) &&
+      !directRoleNames.includes(effectiveRole);
+
+    return {
+      role: effectiveRole,
+      allRoles,
+      isFromManagementCompany: roleIsFromMgmtCompany,
+      managementCompanyId: managementCompanyId || null,
+    };
   }
 
   async assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole> {
@@ -2476,7 +2683,7 @@ export class DbStorage implements IStorage {
     await db.delete(schema.calendarFeedTokens).where(eq(schema.calendarFeedTokens.id, id));
   }
 
-  // Get events for iCal feed - returns events for the next 12 months
+  // Get events for iCal feed - returns events from past 3 months to next 12 months
   async getEventsForFeed(
     userId: string,
     tenantId?: string,
@@ -2496,13 +2703,16 @@ export class DbStorage implements IStorage {
     }
 
     const now = new Date();
+    // Include events from past 3 months (calendar apps show history)
+    const threeMonthsAgo = new Date(now);
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     const oneYearFromNow = new Date(now);
     oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
 
     // Build conditions
     const conditions = [
       inArray(schema.events.tenantId, tenantIds),
-      sql`${schema.events.startDatetime} >= ${now}`,
+      sql`${schema.events.startDatetime} >= ${threeMonthsAgo}`,
       sql`${schema.events.startDatetime} <= ${oneYearFromNow}`,
       sql`${schema.events.status} != 'cancelled'`,
     ];
@@ -2816,6 +3026,102 @@ export class DbStorage implements IStorage {
       .from(schema.applicationEvents)
       .where(eq(schema.applicationEvents.applicationId, applicationId))
       .orderBy(desc(schema.applicationEvents.createdAt));
+  }
+
+  // ============================================
+  // SELF-SERVICE COMMUNITY JOIN
+  // ============================================
+
+  async searchPublicCommunities(query: string): Promise<schema.Tenant[]> {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    const lowercaseQuery = query.toLowerCase();
+    const results = await db
+      .select()
+      .from(schema.tenants)
+      .where(
+        and(
+          eq(schema.tenants.isActive, true),
+          eq(schema.tenants.type, 'community'),
+          eq(schema.tenants.allowPublicApplications, true),
+          isNull(schema.tenants.demoCodeId), // Exclude demo accounts
+          or(
+            sql`LOWER(${schema.tenants.name}) LIKE ${`%${lowercaseQuery}%`}`,
+            sql`LOWER(${schema.tenants.subdomain}) LIKE ${`%${lowercaseQuery}%`}`
+          )
+        )
+      )
+      .limit(10);
+
+    return results;
+  }
+
+  async selfServiceJoinCommunity(userId: string, tenantId: string): Promise<schema.UserTenantRole> {
+    // Check if tenant allows public applications
+    const tenant = await this.getTenant(tenantId);
+    if (!tenant) {
+      throw new Error('Community not found');
+    }
+    if (tenant.type !== 'community') {
+      throw new Error('Can only join communities');
+    }
+    if (!tenant.allowPublicApplications) {
+      throw new Error('This community does not allow self-service registration');
+    }
+
+    // Check if user already has a role in this tenant
+    const existingRoles = await this.getUserRolesForTenant(userId, tenantId);
+    if (existingRoles.length > 0) {
+      throw new Error('You are already a member of this community');
+    }
+
+    // Create unverified homeowner role
+    const [role] = await db
+      .insert(schema.userTenantRoles)
+      .values({
+        userId,
+        tenantId,
+        role: 'homeowner',
+        isVerified: false,
+        isActive: true,
+      })
+      .returning();
+
+    return role;
+  }
+
+  // ============================================
+  // HOMEOWNER VERIFICATION
+  // ============================================
+
+  async verifyHomeowner(userId: string, tenantId: string, applicationId: string): Promise<schema.UserTenantRole | undefined> {
+    const [updated] = await db
+      .update(schema.userTenantRoles)
+      .set({
+        isVerified: true,
+        verifiedAt: new Date(),
+        verifiedByApplicationId: applicationId,
+      })
+      .where(
+        and(
+          eq(schema.userTenantRoles.userId, userId),
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.role, 'homeowner'),
+          eq(schema.userTenantRoles.isActive, true),
+          eq(schema.userTenantRoles.isVerified, false) // Only update if not already verified
+        )
+      )
+      .returning();
+
+    return updated;
+  }
+
+  async isHomeownerVerified(userId: string, tenantId: string): Promise<boolean> {
+    const roles = await this.getUserRolesForTenant(userId, tenantId);
+    const homeownerRole = roles.find(r => r.role === 'homeowner');
+    return homeownerRole?.isVerified ?? false;
   }
 }
 

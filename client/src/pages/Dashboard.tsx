@@ -9,9 +9,24 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
 import RepContactCard from "@/components/RepContactCard";
+import { SuperAdminDashboard } from "@/components/SuperAdminDashboard";
+import { api } from "@/lib/api";
 
 export default function Dashboard() {
   const { currentUserRole, currentTenant } = useAppStore();
+
+  // Check if user is super admin
+  const { data: superAdminData } = useQuery({
+    queryKey: ['/api/auth/is-super-admin'],
+    queryFn: () => api.isSuperAdmin(),
+  });
+
+  const isSuperAdmin = superAdminData?.isSuperAdmin ?? false;
+
+  // Super admin with no tenant context - show admin dashboard
+  if (isSuperAdmin && !currentTenant) {
+    return <SuperAdminDashboard />;
+  }
 
   // Render different dashboard views based on role
   if (currentUserRole === 'account_admin') {

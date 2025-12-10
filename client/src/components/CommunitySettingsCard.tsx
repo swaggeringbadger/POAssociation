@@ -16,7 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Building, FileText, Globe, Phone, Mail, MapPin, Scale, Loader2, ExternalLink, Image } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Building, FileText, Globe, Phone, Mail, MapPin, Scale, Loader2, ExternalLink, Image, Users } from "lucide-react";
 import type { CommunitySettings, LegalEntityType } from "@shared/schema";
 
 const US_STATES = [
@@ -50,6 +51,7 @@ const US_STATES = [
 interface FormData {
   designGuidelinesUrl: string;
   heroImageUrl: string;
+  allowPublicApplications: boolean;
   communitySettings: CommunitySettings;
 }
 
@@ -61,6 +63,7 @@ export default function CommunitySettingsCard() {
   const [formData, setFormData] = useState<FormData>({
     designGuidelinesUrl: "",
     heroImageUrl: "",
+    allowPublicApplications: true,
     communitySettings: {
       legalEntityType: "poa",
       legalEntityName: "",
@@ -85,6 +88,7 @@ export default function CommunitySettingsCard() {
       setFormData({
         designGuidelinesUrl: (currentTenant as any).designGuidelinesUrl || "",
         heroImageUrl: (currentTenant as any).heroImageUrl || "",
+        allowPublicApplications: (currentTenant as any).allowPublicApplications ?? true,
         communitySettings: {
           legalEntityType: (currentTenant as any).communitySettings?.legalEntityType || "poa",
           legalEntityName: (currentTenant as any).communitySettings?.legalEntityName || "",
@@ -110,6 +114,7 @@ export default function CommunitySettingsCard() {
       return api.updateTenant(currentTenant!.id, {
         designGuidelinesUrl: data.designGuidelinesUrl || null,
         heroImageUrl: data.heroImageUrl || null,
+        allowPublicApplications: data.allowPublicApplications,
         communitySettings: data.communitySettings,
       });
     },
@@ -355,6 +360,30 @@ export default function CommunitySettingsCard() {
               </div>
             </div>
           )}
+        </div>
+
+        <Separator />
+
+        {/* Public Registration Section */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Self-Service Registration
+          </h4>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="allowPublicApplications">Allow Public Registration</Label>
+              <p className="text-xs text-muted-foreground">
+                When enabled, homeowners can find and join your community through search to submit applications
+              </p>
+            </div>
+            <Switch
+              id="allowPublicApplications"
+              checked={formData.allowPublicApplications}
+              onCheckedChange={(checked) => setFormData({ ...formData, allowPublicApplications: checked })}
+            />
+          </div>
         </div>
 
         <Separator />

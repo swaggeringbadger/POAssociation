@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Plus, MoreVertical, Edit, Trash2, TreePine, Building, Ticket, Users } from "lucide-react";
+import { Search, Plus, MoreVertical, Edit, Trash2, TreePine, Building, Ticket, Users, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import EditPropertyModal from "@/components/EditPropertyModal";
 import PropertyRepAssignmentModal from "@/components/PropertyRepAssignmentModal";
@@ -47,6 +48,7 @@ import { getLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 export default function Properties() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { currentUserRole } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -54,10 +56,11 @@ export default function Properties() {
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Fetch properties managed by current user
+  // Fetch properties filtered by current role context
+  // account_admin sees only properties they admin, management_manager sees all managed, etc.
   const { data: properties = [], isLoading } = useQuery({
-    queryKey: ["managedProperties"],
-    queryFn: () => api.getManagedProperties(),
+    queryKey: ["managedProperties", currentUserRole],
+    queryFn: () => api.getManagedProperties(currentUserRole),
   });
 
   // Fetch all management companies for dropdown (get from properties that are management_company type)
@@ -253,6 +256,10 @@ export default function Properties() {
                           <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
                             <Ticket className="mr-2 h-4 w-4" />
                             Subscription & Feature Settings
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => window.open(`/community/${property.subdomain}`, '_blank')}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Community Page
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

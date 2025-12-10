@@ -27,6 +27,19 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
+  // Join Community - all authenticated users (for self-service registration)
+  '/join': [
+    'homeowner',
+    'poa_board_contributor',
+    'poa_board_member',
+    'delegated_rep',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+
   // Applications - all authenticated users (auxiliary is read-only, enforced at component level)
   '/applications': [
     'homeowner',

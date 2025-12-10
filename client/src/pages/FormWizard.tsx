@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
@@ -67,6 +67,8 @@ export default function FormWizard() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [newlyGeneratedVersionId, setNewlyGeneratedVersionId] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
+
   // Use selected property filter if available, otherwise fall back to current tenant
   const effectiveTenantId = selectedPropertyFilter || currentTenant?.id;
 
@@ -131,6 +133,7 @@ export default function FormWizard() {
     queryKey: ["formVersions", effectiveTenantId, viewingType],
     queryFn: () => api.getFormTemplateVersions(effectiveTenantId!, viewingType!),
     enabled: viewFormOpen && !!viewingType && !!effectiveTenantId,
+    staleTime: 0, // Always refetch to get latest versions
   });
 
   const handleViewForm = (applicationType: ApplicationType) => {
@@ -212,16 +215,20 @@ export default function FormWizard() {
         duration: 5000,
       });
 
+      // Invalidate and refetch all related queries to ensure fresh data
+      await queryClient.invalidateQueries({ queryKey: ["formTemplates", effectiveTenantId] });
+      await queryClient.invalidateQueries({ queryKey: ["formVersions", effectiveTenantId, applicationType] });
+
       // Refresh form templates
       await refetchTemplates();
 
       // If the modal is open for this type, refresh the versions list
       if (viewFormOpen && viewingType === applicationType) {
         await refetchVersions();
-        
+
         // Set the newly generated version ID for animation
         setNewlyGeneratedVersionId(result.formTemplateId);
-        
+
         // Clear the highlight after 5 seconds
         setTimeout(() => {
           setNewlyGeneratedVersionId(null);

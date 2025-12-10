@@ -128,9 +128,12 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     console.log('✅ Created 4 demo users');
 
     // 4. Assign User Roles
+    // Note: management_manager and account_admin roles at management company level
+    // automatically inherit to all managed communities (handled by getUserEffectiveRole)
     console.log('Assigning user roles...');
     const userTenantRoles = await Promise.all([
-      // Emily (Manager + Account Admin) - access to all
+      // Emily (Manager + Account Admin) - roles at management company level only
+      // Her access to communities is inherited from these roles
       storage.assignUserRole({
         userId: demoUsers[0].id,
         tenantId: managementCompany.id,
@@ -141,18 +144,6 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
         userId: demoUsers[0].id,
         tenantId: managementCompany.id,
         role: 'account_admin',
-        demoCodeId,
-      }),
-      storage.assignUserRole({
-        userId: demoUsers[0].id,
-        tenantId: markland.id,
-        role: 'management_rep',
-        demoCodeId,
-      }),
-      storage.assignUserRole({
-        userId: demoUsers[0].id,
-        tenantId: whisperingPines.id,
-        role: 'management_rep',
         demoCodeId,
       }),
 
@@ -172,6 +163,7 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
       }),
 
       // Jordan (Management Rep) - Apex Management (has management_rep role)
+      // Their access to specific communities comes from property_rep_assignments
       storage.assignUserRole({
         userId: demoUsers[2].id,
         tenantId: managementCompany.id,

@@ -47,7 +47,14 @@ export default function WorkflowTemplatesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const { selectedPropertyFilter } = useAppStore();
+  const { selectedPropertyFilter, currentTenant, currentUserRole } = useAppStore();
+
+  // For account_admins on a community (not management company), use the current tenant as the target
+  // This handles the case where there's no property filter dropdown because they're already on a community
+  const effectivePropertyFilter = selectedPropertyFilter ||
+    (currentTenant?.type === 'community' && (currentUserRole === 'account_admin' || currentUserRole === 'poa_board_member')
+      ? currentTenant.id
+      : null);
 
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -60,10 +67,10 @@ export default function WorkflowTemplatesPage() {
 
   // Pass the selected property filter to the API
   const { data, isLoading } = useQuery<TemplatesResponse>({
-    queryKey: ['/api/workflow-designer/templates', selectedPropertyFilter],
+    queryKey: ['/api/workflow-designer/templates', effectivePropertyFilter],
     queryFn: async () => {
-      const url = selectedPropertyFilter
-        ? `/api/workflow-designer/templates?targetTenantId=${selectedPropertyFilter}`
+      const url = effectivePropertyFilter
+        ? `/api/workflow-designer/templates?targetTenantId=${effectivePropertyFilter}`
         : '/api/workflow-designer/templates';
       const response = await fetch(url, {
         credentials: 'include',
@@ -77,9 +84,9 @@ export default function WorkflowTemplatesPage() {
 
   // Get current active workflow for the selected property
   const { data: propertyWorkflow } = useQuery<PropertyWorkflowResponse>({
-    queryKey: ['/api/properties', selectedPropertyFilter, 'workflow'],
+    queryKey: ['/api/properties', effectivePropertyFilter, 'workflow'],
     queryFn: async () => {
-      const response = await fetch(`/api/properties/${selectedPropertyFilter}/workflow`, {
+      const response = await fetch(`/api/properties/${effectivePropertyFilter}/workflow`, {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -87,7 +94,7 @@ export default function WorkflowTemplatesPage() {
       }
       return response.json();
     },
-    enabled: !!selectedPropertyFilter,
+    enabled: !!effectivePropertyFilter,
   });
 
   const templates = data?.templates || [];
@@ -108,7 +115,7 @@ export default function WorkflowTemplatesPage() {
         body: JSON.stringify({
           name,
           description,
-          targetTenantId: selectedPropertyFilter,
+          targetTenantId: effectivePropertyFilter,
         }),
       });
       if (!response.ok) {
@@ -167,11 +174,11 @@ export default function WorkflowTemplatesPage() {
 
   const activateMutation = useMutation({
     mutationFn: async (templateId: string) => {
-      if (!selectedPropertyFilter) {
+      if (!effectivePropertyFilter) {
         throw new Error('No property selected');
       }
-      console.log('[activateMutation] Setting workflow for property:', selectedPropertyFilter, 'template:', templateId);
-      const response = await fetch(`/api/properties/${selectedPropertyFilter}/workflow`, {
+      console.log('[activateMutation] Setting workflow for property:', effectivePropertyFilter, 'template:', templateId);
+      const response = await fetch(`/api/properties/${effectivePropertyFilter}/workflow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -192,7 +199,7 @@ export default function WorkflowTemplatesPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/properties', selectedPropertyFilter, 'workflow'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/properties', effectivePropertyFilter, 'workflow'] });
       setActivateDialogOpen(false);
       toast({
         title: 'Workflow activated',
@@ -242,7 +249,7 @@ export default function WorkflowTemplatesPage() {
   };
 
   const handleActivateClick = (template: WorkflowTemplate) => {
-    if (!selectedPropertyFilter) {
+    if (!effectivePropertyFilter) {
       toast({
         title: 'No property selected',
         description: 'Please select a property from the dropdown to set an active workflow.',
@@ -262,8 +269,8 @@ export default function WorkflowTemplatesPage() {
 
   const handleUpgrade = () => {
     // Navigate to subscription management page for the selected property
-    if (selectedPropertyFilter) {
-      setLocation(`/properties/${selectedPropertyFilter}/subscription`);
+    if (effectivePropertyFilter) {
+      setLocation(`/properties/${effectivePropertyFilter}/subscription`);
     } else {
       // If no property selected, go to properties list
       setLocation('/properties');
@@ -284,8 +291,8 @@ export default function WorkflowTemplatesPage() {
   const customTemplates = templates?.filter((t) => !t.isBlueprint) || [];
 
   // Determine if we need to show "select property" message vs "upgrade" message
-  const needsPropertySelection = !selectedPropertyFilter;
-  const needsUpgrade = selectedPropertyFilter && !canClone;
+  const needsPropertySelection = !effectivePropertyFilter;
+  const needsUpgrade = effectivePropertyFilter && !canClone;
 
   return (
     <div className="p-8">
@@ -310,7 +317,7 @@ export default function WorkflowTemplatesPage() {
         )}
 
         {/* Current active workflow banner */}
-        {selectedPropertyFilter && propertyWorkflow && (
+        {effectivePropertyFilter && propertyWorkflow && (
           <Alert className="mb-6 border-green-200 bg-green-50">
             <Star className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
@@ -389,7 +396,7 @@ export default function WorkflowTemplatesPage() {
                               size="sm"
                               variant={isActive ? "secondary" : "default"}
                               onClick={() => handleActivateClick(template)}
-                              disabled={!selectedPropertyFilter || isActive}
+                              disabled={!effectivePropertyFilter || isActive}
                             >
                               {isActive ? (
                                 <>
@@ -404,7 +411,7 @@ export default function WorkflowTemplatesPage() {
                               )}
                             </Button>
                           </TooltipTrigger>
-                          {!selectedPropertyFilter && (
+                          {!effectivePropertyFilter && (
                             <TooltipContent>
                               <p className="text-sm">Select a property first</p>
                             </TooltipContent>
@@ -489,7 +496,7 @@ export default function WorkflowTemplatesPage() {
                                 size="sm"
                                 variant={isActive ? "secondary" : "default"}
                                 onClick={() => handleActivateClick(template)}
-                                disabled={!selectedPropertyFilter || isActive}
+                                disabled={!effectivePropertyFilter || isActive}
                               >
                                 {isActive ? (
                                   <>
@@ -504,7 +511,7 @@ export default function WorkflowTemplatesPage() {
                                 )}
                               </Button>
                             </TooltipTrigger>
-                            {!selectedPropertyFilter && (
+                            {!effectivePropertyFilter && (
                               <TooltipContent>
                                 <p className="text-sm">Select a property first</p>
                               </TooltipContent>

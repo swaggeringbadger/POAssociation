@@ -80,7 +80,16 @@
       "Bash(git -C /home/runner/workspace log --oneline --since=\"30 days ago\")",
       "Bash(git -C /home/runner/workspace log --oneline --since=\"30 days ago\" --name-only)",
       "Bash(git -C /home/runner/workspace show 1af9792:server/storage.ts)",
-      "Bash(killall:*)"
+      "Bash(killall:*)",
+      "Bash(timeout 10 curl:*)",
+      "Bash(git -C /home/runner/workspace diff client/src/pages/Dashboard.tsx)",
+      "Bash(git -C /home/runner/workspace diff client/src/components/SuperAdminDashboard.tsx)",
+      "Bash(git -C /home/runner/workspace diff client/src/components/layout/DashboardLayout.tsx)",
+      "Bash(git -C /home/runner/workspace diff client/src/pages/ProfileSettings.tsx)",
+      "Bash(git -C /home/runner/workspace diff client/src/hooks/useUserTenants.ts)",
+      "Bash(git -C /home/runner/workspace diff client/src/pages/JoinCommunity.tsx)",
+      "Bash(git -C /home/runner/workspace diff server/storage.ts)",
+      "Bash(git -C /home/runner/workspace diff shared/schema.ts)"
     ],
     "deny": [],
     "ask": []

@@ -26,6 +26,61 @@ function getHighestPrivilegeRole(roles: string[]): string {
   return roles[0] || 'homeowner';
 }
 
+// Type for tenant from userTenants response
+type UserTenantWithTenant = {
+  tenantId: string;
+  role: string;
+  tenant: {
+    id: string;
+    type: string;
+    managementCompanyId?: string | null;
+  };
+};
+
+/**
+ * Get effective roles for a tenant, considering inherited roles from management company.
+ * - If tenant is a community with a managementCompanyId, inherit management_manager and account_admin from the mgmt company
+ * - management_rep at mgmt company level doesn't automatically inherit (requires property assignment, handled server-side)
+ */
+function getEffectiveRolesForTenant(
+  tenantId: string,
+  userTenants: UserTenantWithTenant[]
+): string[] {
+  // Find the target tenant
+  const targetTenantData = userTenants.find(ut => ut.tenant.id === tenantId);
+  if (!targetTenantData) {
+    return [];
+  }
+
+  // Get direct roles on this tenant
+  const directRoles = userTenants
+    .filter(ut => ut.tenantId === tenantId)
+    .map(ut => ut.role);
+
+  const targetTenant = targetTenantData.tenant;
+
+  // If this is a community with a management company, check for inherited roles
+  if (targetTenant.type === 'community' && targetTenant.managementCompanyId) {
+    const mgmtCompanyId = targetTenant.managementCompanyId;
+    const mgmtRoles = userTenants
+      .filter(ut => ut.tenantId === mgmtCompanyId)
+      .map(ut => ut.role);
+
+    // management_manager at mgmt company = management_manager everywhere under it
+    if (mgmtRoles.includes('management_manager')) {
+      directRoles.push('management_manager');
+    }
+
+    // account_admin at mgmt company = account_admin everywhere under it
+    if (mgmtRoles.includes('account_admin')) {
+      directRoles.push('account_admin');
+    }
+  }
+
+  // Return unique roles
+  return Array.from(new Set(directRoles));
+}
+
 // Sync role with backend session
 async function syncRoleWithBackend(role: string): Promise<void> {
   try {
@@ -80,10 +135,8 @@ export function useUserTenants() {
       // If no current tenant is set, set the first one
       if (!currentTenant || !tenants.find(t => currentTenant && t.id === currentTenant.id)) {
         setCurrentTenant(tenants[0]);
-        // Get ALL roles for this tenant
-        const rolesForTenant = userTenants
-          .filter(ut => ut.tenantId === tenants[0].id)
-          .map(ut => ut.role);
+        // Get ALL effective roles for this tenant (including inherited from mgmt company)
+        const rolesForTenant = getEffectiveRolesForTenant(tenants[0].id, userTenants);
         setAvailableRolesForCurrentTenant(rolesForTenant);
         // Set the highest privilege role as default
         const defaultRole = getHighestPrivilegeRole(rolesForTenant);
@@ -104,10 +157,8 @@ export function useUserTenants() {
   // Update roles when tenant changes
   useEffect(() => {
     if (userTenants && currentTenant?.id) {
-      // Get ALL roles for current tenant
-      const rolesForTenant = userTenants
-        .filter(ut => ut.tenantId === currentTenant.id)
-        .map(ut => ut.role);
+      // Get ALL effective roles for current tenant (including inherited from mgmt company)
+      const rolesForTenant = getEffectiveRolesForTenant(currentTenant.id, userTenants);
       setAvailableRolesForCurrentTenant(rolesForTenant);
 
       // If current role is not available for this tenant, pick the highest privilege role
@@ -120,9 +171,9 @@ export function useUserTenants() {
     }
   }, [currentTenant, userTenants, currentUserRole, setCurrentUserRole, setAvailableRolesForCurrentTenant]);
 
-  // Get all roles for current tenant
-  const rolesForCurrentTenant = currentTenant
-    ? userTenants?.filter(ut => ut.tenantId === currentTenant.id).map(ut => ut.role)
+  // Get all effective roles for current tenant (including inherited)
+  const rolesForCurrentTenant = currentTenant && userTenants
+    ? getEffectiveRolesForTenant(currentTenant.id, userTenants)
     : [];
 
   return {

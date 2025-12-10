@@ -4,7 +4,7 @@
  * Provider-agnostic AI image generation for architectural mockups.
  * Currently supports:
  * - Stability AI
- * - Nano Banana Pro Preview (Gemini 3 Pro Image Preview)
+ * - Nano Banana Pro (Gemini 2.5 Flash Image)
  *
  * Generates AI mockups showing proposed improvements on properties
  * based on application details and satellite imagery.
@@ -42,8 +42,8 @@ export interface MockupContext {
 // Stability AI configuration
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/sd3';
 
-// Nano Banana Pro Preview (Gemini 3 Pro Image) configuration
-const NANO_BANANA_MODEL = 'gemini-3-pro-image-preview';
+// Nano Banana Pro (Gemini 2.5 Flash Image) configuration
+const NANO_BANANA_MODEL = 'gemini-2.5-flash-preview-image-generation';
 const NANO_BANANA_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${NANO_BANANA_MODEL}:generateContent`;
 
 // Helper to get API keys dynamically (allows hot-reload of env vars)
@@ -265,7 +265,7 @@ ${detailsStr}`;
   }
 
   /**
-   * Generate image using Nano Banana Pro (Gemini 2.0 Flash Image Generation)
+   * Generate image using Nano Banana Pro (Gemini 2.5 Flash Image Generation)
    */
   private async generateWithNanoBanana(
     prompt: string,

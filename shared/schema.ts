@@ -143,6 +143,8 @@ export const tenants = pgTable("tenants", {
   autoPayEnabled: boolean("auto_pay_enabled").default(false), // Whether to auto-charge saved payment method
   paymentTermsDays: integer("payment_terms_days").default(30), // Net 30, Net 60, etc.
   billingStatus: text("billing_status").default('active'), // 'active' | 'delinquent' | 'suspended'
+  // Self-service registration
+  allowPublicApplications: boolean("allow_public_applications").default(true).notNull(), // Allow homeowners to self-register via public search
 });
 
 export const insertTenantSchema = createInsertSchema(tenants).omit({
@@ -164,6 +166,10 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
   isActive: boolean("is_active").default(true).notNull(), // Soft delete support
   deactivatedAt: timestamp("deactivated_at"), // When user was removed from tenant
   deactivatedByUserId: varchar("deactivated_by_user_id").references(() => users.id), // Who removed them
+  // Homeowner verification
+  isVerified: boolean("is_verified").default(false).notNull(), // True when homeowner's identity is verified
+  verifiedAt: timestamp("verified_at"), // When the user was verified
+  verifiedByApplicationId: varchar("verified_by_application_id"), // Which application triggered auto-verification
 }, (table) => ({
   userTenantIdx: uniqueIndex("user_tenant_idx").on(table.userId, table.tenantId, table.role),
 }));
@@ -174,6 +180,9 @@ export const insertUserTenantRoleSchema = createInsertSchema(userTenantRoles).om
   isActive: true,
   deactivatedAt: true,
   deactivatedByUserId: true,
+  isVerified: true,
+  verifiedAt: true,
+  verifiedByApplicationId: true,
 });
 
 export type InsertUserTenantRole = z.infer<typeof insertUserTenantRoleSchema>;
@@ -958,7 +967,7 @@ export const communityTiers = pgTable("community_tiers", {
   maxDoors: integer("max_doors"), // NULL for XL (unlimited)
   basePriceMonthly: text("base_price_monthly").notNull(), // Stored as string for precision
   basePriceYearly: text("base_price_yearly").notNull(),
-  includedCredits: integer("included_credits").notNull(),
+  includedCredits: integer("included_ai_credits").notNull(),
   defaultOverageCost: text("default_overage_cost").notNull().default("2.00"),
   maxUsers: integer("max_users"),
   maxStorageGb: integer("max_storage_gb"),
