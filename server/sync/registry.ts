@@ -36,6 +36,25 @@ export const syncFeatures = {
       description: "Health check request",
       schema: {},
     },
+    "dev.instruction": {
+      description: "Claude-to-Claude dev instruction",
+      schema: {
+        type: "string",
+        priority: "string (optional, default: normal)",
+        title: "string",
+        message: "string",
+        context: "object (optional)",
+        relatedAction: "string (optional)",
+      },
+    },
+    "dev.instruction.ack": {
+      description: "Acknowledge a dev instruction",
+      schema: {
+        instructionId: "string",
+        status: "string (acknowledged | implemented | rejected)",
+        responseNotes: "string (optional)",
+      },
+    },
   } as Record<string, { description: string; schema: Record<string, string> }>,
 
   // What POAssociation can SEND to partner apps
@@ -82,6 +101,25 @@ export const syncFeatures = {
         title: "string",
         content: "string",
         priority: "string",
+      },
+    },
+    "dev.instruction": {
+      description: "Claude-to-Claude dev instruction",
+      schema: {
+        type: "string",
+        priority: "string (optional, default: normal)",
+        title: "string",
+        message: "string",
+        context: "object (optional)",
+        relatedAction: "string (optional)",
+      },
+    },
+    "dev.instruction.ack": {
+      description: "Acknowledge a dev instruction",
+      schema: {
+        instructionId: "string",
+        status: "string (acknowledged | implemented | rejected)",
+        responseNotes: "string (optional)",
       },
     },
   } as Record<string, { description: string; schema: Record<string, string> }>,

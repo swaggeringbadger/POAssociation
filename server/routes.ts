@@ -6356,6 +6356,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // Claude-to-Claude Dev Instructions
+  // ============================================
+
+  // Get pending dev instructions (for Claude to check at session start)
+  app.get('/api/sync/dev/instructions', async (req, res) => {
+    try {
+      const status = (req.query.status as string) || 'pending';
+
+      const instructions = await db
+        .select()
+        .from(schema.devInstructions)
+        .where(
+          and(
+            eq(schema.devInstructions.toApp, 'poassociation'),
+            eq(schema.devInstructions.status, status)
+          )
+        )
+        .orderBy(desc(schema.devInstructions.createdAt));
+
+      res.json({
+        count: instructions.length,
+        instructions: instructions.map(i => ({
+          id: i.id,
+          from: i.fromApp,
+          type: i.type,
+          priority: i.priority,
+          title: i.title,
+          message: i.message,
+          context: i.context,
+          relatedAction: i.relatedAction,
+          createdAt: i.createdAt,
+        })),
+      });
+    } catch (error: any) {
+      console.error('[Sync] Error fetching dev instructions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send a dev instruction to HomeHub
+  app.post('/api/sync/dev/instructions', async (req, res) => {
+    try {
+      const { type, priority, title, message, context, relatedAction } = req.body;
+
+      if (!type || !title || !message) {
+        return res.status(400).json({ error: 'type, title, and message are required' });
+      }
+
+      const { sendSyncRequest } = await import('./sync/client');
+
+      // Store locally first
+      const [instruction] = await db
+        .insert(schema.devInstructions)
+        .values({
+          fromApp: 'poassociation',
+          toApp: 'homehub',
+          type,
+          priority: priority || 'normal',
+          title,
+          message,
+          context,
+          relatedAction,
+          status: 'pending',
+        })
+        .returning();
+
+      // Send to HomeHub
+      const result = await sendSyncRequest('homehub', 'dev.instruction', {
+        type,
+        priority: priority || 'normal',
+        title,
+        message,
+        context,
+        relatedAction,
+      });
+
+      // Update with remote instruction ID if successful
+      if (result.success && result.data?.instructionId) {
+        await db
+          .update(schema.devInstructions)
+          .set({ responseNotes: `Remote ID: ${result.data.instructionId}` })
+          .where(eq(schema.devInstructions.id, instruction.id));
+      }
+
+      res.json({
+        sent: result.success,
+        localId: instruction.id,
+        remoteId: result.data?.instructionId,
+        error: result.error,
+      });
+    } catch (error: any) {
+      console.error('[Sync] Error sending dev instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Acknowledge a dev instruction
+  app.post('/api/sync/dev/instructions/:id/ack', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, responseNotes } = req.body;
+
+      if (!status || !['acknowledged', 'implemented', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: 'status must be acknowledged, implemented, or rejected' });
+      }
+
+      // Get the instruction to find source app
+      const [instruction] = await db
+        .select()
+        .from(schema.devInstructions)
+        .where(eq(schema.devInstructions.id, id));
+
+      if (!instruction) {
+        return res.status(404).json({ error: 'Instruction not found' });
+      }
+
+      // Update locally
+      await db
+        .update(schema.devInstructions)
+        .set({
+          status,
+          responseNotes,
+          ...(status === 'acknowledged'
+            ? { acknowledgedAt: new Date() }
+            : { implementedAt: new Date() }),
+        })
+        .where(eq(schema.devInstructions.id, id));
+
+      // Notify the source app
+      const { sendSyncRequest } = await import('./sync/client');
+      await sendSyncRequest(instruction.fromApp, 'dev.instruction.ack', {
+        instructionId: id,
+        status,
+        responseNotes,
+      });
+
+      res.json({ updated: true });
+    } catch (error: any) {
+      console.error('[Sync] Error acknowledging dev instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

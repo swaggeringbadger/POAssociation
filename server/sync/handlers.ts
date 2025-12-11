@@ -1,4 +1,7 @@
 import { SyncPayload } from "./protocol";
+import { db } from "../storage";
+import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 // Type definitions for incoming sync data
 interface ProjectStatusChangedData {
@@ -19,6 +22,21 @@ interface HomeUpdatedData {
   postalCode?: string;
 }
 
+interface DevInstructionData {
+  type: string;
+  priority?: string;
+  title: string;
+  message: string;
+  context?: Record<string, any>;
+  relatedAction?: string;
+}
+
+interface DevInstructionAckData {
+  instructionId: string;
+  status: string;
+  responseNotes?: string;
+}
+
 /**
  * Handle incoming sync actions from partner apps
  */
@@ -34,6 +52,10 @@ export async function handleSyncAction(payload: SyncPayload): Promise<any> {
       return handleHomeUpdated(payload.data as HomeUpdatedData);
     case "health.check":
       return handleHealthCheck();
+    case "dev.instruction":
+      return handleDevInstruction(payload.data as DevInstructionData, payload.sourceApp);
+    case "dev.instruction.ack":
+      return handleDevInstructionAck(payload.data as DevInstructionAckData);
     default:
       throw new Error(`Unknown action: ${payload.action}`);
   }
@@ -101,4 +123,62 @@ async function handleHealthCheck(): Promise<{
     app: "poassociation",
     timestamp: Date.now(),
   };
+}
+
+/**
+ * Handle dev instruction from another Claude
+ * Stores the instruction for the local Claude to process
+ */
+async function handleDevInstruction(
+  data: DevInstructionData,
+  sourceApp: string
+): Promise<{ received: boolean; instructionId: string }> {
+  console.log(`[Sync] Dev instruction from ${sourceApp}: ${data.title}`);
+  console.log(`[Sync] Priority: ${data.priority || "normal"}, Type: ${data.type}`);
+  console.log(`[Sync] Message: ${data.message}`);
+
+  const [instruction] = await db
+    .insert(schema.devInstructions)
+    .values({
+      fromApp: sourceApp,
+      toApp: "poassociation",
+      type: data.type,
+      priority: data.priority || "normal",
+      title: data.title,
+      message: data.message,
+      context: data.context,
+      relatedAction: data.relatedAction,
+      status: "pending",
+    })
+    .returning();
+
+  return {
+    received: true,
+    instructionId: instruction.id,
+  };
+}
+
+/**
+ * Handle acknowledgment of a dev instruction we sent
+ */
+async function handleDevInstructionAck(
+  data: DevInstructionAckData
+): Promise<{ updated: boolean }> {
+  console.log(`[Sync] Dev instruction ${data.instructionId} acknowledged with status: ${data.status}`);
+  if (data.responseNotes) {
+    console.log(`[Sync] Response notes: ${data.responseNotes}`);
+  }
+
+  await db
+    .update(schema.devInstructions)
+    .set({
+      status: data.status,
+      responseNotes: data.responseNotes,
+      ...(data.status === "acknowledged"
+        ? { acknowledgedAt: new Date() }
+        : { implementedAt: new Date() }),
+    })
+    .where(eq(schema.devInstructions.id, data.instructionId));
+
+  return { updated: true };
 }

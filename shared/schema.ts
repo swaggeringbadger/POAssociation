@@ -1386,3 +1386,39 @@ export const insertSyncEventSchema = createInsertSchema(syncEvents).omit({
 });
 export type InsertSyncEvent = z.infer<typeof insertSyncEventSchema>;
 export type SyncEvent = typeof syncEvents.$inferSelect;
+
+// ============================================
+// Claude-to-Claude Dev Instructions
+// ============================================
+
+// Allow Claudes to send instructions to each other across apps
+export const devInstructions = pgTable("dev_instructions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromApp: text("from_app").notNull(), // e.g., "homehub", "poassociation"
+  toApp: text("to_app").notNull(),
+  type: text("type").notNull(), // e.g., "schema_change", "feature_request", "bug_report", "question"
+  priority: text("priority").notNull().default("normal"), // "low", "normal", "high", "urgent"
+  title: text("title").notNull(),
+  message: text("message").notNull(), // The actual instruction/message
+  context: jsonb("context"), // Additional context (code snippets, file paths, etc.)
+  relatedAction: text("related_action"), // Related sync action if applicable
+  status: text("status").notNull().default("pending"), // "pending", "acknowledged", "implemented", "rejected"
+  acknowledgedAt: timestamp("acknowledged_at"),
+  implementedAt: timestamp("implemented_at"),
+  responseNotes: text("response_notes"), // Response from the receiving Claude
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  toAppIdx: index("dev_instructions_to_app_idx").on(table.toApp),
+  statusIdx: index("dev_instructions_status_idx").on(table.status),
+  priorityIdx: index("dev_instructions_priority_idx").on(table.priority),
+  createdAtIdx: index("dev_instructions_created_at_idx").on(table.createdAt),
+}));
+
+export const insertDevInstructionSchema = createInsertSchema(devInstructions).omit({
+  id: true,
+  createdAt: true,
+  acknowledgedAt: true,
+  implementedAt: true,
+});
+export type InsertDevInstruction = z.infer<typeof insertDevInstructionSchema>;
+export type DevInstruction = typeof devInstructions.$inferSelect;
