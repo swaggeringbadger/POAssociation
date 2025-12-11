@@ -6124,9 +6124,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate SSO redirect URL for HomeHub
   app.get('/api/homehub/sso', isAuthenticated, async (req: any, res) => {
     try {
-      const user = req.user;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      // Fetch user from database to get email
+      const user = await storage.getUser(userId);
       if (!user?.email) {
         return res.status(400).json({ error: 'User email is required for SSO' });
+      }
+
+      // Try to get postal code from user's tenant/community
+      let postalCode: string | undefined;
+      try {
+        const userTenants = await storage.getUserTenants(userId);
+        // Find first community tenant with a physical address
+        for (const ut of userTenants) {
+          const communitySettings = ut.tenant?.communitySettings as any;
+          if (communitySettings?.physicalAddress?.zip) {
+            postalCode = communitySettings.physicalAddress.zip;
+            break;
+          }
+        }
+      } catch (e) {
+        // Postal code is optional, continue without it
       }
 
       const ssoSecret = process.env.HOMEHUB_SSO_SECRET;
@@ -6136,13 +6158,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const crypto = await import('crypto');
 
-      const payload = {
+      const displayName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email.split('@')[0];
+
+      const payload: Record<string, any> = {
         email: user.email,
         appId: "hoa_app",
         timestamp: Date.now(),
         nonce: crypto.randomUUID(),
-        displayName: user.name || user.email.split('@')[0]
+        displayName
       };
+
+      // Add postal code if available
+      if (postalCode) {
+        payload.postalCode = postalCode;
+      }
 
       const signature = crypto
         .createHmac("sha256", ssoSecret)
@@ -6172,6 +6201,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error('Error checking HomeHub status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // Inter-App Sync Protocol
+  // ============================================
+
+  // Import sync modules lazily to avoid circular dependencies
+  const getSyncModules = async () => {
+    const { verifyRequest, isSyncConfigured } = await import('./sync/protocol');
+    const { syncFeatures, canReceive } = await import('./sync/registry');
+    const { handleSyncAction } = await import('./sync/handlers');
+    return { verifyRequest, isSyncConfigured, syncFeatures, canReceive, handleSyncAction };
+  };
+
+  // Public feature registry - allows partner apps to discover capabilities
+  app.get('/api/sync/features', async (req, res) => {
+    try {
+      const { syncFeatures } = await getSyncModules();
+      res.json(syncFeatures);
+    } catch (error: any) {
+      console.error('[Sync] Error fetching features:', error);
+      res.status(500).json({ error: 'Failed to fetch sync features' });
+    }
+  });
+
+  // Receive signed requests from partner apps
+  app.post('/api/sync/receive', async (req, res) => {
+    try {
+      const { verifyRequest, canReceive, handleSyncAction } = await getSyncModules();
+
+      const request = req.body;
+
+      // Validate structure
+      if (!request?.payload?.sourceApp || !request?.signature) {
+        return res.status(400).json({ error: 'Invalid request format' });
+      }
+
+      // Only accept from known apps
+      if (request.payload.sourceApp !== 'homehub') {
+        return res.status(400).json({ error: 'Unknown source app' });
+      }
+
+      // Verify signature
+      const verification = verifyRequest(request, request.payload.sourceApp);
+      if (!verification.valid) {
+        console.error('[Sync] Verification failed:', verification.error);
+        return res.status(401).json({ error: verification.error });
+      }
+
+      // Check action is supported
+      if (!canReceive(request.payload.action)) {
+        return res.status(400).json({
+          error: `Unsupported action: ${request.payload.action}`
+        });
+      }
+
+      // Log inbound sync event
+      try {
+        await db.insert(schema.syncEvents).values({
+          direction: 'inbound',
+          partnerApp: request.payload.sourceApp,
+          action: request.payload.action,
+          payload: request.payload.data,
+          correlationId: request.payload.nonce,
+          status: 'pending',
+        });
+      } catch (logError) {
+        console.error('[Sync] Failed to log sync event:', logError);
+        // Continue processing even if logging fails
+      }
+
+      // Route to handler
+      const result = await handleSyncAction(request.payload);
+
+      // Update sync event status
+      try {
+        await db.update(schema.syncEvents)
+          .set({
+            status: 'success',
+            response: result,
+          })
+          .where(eq(schema.syncEvents.correlationId, request.payload.nonce));
+      } catch (updateError) {
+        console.error('[Sync] Failed to update sync event:', updateError);
+      }
+
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('[Sync] Handler error:', error);
+
+      // Try to update sync event with error
+      try {
+        const request = req.body;
+        if (request?.payload?.nonce) {
+          await db.update(schema.syncEvents)
+            .set({
+              status: 'failed',
+              errorMessage: error.message,
+            })
+            .where(eq(schema.syncEvents.correlationId, request.payload.nonce));
+        }
+      } catch (updateError) {
+        console.error('[Sync] Failed to update sync event with error:', updateError);
+      }
+
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Health check endpoint (signed) - verify connectivity between apps
+  app.post('/api/sync/health', async (req, res) => {
+    try {
+      const { verifyRequest, syncFeatures } = await getSyncModules();
+
+      const request = req.body;
+
+      if (!request?.payload?.sourceApp) {
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+
+      const verification = verifyRequest(request, request.payload.sourceApp);
+      if (!verification.valid) {
+        return res.status(401).json({ error: verification.error });
+      }
+
+      res.json({
+        healthy: true,
+        app: 'poassociation',
+        timestamp: Date.now(),
+        features: Object.keys(syncFeatures.receives),
+      });
+    } catch (error: any) {
+      console.error('[Sync] Health check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check sync configuration status (authenticated)
+  app.get('/api/sync/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { isSyncConfigured } = await getSyncModules();
+      res.json({
+        homehub: {
+          configured: isSyncConfigured('homehub'),
+          url: process.env.HOMEHUB_APP_URL || process.env.HOMEHUB_URL || 'https://homehub.replit.app',
+        },
+      });
+    } catch (error: any) {
+      console.error('[Sync] Status check error:', error);
       res.status(500).json({ error: error.message });
     }
   });

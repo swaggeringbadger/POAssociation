@@ -25,8 +25,8 @@ export function HomeHubCard() {
       return res.json();
     },
     onSuccess: (data) => {
-      // Redirect to HomeHub
-      window.location.href = data.redirectUrl;
+      // Open HomeHub in a new tab
+      window.open(data.redirectUrl, '_blank');
     },
   });
 

@@ -1355,3 +1355,34 @@ export const insertApplicationEventSchema = createInsertSchema(applicationEvents
 });
 export type InsertApplicationEvent = z.infer<typeof insertApplicationEventSchema>;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
+
+// ============================================
+// Inter-App Sync Events
+// ============================================
+
+// Track sync events for debugging and audit
+export const syncEvents = pgTable("sync_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  direction: text("direction").notNull(), // "inbound" | "outbound"
+  partnerApp: text("partner_app").notNull(), // e.g., "homehub"
+  action: text("action").notNull(), // e.g., "project.seed", "project.statusChanged"
+  payload: jsonb("payload"), // The sync payload data
+  response: jsonb("response"), // Response received/sent
+  status: text("status").notNull(), // "success" | "failed" | "pending"
+  errorMessage: text("error_message"),
+  correlationId: text("correlation_id"), // nonce for tracking/deduplication
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  directionIdx: index("sync_events_direction_idx").on(table.direction),
+  partnerAppIdx: index("sync_events_partner_app_idx").on(table.partnerApp),
+  actionIdx: index("sync_events_action_idx").on(table.action),
+  statusIdx: index("sync_events_status_idx").on(table.status),
+  createdAtIdx: index("sync_events_created_at_idx").on(table.createdAt),
+}));
+
+export const insertSyncEventSchema = createInsertSchema(syncEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSyncEvent = z.infer<typeof insertSyncEventSchema>;
+export type SyncEvent = typeof syncEvents.$inferSelect;

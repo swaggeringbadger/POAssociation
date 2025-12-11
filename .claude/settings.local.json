@@ -94,7 +94,8 @@
       "Bash(git -C /home/runner/workspace log --oneline -20)",
       "Bash(git -C /home/runner/workspace show --stat 911656f)",
       "Bash(git -C /home/runner/workspace log --all --oneline --graph)",
-      "Bash(git -C /home/runner/workspace log --since=\"2 weeks ago\" --oneline)"
+      "Bash(git -C /home/runner/workspace log --since=\"2 weeks ago\" --oneline)",
+      "Bash(npx drizzle-kit push:*)"
     ],
     "deny": [],
     "ask": []
