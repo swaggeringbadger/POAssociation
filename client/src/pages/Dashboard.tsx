@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle, Brain, XCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
@@ -12,6 +12,65 @@ import RepContactCard from "@/components/RepContactCard";
 import { SuperAdminDashboard } from "@/components/SuperAdminDashboard";
 import { HomeHubCard } from "@/components/HomeHubCard";
 import { api } from "@/lib/api";
+
+// Type for applications with AI analysis data
+type ApplicationWithAiAnalysis = {
+  id: string;
+  title: string;
+  propertyAddress: string;
+  status: string;
+  submittedAt: string;
+  tenantId: string;
+  tenantName?: string;
+  projectType?: string;
+  aiAnalysis?: { status: string; complianceScore?: number; riskLevel?: string } | null;
+};
+
+// Helper function to render AI analysis badge
+function getAiAnalysisBadge(aiAnalysis: ApplicationWithAiAnalysis['aiAnalysis']) {
+  if (!aiAnalysis) return null;
+
+  if (aiAnalysis.status === 'queued' || aiAnalysis.status === 'processing') {
+    return (
+      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 gap-1">
+        <Brain className="h-3 w-3 animate-pulse" />
+        AI Analyzing...
+      </Badge>
+    );
+  }
+
+  if (aiAnalysis.status === 'failed') {
+    return (
+      <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 gap-1">
+        <XCircle className="h-3 w-3" />
+        AI Failed
+      </Badge>
+    );
+  }
+
+  if (aiAnalysis.status === 'completed' && aiAnalysis.complianceScore !== undefined) {
+    const score = aiAnalysis.complianceScore;
+    let colorClass = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+    let Icon = CheckCircle2;
+
+    if (score < 50) {
+      colorClass = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      Icon = XCircle;
+    } else if (score < 75) {
+      colorClass = "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      Icon = AlertTriangle;
+    }
+
+    return (
+      <Badge className={`${colorClass} gap-1`}>
+        <Icon className="h-3 w-3" />
+        {score}% Compliant
+      </Badge>
+    );
+  }
+
+  return null;
+}
 
 export default function Dashboard() {
   const { currentUserRole, currentTenant } = useAppStore();
@@ -60,22 +119,30 @@ function ManagementDashboard() {
   const { user } = useAuth();
 
   // Fetch applications for management view
-  const { data: applications = [] } = useQuery({
+  const { data: applications = [] } = useQuery<ApplicationWithAiAnalysis[]>({
     queryKey: ['management-applications', selectedPropertyFilter, user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      
+
       // For management users, fetch applications across all their tenants or filtered tenant
       const tenantId = selectedPropertyFilter || currentTenant?.id;
       if (!tenantId) return [];
-      
+
       const url = `/api/applications/list?role=management_manager&tenantId=${tenantId}&userId=${user.id}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return [];
       const data = await res.json();
-      return data as any[];
+      return data as ApplicationWithAiAnalysis[];
     },
     enabled: !!user?.id,
+    // Poll every 5 seconds if any application has an in-progress AI analysis
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasInProgress = data?.some(app =>
+        app.aiAnalysis?.status === 'queued' || app.aiAnalysis?.status === 'processing'
+      );
+      return hasInProgress ? 5000 : false;
+    },
   });
 
   const pendingReviews = applications.filter(app => 
@@ -185,7 +252,10 @@ function ManagementDashboard() {
                                 </p>
                               </div>
                             </div>
-                            {getStatusBadge(app.status)}
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(app.status)}
+                              {getAiAnalysisBadge(app.aiAnalysis)}
+                            </div>
                           </div>
                         </Link>
                       );
@@ -270,18 +340,26 @@ function BoardMemberDashboard() {
   const { user } = useAuth();
 
   // Fetch applications for board member view
-  const { data: applications = [] } = useQuery({
+  const { data: applications = [] } = useQuery<ApplicationWithAiAnalysis[]>({
     queryKey: ['board-applications', currentTenant?.id, user?.id],
     queryFn: async () => {
       if (!user?.id || !currentTenant?.id) return [];
-      
+
       const url = `/api/applications/list?tenantId=${currentTenant.id}&userId=${user.id}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return [];
       const data = await res.json();
-      return data as any[];
+      return data as ApplicationWithAiAnalysis[];
     },
     enabled: !!user?.id && !!currentTenant?.id,
+    // Poll every 5 seconds if any application has an in-progress AI analysis
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasInProgress = data?.some(app =>
+        app.aiAnalysis?.status === 'queued' || app.aiAnalysis?.status === 'processing'
+      );
+      return hasInProgress ? 5000 : false;
+    },
   });
 
   const needsReview = applications.filter(app => 
@@ -394,7 +472,10 @@ function BoardMemberDashboard() {
                             </p>
                           </div>
                         </div>
-                        <Button size="sm">Review</Button>
+                        <div className="flex items-center gap-2">
+                          {getAiAnalysisBadge(app.aiAnalysis)}
+                          <Button size="sm">Review</Button>
+                        </div>
                       </div>
                     </Link>
                   ))
@@ -586,18 +667,26 @@ function HomeownerDashboard() {
   const { user } = useAuth();
 
   // Fetch applications submitted by the current homeowner
-  const { data: applications = [] } = useQuery({
+  const { data: applications = [] } = useQuery<ApplicationWithAiAnalysis[]>({
     queryKey: ['homeowner-applications', currentTenant?.id, user?.id],
     queryFn: async () => {
       if (!user?.id || !currentTenant?.id) return [];
-      
+
       const url = `/api/applications/list?tenantId=${currentTenant.id}&userId=${user.id}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return [];
       const data = await res.json();
-      return data as any[];
+      return data as ApplicationWithAiAnalysis[];
     },
     enabled: !!user?.id && !!currentTenant?.id,
+    // Poll every 5 seconds if any application has an in-progress AI analysis
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasInProgress = data?.some(app =>
+        app.aiAnalysis?.status === 'queued' || app.aiAnalysis?.status === 'processing'
+      );
+      return hasInProgress ? 5000 : false;
+    },
   });
 
   const totalApplications = applications.length;
@@ -699,7 +788,10 @@ function HomeownerDashboard() {
                             Submitted {getTimeAgo(app.submittedAt)}
                           </p>
                         </div>
-                        {getStatusBadge(app.status)}
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(app.status)}
+                          {getAiAnalysisBadge((app as ApplicationWithAiAnalysis).aiAnalysis)}
+                        </div>
                       </div>
                     </Link>
                   ))
@@ -724,12 +816,28 @@ function HomeownerDashboard() {
               <CardTitle>Community Guidelines</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Before submitting an application, review the community architectural guidelines to ensure your project complies.
-              </p>
-              <Button variant="outline" size="sm" className="w-full">
-                View Guidelines
-              </Button>
+              {currentTenant?.designGuidelinesUrl ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Before submitting an application, review the community architectural guidelines to ensure your project complies.
+                  </p>
+                  <a
+                    href={currentTenant.designGuidelinesUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <Button variant="outline" size="sm" className="w-full">
+                      View Guidelines
+                      <ArrowUpRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </a>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Community design guidelines have not been specified yet. Contact your community administrator for more information.
+                </p>
+              )}
             </CardContent>
           </Card>
 

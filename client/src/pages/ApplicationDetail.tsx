@@ -7,7 +7,7 @@ import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool, Sparkles, ExternalLink, List, Grid2X2, Grid3X3, CheckCircle, XCircle, Clock, ChevronDown } from "lucide-react";
 import { AIAnalysisButton, AIAnalysisStatusCard, AIAnalysisResults } from "@/components/ai-analysis";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
@@ -41,6 +41,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
 
 interface WorkflowData {
   id: string;
@@ -71,6 +78,7 @@ export default function ApplicationDetail() {
   const legalEntityLabel = useLegalEntityLabel();
   const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
   const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
+  const [docViewMode, setDocViewMode] = useState<'list' | 'small-grid' | 'large-grid'>('list');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [imageZoom, setImageZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -81,6 +89,9 @@ export default function ApplicationDetail() {
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
+  const [quickActionNotes, setQuickActionNotes] = useState("");
+  const [quickActionSelected, setQuickActionSelected] = useState<string | null>(null);
+  const [showQuickActionDialog, setShowQuickActionDialog] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -173,6 +184,51 @@ export default function ApplicationDetail() {
     queryClient.invalidateQueries({ queryKey: ['application-analyses', applicationId] });
   };
 
+  // Fetch user roles for this tenant (for quick actions)
+  const { data: userRoles } = useQuery({
+    queryKey: [`/api/users/${user?.id}/roles/${application?.tenantId}`],
+    queryFn: async () => {
+      if (!user?.id || !application?.tenantId) return [];
+      const res = await fetch(`/api/users/${user.id}/tenants`, { credentials: "include" });
+      if (!res.ok) return [];
+      const tenantRoles = await res.json();
+      const rolesForTenant = tenantRoles.filter((tr: any) => tr.tenant?.id === application.tenantId || tr.tenantId === application.tenantId);
+      return rolesForTenant.map((tr: any) => tr.role);
+    },
+    enabled: !!user?.id && !!application?.tenantId,
+  });
+
+  // Quick action mutation for workflow
+  const quickActionMutation = useMutation({
+    mutationFn: async ({ action, notes }: { action: string; notes: string }) => {
+      const res = await fetch(`/api/applications/${applicationId}/workflow/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action, stepIndex: workflow?.currentStepIndex, notes }),
+      });
+      if (!res.ok) throw new Error("Failed to submit action");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/workflow`] });
+      setQuickActionNotes("");
+      setQuickActionSelected(null);
+      setShowQuickActionDialog(false);
+      toast({
+        title: "Action Submitted",
+        description: "The workflow has been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Action Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Upload document mutation
   const uploadDocMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -226,6 +282,34 @@ export default function ApplicationDetail() {
     onError: (error: Error) => {
       toast({
         title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Advance start step mutation - MUST be before early returns to maintain hook order
+  const advanceStartStepMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/applications/${applicationId}/workflow/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "begin_review", stepIndex: workflow?.currentStepIndex, notes: "Started review process" }),
+      });
+      if (!res.ok) throw new Error("Failed to advance workflow");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${applicationId}/workflow`] });
+      toast({
+        title: "Review Started",
+        description: "The application is now ready for review.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Start Review",
         description: error.message,
         variant: "destructive",
       });
@@ -457,41 +541,202 @@ export default function ApplicationDetail() {
     navigate(`/applications/${application?.id}/edit`);
   };
 
+  // Workflow quick action permissions
+  const workflowSteps = workflow?.template?.steps || [];
+  const currentStep = workflowSteps[workflow?.currentStepIndex || 0];
+  const stepRequiresRole = currentStep?.role && currentStep.role !== "system";
+  const allowedRoles = stepRequiresRole ? currentStep.role.split("|").map((r: string) => r.trim()) : [];
+  const userHasWorkflowRole = !stepRequiresRole || (userRoles && allowedRoles.some((role: string) => userRoles.includes(role)));
+
+  // Check if this is a start step that needs to advance
+  const isStartStep = currentStep?.type === "start";
+  const hasDefaultTransition = currentStep?.transitions?.some((t: any) => t.isDefault);
+
+  // For start steps, any user with management/admin role can advance to begin review
+  const userRolesArray = userRoles || [];
+  const userHasManagementRole = userRolesArray.some((role: string) =>
+    ['account_admin', 'management_rep', 'management_manager', 'poa_board_member'].includes(role)
+  );
+  const userCanAdvanceStartStep = isStartStep && hasDefaultTransition && workflow?.status === "in_progress" && userHasManagementRole;
+
+  const canTakeWorkflowAction = workflow?.status === "in_progress" && userHasWorkflowRole && currentStep?.actions?.length > 0;
+  const availableActions = currentStep?.actions || [];
+
+  // Handle quick action selection
+  const handleQuickAction = (action: string) => {
+    setQuickActionSelected(action);
+    setShowQuickActionDialog(true);
+  };
+
+  // Submit quick action
+  const submitQuickAction = () => {
+    if (quickActionSelected) {
+      quickActionMutation.mutate({ action: quickActionSelected, notes: quickActionNotes });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{application.title}</h1>
-          <p className="text-muted-foreground mt-1">Application #{application.applicationNumber}</p>
-        </div>
-        <div className="flex gap-2">
-          {/* AI Analysis Button - only for management roles */}
-          <AIAnalysisButton
-            applicationId={applicationId}
-            userRole={currentUserRole}
-            onAnalysisStarted={handleAnalysisStarted}
-            disabled={!!hasActiveAnalysis}
-            isAnalyzing={!!hasActiveAnalysis}
-          />
-          {(canEdit || canEditWithWarning) && (
-            <Button
-              variant="default"
-              className="gap-2"
-              onClick={handleEditClick}
-              data-testid="button-edit-application"
-            >
-              <Edit className="h-4 w-4" />
-              Edit Application
-            </Button>
-          )}
-          <Link href="/applications">
-            <Button variant="outline" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-          </Link>
+      {/* Header with Back Button and Title */}
+      <div className="flex items-center gap-4">
+        <Link href="/applications">
+          <Button variant="outline" size="sm" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">{application.title}</h1>
+          <p className="text-muted-foreground text-sm">Application #{application.applicationNumber}</p>
         </div>
       </div>
+
+      {/* Quick Actions Bar - Prominent placement */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-sm py-1">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {currentStep?.title || "Pending"}
+                </Badge>
+              </div>
+              {workflow?.status === "completed" && (
+                <Badge variant="default" className="bg-green-600">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Completed
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* AI Analysis Button */}
+              <AIAnalysisButton
+                applicationId={applicationId}
+                userRole={currentUserRole}
+                onAnalysisStarted={handleAnalysisStarted}
+                disabled={!!hasActiveAnalysis}
+                isAnalyzing={!!hasActiveAnalysis}
+              />
+
+              {/* Begin Review Button - for start steps */}
+              {userCanAdvanceStartStep && (
+                <Button
+                  variant="default"
+                  className="gap-2 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => advanceStartStepMutation.mutate()}
+                  disabled={advanceStartStepMutation.isPending}
+                  data-testid="button-begin-review"
+                >
+                  {advanceStartStepMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      Begin Review
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Workflow Action Buttons */}
+              {canTakeWorkflowAction && availableActions.length > 0 && (
+                <>
+                  {availableActions.map((action: string) => {
+                    const isApprove = action.toLowerCase().includes('approve');
+                    const isReject = action.toLowerCase().includes('reject') || action.toLowerCase().includes('deny');
+                    const isForward = action.toLowerCase().includes('forward') || action.toLowerCase().includes('advance');
+
+                    return (
+                      <Button
+                        key={action}
+                        variant={isApprove ? "default" : isReject ? "destructive" : "outline"}
+                        className={`gap-2 ${isApprove ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        onClick={() => handleQuickAction(action)}
+                        data-testid={`button-quick-${action}`}
+                      >
+                        {isApprove && <CheckCircle className="h-4 w-4" />}
+                        {isReject && <XCircle className="h-4 w-4" />}
+                        {isForward && <ChevronDown className="h-4 w-4 rotate-[-90deg]" />}
+                        {action.replace(/_/g, " ")}
+                      </Button>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Edit Button */}
+              {(canEdit || canEditWithWarning) && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleEditClick}
+                  data-testid="button-edit-application"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Action Confirmation Dialog */}
+      <AlertDialog open={showQuickActionDialog} onOpenChange={setShowQuickActionDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="capitalize">
+              {quickActionSelected?.replace(/_/g, " ")} Application?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will advance the workflow. Add any notes below.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-4">
+            <Textarea
+              value={quickActionNotes}
+              onChange={(e) => setQuickActionNotes(e.target.value)}
+              placeholder="Add notes for this action (optional)..."
+              className="min-h-24"
+              data-testid="textarea-quick-action-notes"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel onClick={() => {
+              setQuickActionSelected(null);
+              setQuickActionNotes("");
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={submitQuickAction}
+              disabled={quickActionMutation.isPending}
+              className={
+                quickActionSelected?.toLowerCase().includes('reject') || quickActionSelected?.toLowerCase().includes('deny')
+                  ? "bg-destructive hover:bg-destructive/90"
+                  : quickActionSelected?.toLowerCase().includes('approve')
+                    ? "bg-green-600 hover:bg-green-700"
+                    : ""
+              }
+              data-testid="button-confirm-quick-action"
+            >
+              {quickActionMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                <span className="capitalize">{quickActionSelected?.replace(/_/g, " ")}</span>
+              )}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Warning dialog for editing applications under review or with final decisions */}
       <AlertDialog open={editWarningOpen} onOpenChange={setEditWarningOpen}>
@@ -891,9 +1136,10 @@ export default function ApplicationDetail() {
               {/* Documents Tab */}
               {activeTab === 'documents' && (
                 <div className="space-y-4">
-                  {/* Upload section for submitter */}
-                  {isSubmitter && (
-                    <div className="border-2 border-dashed rounded-lg p-4 bg-muted/30">
+                  {/* View mode toggle and upload section */}
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Upload section for submitter */}
+                    {isSubmitter && (
                       <div className="flex items-center gap-3">
                         <input
                           type="file"
@@ -908,7 +1154,7 @@ export default function ApplicationDetail() {
                           disabled={uploadDocMutation.isPending}
                           className="hidden"
                         />
-                        <label htmlFor="doc-upload" className="flex-1">
+                        <label htmlFor="doc-upload">
                           <Button
                             asChild
                             variant="outline"
@@ -932,66 +1178,280 @@ export default function ApplicationDetail() {
                           </Button>
                         </label>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">Click to upload a new document to this application</p>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Documents list */}
+                    {/* View mode toggle */}
+                    {documents.length > 0 && (
+                      <div className="flex items-center gap-1 ml-auto border rounded-lg p-1 bg-muted/30">
+                        <Button
+                          variant={docViewMode === 'list' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => setDocViewMode('list')}
+                          title="List view"
+                          data-testid="button-view-list"
+                        >
+                          <List className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant={docViewMode === 'small-grid' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => setDocViewMode('small-grid')}
+                          title="Small thumbnails"
+                          data-testid="button-view-small-grid"
+                        >
+                          <Grid3X3 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant={docViewMode === 'large-grid' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => setDocViewMode('large-grid')}
+                          title="Large thumbnails"
+                          data-testid="button-view-large-grid"
+                        >
+                          <Grid2X2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Documents display */}
                   {documents.length > 0 ? (
-                    <div className="space-y-2">
-                      {documents.map((doc: any) => (
-                        <div key={doc.id} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-1">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate" data-testid={`text-document-${doc.id}`}>{doc.fileName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 ml-2">
-                            {isPreviewable(doc.fileName) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setPreviewDoc(doc)}
-                                data-testid={`button-preview-${doc.id}`}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              asChild
-                              data-testid={`button-download-${doc.id}`}
-                            >
-                              <a href={`/api/documents/${doc.id}/download`} download>
-                                <Download className="h-4 w-4" />
-                              </a>
-                            </Button>
-                            {/* Delete button for document uploader */}
-                            {isSubmitter && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => deleteDocMutation.mutate(doc.id)}
-                                disabled={deletingDocId === doc.id || deleteDocMutation.isPending}
-                                data-testid={`button-delete-document-${doc.id}`}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              >
-                                {deletingDocId === doc.id && deleteDocMutation.isPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
+                    <>
+                      {/* List View */}
+                      {docViewMode === 'list' && (
+                        <div className="space-y-2">
+                          {documents.map((doc: any) => (
+                            <div key={doc.id} className="border rounded-lg p-3 bg-muted/50 flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1">
+                                <FileText className="h-5 w-5 text-muted-foreground" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate" data-testid={`text-document-${doc.id}`}>{doc.fileName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 ml-2">
+                                {isPreviewable(doc.fileName) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setPreviewDoc(doc)}
+                                    title="Preview"
+                                    data-testid={`button-preview-${doc.id}`}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                 )}
-                              </Button>
-                            )}
-                          </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  asChild
+                                  title="Open in new tab"
+                                  data-testid={`button-open-tab-${doc.id}`}
+                                >
+                                  <a href={`/api/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  asChild
+                                  title="Download"
+                                  data-testid={`button-download-${doc.id}`}
+                                >
+                                  <a href={`/api/documents/${doc.id}/download`} download>
+                                    <Download className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                                {isSubmitter && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => deleteDocMutation.mutate(doc.id)}
+                                    disabled={deletingDocId === doc.id || deleteDocMutation.isPending}
+                                    title="Delete"
+                                    data-testid={`button-delete-document-${doc.id}`}
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  >
+                                    {deletingDocId === doc.id && deleteDocMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+
+                      {/* Small Grid View */}
+                      {docViewMode === 'small-grid' && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                          {documents.map((doc: any) => (
+                            <div key={doc.id} className="border rounded-lg bg-muted/50 overflow-hidden group">
+                              {/* Thumbnail area */}
+                              <div className="aspect-square relative bg-muted flex items-center justify-center">
+                                {isImage(doc.fileName) ? (
+                                  <img
+                                    src={`/api/documents/${doc.id}/preview`}
+                                    alt={doc.fileName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <FileText className="h-8 w-8 text-muted-foreground" />
+                                )}
+                                {/* Hover overlay with actions */}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                  {isPreviewable(doc.fileName) && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => setPreviewDoc(doc)}
+                                      title="Preview"
+                                    >
+                                      <Eye className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    asChild
+                                    title="Open in new tab"
+                                  >
+                                    <a href={`/api/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    asChild
+                                    title="Download"
+                                  >
+                                    <a href={`/api/documents/${doc.id}/download`} download>
+                                      <Download className="h-3 w-3" />
+                                    </a>
+                                  </Button>
+                                  {isSubmitter && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                      onClick={() => deleteDocMutation.mutate(doc.id)}
+                                      disabled={deletingDocId === doc.id || deleteDocMutation.isPending}
+                                      title="Delete"
+                                    >
+                                      {deletingDocId === doc.id && deleteDocMutation.isPending ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              {/* File name */}
+                              <div className="p-2">
+                                <p className="text-xs font-medium truncate" title={doc.fileName}>{doc.fileName}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Large Grid View */}
+                      {docViewMode === 'large-grid' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {documents.map((doc: any) => (
+                            <div key={doc.id} className="border rounded-lg bg-muted/50 overflow-hidden group">
+                              {/* Thumbnail area */}
+                              <div className="aspect-video relative bg-muted flex items-center justify-center">
+                                {isImage(doc.fileName) ? (
+                                  <img
+                                    src={`/api/documents/${doc.id}/preview`}
+                                    alt={doc.fileName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <FileText className="h-12 w-12 text-muted-foreground" />
+                                )}
+                                {/* Hover overlay with actions */}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  {isPreviewable(doc.fileName) && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => setPreviewDoc(doc)}
+                                      title="Preview"
+                                    >
+                                      <Eye className="h-4 w-4 mr-1" />
+                                      Preview
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    asChild
+                                    title="Open in new tab"
+                                  >
+                                    <a href={`/api/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="h-4 w-4 mr-1" />
+                                      Open
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    asChild
+                                    title="Download"
+                                  >
+                                    <a href={`/api/documents/${doc.id}/download`} download>
+                                      <Download className="h-4 w-4 mr-1" />
+                                      Download
+                                    </a>
+                                  </Button>
+                                </div>
+                              </div>
+                              {/* File info and delete */}
+                              <div className="p-3 flex items-center justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate" title={doc.fileName}>{doc.fileName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown date'}
+                                  </p>
+                                </div>
+                                {isSubmitter && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => deleteDocMutation.mutate(doc.id)}
+                                    disabled={deletingDocId === doc.id || deleteDocMutation.isPending}
+                                    title="Delete"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 ml-2"
+                                  >
+                                    {deletingDocId === doc.id && deleteDocMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="text-center py-6 text-muted-foreground">
                       <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />

@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Zap, Building2, Calendar, TrendingUp, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
-  COMMUNITY_TIER_DEFAULTS,
   getTierCodeByDoorCount,
   type CommunityTierCode,
   type CommunitySubscriptionWithTier,
@@ -324,11 +323,11 @@ export default function SubscriptionManagement() {
         </CardHeader>
         <CardContent>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(COMMUNITY_TIER_DEFAULTS).map(([code, tier]) => {
-              const isCurrentTier = currentTier?.tierCode === code;
+            {tiers.map((tier) => {
+              const isCurrentTier = currentTier?.tierCode === tier.tierCode;
               return (
                 <div
-                  key={code}
+                  key={tier.tierCode}
                   className={`p-4 rounded-lg border ${isCurrentTier ? "border-primary bg-primary/5" : "border-border"}`}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -473,13 +472,17 @@ function TierPreview({
   currentDoorCount?: number;
 }) {
   const tierCode = getTierCodeByDoorCount(doorCount);
-  const tier = COMMUNITY_TIER_DEFAULTS[tierCode];
+  const tier = tiers.find(t => t.tierCode === tierCode);
+
+  if (!tier) {
+    return <div className="p-4 rounded-lg bg-muted/50 border text-muted-foreground">Loading tier info...</div>;
+  }
 
   const currentTierCode = currentDoorCount ? getTierCodeByDoorCount(currentDoorCount) : null;
-  const isUpgrade = currentTierCode && Object.keys(COMMUNITY_TIER_DEFAULTS).indexOf(tierCode) >
-    Object.keys(COMMUNITY_TIER_DEFAULTS).indexOf(currentTierCode);
-  const isDowngrade = currentTierCode && Object.keys(COMMUNITY_TIER_DEFAULTS).indexOf(tierCode) <
-    Object.keys(COMMUNITY_TIER_DEFAULTS).indexOf(currentTierCode);
+  const tierIndex = tiers.findIndex(t => t.tierCode === tierCode);
+  const currentTierIndex = currentTierCode ? tiers.findIndex(t => t.tierCode === currentTierCode) : -1;
+  const isUpgrade = currentTierIndex >= 0 && tierIndex > currentTierIndex;
+  const isDowngrade = currentTierIndex >= 0 && tierIndex < currentTierIndex;
 
   return (
     <div className="p-4 rounded-lg bg-muted/50 border">

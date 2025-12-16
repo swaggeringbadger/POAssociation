@@ -147,8 +147,17 @@ class UsageTrackingService {
     applicationId: string,
     userId: string
   ): Promise<LoggedUsageEvent> {
-    // Increment application count on subscription
+    // Increment application count on community subscription (new system)
     await communitySubscriptionService.incrementApplicationCount(communityId);
+
+    // Also increment on tenant subscription (legacy system used by AccountAdminDashboard)
+    try {
+      const { storage } = await import('../storage');
+      await storage.incrementTenantApplicationCount(communityId);
+    } catch (error) {
+      // Don't fail if tenant_subscriptions table doesn't exist
+      console.warn('Failed to increment tenant application count:', error);
+    }
 
     return this.logEvent({
       communityId,

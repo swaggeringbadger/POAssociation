@@ -75,6 +75,51 @@ export interface User {
   createdAt: string;
 }
 
+// Community Subscription (new token-based system)
+export interface CommunityTier {
+  id: string;
+  tierCode: 'small' | 'medium' | 'large' | 'xl';
+  name: string;
+  minDoors: number;
+  maxDoors: number | null;
+  basePriceMonthly: number;
+  basePriceYearly: number;
+  includedCredits: number;
+  defaultOverageCost: number;
+  maxUsers: number | null;
+  maxStorageGb: number | null;
+}
+
+export interface CommunitySubscription {
+  id: string;
+  communityId: string;
+  tierId: string;
+  tier?: CommunityTier;
+  doorCount: number;
+  status: 'active' | 'trial' | 'canceled' | 'paused';
+
+  // Custom overrides
+  customPriceMonthly: number | null;
+  customAiCredits: number | null;
+  customOverageCost: number | null;
+
+  // Billing cycle
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+
+  // Usage
+  creditsUsed: number;
+  applicationsThisMonth: number;
+
+  // Computed effective values
+  effectivePrice?: number;
+  effectiveCredits?: number;
+  effectiveOverageCost?: number;
+  creditsRemaining?: number;
+  overageCreditsUsed?: number;
+  estimatedOverageCost?: number;
+}
+
 export interface PropertyRepAssignment {
   id: string;
   propertyId: string;
@@ -572,6 +617,16 @@ class ApiClient {
   }> {
     const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/feature-access/${feature}`);
     if (!response.ok) throw new Error("Failed to check feature access");
+    return response.json();
+  }
+
+  // Community Subscription (new token-based system)
+  async getCommunitySubscription(communityId: string): Promise<CommunitySubscription | null> {
+    const response = await fetch(`${this.baseUrl}/communities/${communityId}/subscription`, {
+      credentials: 'include',
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("Failed to fetch community subscription");
     return response.json();
   }
 
@@ -1683,6 +1738,7 @@ export interface AiAnalysisStatus {
   status: 'queued' | 'processing' | 'completed' | 'failed';
   queuePosition?: number;
   estimatedTimeSeconds?: number;
+  startedAt?: string;
   completedAt?: string;
   errorMessage?: string;
 }

@@ -95,7 +95,19 @@
       "Bash(git -C /home/runner/workspace show --stat 911656f)",
       "Bash(git -C /home/runner/workspace log --all --oneline --graph)",
       "Bash(git -C /home/runner/workspace log --since=\"2 weeks ago\" --oneline)",
-      "Bash(npx drizzle-kit push:*)"
+      "Bash(npx drizzle-kit push:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(while read hash msg)",
+      "Bash(do echo \"=== $msg ===\")",
+      "Bash(done)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(npm run check:*)",
+      "Bash(node -e:*)",
+      "Bash(npm run test:*)",
+      "Bash(cut:*)"
     ],
     "deny": [],
     "ask": []

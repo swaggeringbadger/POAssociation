@@ -3,13 +3,13 @@
  *
  * Custom hooks for fetching and managing data in the Account Admin dashboard.
  * Uses React Query for caching and lazy loading.
+ *
+ * Updated to use the new token-based community subscription system.
  */
 
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { api, type Tenant, type Application } from "@/lib/api";
+import { api, type Tenant, type Application, type CommunitySubscription } from "@/lib/api";
 import { useMemo } from "react";
-import type { TenantSubscription } from "@shared/subscriptionTypes";
-import { getPropertyOverallStatus, type UsageStatus } from "@/lib/usageStatus";
 
 /**
  * Fetch all properties the current user has account_admin access to
@@ -26,13 +26,13 @@ export function useAccountAdminProperties() {
 }
 
 /**
- * Fetch subscription data for a specific property
+ * Fetch community subscription data for a specific property (new token-based system)
  * Only fetches when enabled=true (for lazy loading in collapsed tiles)
  */
 export function usePropertySubscription(tenantId: string, enabled: boolean = true) {
   return useQuery({
-    queryKey: ['tenant-subscription', tenantId],
-    queryFn: () => api.getTenantSubscription(tenantId),
+    queryKey: ['community-subscription', tenantId],
+    queryFn: () => api.getCommunitySubscription(tenantId),
     enabled: enabled && !!tenantId,
     staleTime: 30 * 1000, // 30 seconds - subscription data changes rarely
   });
@@ -47,7 +47,7 @@ export function usePropertyActivity(tenantId: string, enabled: boolean = true) {
     queryKey: ['account-admin', 'activity', tenantId],
     queryFn: async () => {
       // Fetch applications for this tenant
-      const response = await fetch(`/api/applications/list?tenantId=${tenantId}`, {
+      const response = await fetch(`/api/applications/list?tenantId=${tenantId}&role=account_admin&userId=current`, {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -94,11 +94,11 @@ export function usePropertyActivity(tenantId: string, enabled: boolean = true) {
 export function useAccountAdminSummary() {
   const { data: properties = [], isLoading: propertiesLoading } = useAccountAdminProperties();
 
-  // Fetch subscriptions for all properties in parallel
+  // Fetch community subscriptions for all properties in parallel
   const subscriptionQueries = useQueries({
     queries: properties.map(property => ({
-      queryKey: ['tenant-subscription', property.id],
-      queryFn: () => api.getTenantSubscription(property.id),
+      queryKey: ['community-subscription', property.id],
+      queryFn: () => api.getCommunitySubscription(property.id),
       staleTime: 30 * 1000,
     })),
   });
@@ -107,24 +107,33 @@ export function useAccountAdminSummary() {
   const summary = useMemo(() => {
     const subscriptions = subscriptionQueries
       .filter(q => q.data)
-      .map(q => q.data as TenantSubscription);
+      .map(q => q.data as CommunitySubscription);
 
-    // Count properties by status
+    // Count properties by credit status
     let propertiesAtLimit = 0;
     let propertiesWarning = 0;
 
     subscriptions.forEach(sub => {
-      const status = getPropertyOverallStatus(sub);
-      if (status === 'critical') propertiesAtLimit++;
-      else if (status === 'warning') propertiesWarning++;
+      const creditsRemaining = sub.creditsRemaining ?? (sub.effectiveCredits ?? 0) - sub.creditsUsed;
+      const effectiveCredits = sub.effectiveCredits ?? sub.tier?.includedCredits ?? 0;
+
+      if (effectiveCredits > 0) {
+        const usagePercent = (sub.creditsUsed / effectiveCredits) * 100;
+        if (usagePercent >= 100) propertiesAtLimit++;
+        else if (usagePercent >= 80) propertiesWarning++;
+      }
     });
 
     return {
       totalProperties: properties.length,
-      totalUsers: subscriptions.reduce((sum, s) => sum + (s.usageUsers || 0), 0),
-      totalStorageGb: subscriptions.reduce((sum, s) => sum + (s.usageStorageGb || 0), 0),
+      totalCreditsUsed: subscriptions.reduce((sum, s) => sum + (s.creditsUsed || 0), 0),
+      totalCreditsIncluded: subscriptions.reduce((sum, s) => sum + (s.effectiveCredits ?? s.tier?.includedCredits ?? 0), 0),
       totalApplicationsThisMonth: subscriptions.reduce(
-        (sum, s) => sum + (s.usageApplicationsCurrentMonth || 0),
+        (sum, s) => sum + (s.applicationsThisMonth || 0),
+        0
+      ),
+      totalOverageCost: subscriptions.reduce(
+        (sum, s) => sum + (s.estimatedOverageCost ?? 0),
         0
       ),
       propertiesAtLimit,
@@ -141,10 +150,17 @@ export function useAccountAdminSummary() {
 /**
  * Get usage status for a property's subscription
  */
-export function usePropertyUsageStatus(subscription: TenantSubscription | undefined): UsageStatus {
+export function usePropertyUsageStatus(subscription: CommunitySubscription | null | undefined): 'normal' | 'warning' | 'critical' {
   return useMemo(() => {
     if (!subscription) return 'normal';
-    return getPropertyOverallStatus(subscription);
+
+    const effectiveCredits = subscription.effectiveCredits ?? subscription.tier?.includedCredits ?? 0;
+    if (effectiveCredits === 0) return 'normal';
+
+    const usagePercent = (subscription.creditsUsed / effectiveCredits) * 100;
+    if (usagePercent >= 100) return 'critical';
+    if (usagePercent >= 80) return 'warning';
+    return 'normal';
   }, [subscription]);
 }
 
@@ -163,9 +179,10 @@ export interface PropertyActivity {
  */
 export interface AccountAdminSummary {
   totalProperties: number;
-  totalUsers: number;
-  totalStorageGb: number;
+  totalCreditsUsed: number;
+  totalCreditsIncluded: number;
   totalApplicationsThisMonth: number;
+  totalOverageCost: number;
   propertiesAtLimit: number;
   propertiesWarning: number;
   propertiesHealthy: number;

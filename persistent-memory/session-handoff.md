@@ -259,6 +259,15 @@ DELETE /api/property-rep-assignments/:id          # Remove assignment
 
 ## Important Conventions
 
+### Server Restart After Code Changes
+**IMPORTANT:** After making server-side code changes, always restart the Replit server to ensure changes take effect. The tsx hot-reload doesn't always work reliably for service files.
+
+```bash
+pkill -f "tsx server/index.ts"
+```
+
+Then click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
+
 ### Application Number Format
 **Format:** `{tenant-last-4-chars}-{year}-{random-4-alphanumeric}`
 **Example:** `A1B2-2025-XY9Z`

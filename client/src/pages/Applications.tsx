@@ -69,6 +69,14 @@ export default function Applications() {
       return res.json() as Promise<ApplicationWithWorkflow[]>;
     },
     enabled: !!currentTenant && !!user,
+    // Poll every 5 seconds if any application has an in-progress AI analysis
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasInProgress = data?.some(app =>
+        app.aiAnalysis?.status === 'queued' || app.aiAnalysis?.status === 'processing'
+      );
+      return hasInProgress ? 5000 : false;
+    },
   });
 
   const uniqueProperties = useMemo(() => {

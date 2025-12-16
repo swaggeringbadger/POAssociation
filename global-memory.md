@@ -133,6 +133,24 @@ All implemented features now have proper subscription tier checks:
 3. **Database sync** - Feature flag in code must match database column
 4. **Snake_case vs camelCase** - Database uses snake_case, TypeScript uses camelCase. The `key` field in featureDefinitions.ts is snake_case.
 
+## Development Workflow Conventions
+
+### Server Restart After Code Changes
+
+**IMPORTANT:** After making server-side code changes, always restart the Replit server to ensure changes take effect. The tsx hot-reload doesn't always work reliably for service files.
+
+```bash
+pkill -f "tsx server/index.ts"
+```
+
+Then click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
+
+**When to restart:**
+- After modifying any file in `/server/` directory
+- After modifying `/shared/` files that are used server-side
+- When debugging unexpected behavior that doesn't match code changes
+- After changing environment variables or configuration
+
 ### Helper Functions Available
 
 ```typescript

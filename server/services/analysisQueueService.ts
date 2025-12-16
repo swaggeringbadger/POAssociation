@@ -15,7 +15,7 @@
  */
 
 import { storage } from '../storage';
-import { aiCreditService } from './aiCreditService';
+import { communitySubscriptionService } from './communitySubscriptionService';
 import { applicationEventService } from './applicationEventService';
 import type { AiAnalysis, InsertAiAnalysis } from '@shared/schema';
 import type { AnalysisJobData, TriggerAnalysisResponse } from '@shared/aiAnalysisTypes';
@@ -27,7 +27,8 @@ const getUsageTrackingService = async () => {
 };
 
 // Estimated processing time in seconds (for UI feedback)
-const ESTIMATED_PROCESSING_TIME = 90;
+// AI analysis typically takes 7-8 minutes including image generation
+const ESTIMATED_PROCESSING_TIME = 450;
 
 // Maximum retry attempts for failed jobs
 const MAX_RETRIES = 3;
@@ -66,15 +67,13 @@ export class AnalysisQueueService {
       priority = 0,
     } = params;
 
-    // Check if tenant has credits
-    const creditCheck = await aiCreditService.checkCredits(tenantId);
-
-    if (!creditCheck.hasAccess) {
-      throw new Error(creditCheck.reason || 'AI Analysis not available');
-    }
+    // Check if tenant has credits (using new community subscription system)
+    // The new system uses a soft cap - always allows analysis but charges overage fees
+    const creditCheck = await communitySubscriptionService.checkCredits(tenantId);
 
     if (!creditCheck.hasCredits) {
-      throw new Error('No AI analysis credits remaining');
+      // No subscription found - this shouldn't happen but handle gracefully
+      throw new Error('No active subscription found. Please set up your subscription.');
     }
 
     // Check for existing pending analysis for this application
@@ -201,10 +200,7 @@ export class AnalysisQueueService {
       console.error('[AnalysisQueue] Failed to emit completed event:', e);
     }
 
-    // Deduct credit from tenant (old system - for backwards compatibility)
-    await aiCreditService.deductCredit(analysis.tenantId);
-
-    // Also log to new usage tracking system (if community subscription exists)
+    // Deduct credit and log usage (consolidated to new community subscription system)
     try {
       const usageTrackingService = await getUsageTrackingService();
       await usageTrackingService.logAiAnalysis(
@@ -213,8 +209,8 @@ export class AnalysisQueueService {
         analysis.id
       );
     } catch (e) {
-      // Don't fail if new system isn't set up yet
-      console.log('[AnalysisQueue] Usage tracking not available:', e);
+      console.error('[AnalysisQueue] Failed to track usage:', e);
+      // Still continue - don't fail the analysis just because usage tracking failed
     }
 
     return updated;
@@ -267,7 +263,9 @@ export class AnalysisQueueService {
   async getStatus(analysisId: string): Promise<{
     status: string;
     progress?: string;
+    estimatedTimeSeconds?: number;
     estimatedTimeRemaining?: number;
+    startedAt?: string;
     error?: string;
   }> {
     const analysis = await storage.getAiAnalysis(analysisId);
@@ -279,16 +277,23 @@ export class AnalysisQueueService {
     const result: {
       status: string;
       progress?: string;
+      estimatedTimeSeconds?: number;
       estimatedTimeRemaining?: number;
+      startedAt?: string;
       error?: string;
     } = {
       status: analysis.status,
+      estimatedTimeSeconds: ESTIMATED_PROCESSING_TIME,
     };
 
     if (analysis.status === 'queued') {
       result.progress = 'Waiting in queue...';
       result.estimatedTimeRemaining = ESTIMATED_PROCESSING_TIME;
     } else if (analysis.status === 'processing') {
+      // Include startedAt so client can calculate accurate elapsed time
+      if (analysis.startedAt) {
+        result.startedAt = analysis.startedAt.toISOString();
+      }
       const elapsed = analysis.startedAt
         ? Math.floor((Date.now() - new Date(analysis.startedAt).getTime()) / 1000)
         : 0;

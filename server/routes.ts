@@ -3573,17 +3573,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Middleware to check compliance access
   const requireComplianceAccess = async (req: any, res: any, next: any) => {
-    const userId = req.userId;
+    const userId = req.session?.userId || req.user?.claims?.sub;
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
+    req.userId = userId;
 
     // Get user's roles across all tenants
     const userTenants = await storage.getUserTenants(userId);
     const userRoles = userTenants.map(ut => ut.role);
 
-    const allowedRoles = ['management_manager', 'super_admin'];
-    const readOnlyRoles = ['management_rep'];
+    const allowedRoles = ['management_manager', 'super_admin', 'account_admin', 'poa_board_member'];
+    const readOnlyRoles = ['management_rep', 'poa_board_contributor'];
 
     if (allowedRoles.some(r => userRoles.includes(r))) {
       req.complianceAccess = 'full';
@@ -3601,7 +3602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // List compliance categories
-  app.get('/api/compliance/categories', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/categories', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       const tenantId = req.query.tenantId as string | undefined;
       const categories = await storage.listComplianceCategories(tenantId);
@@ -3613,7 +3614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create compliance category
-  app.post('/api/compliance/categories', requireComplianceAccess, async (req: any, res) => {
+  app.post('/api/compliance/categories', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3627,12 +3628,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get compliance dashboard
-  app.get('/api/compliance/dashboard', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/dashboard', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       // Get tenant IDs this user has access to
       const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      console.log('[Compliance Dashboard] tenantIds:', tenantIds);
       const dashboard = await storage.getComplianceDashboard(tenantIds);
-      res.json(dashboard);
+      console.log('[Compliance Dashboard] upcoming:', dashboard.upcoming.length, 'overdue:', dashboard.overdue.length);
+      // Transform to include count fields expected by client
+      res.json({
+        ...dashboard,
+        upcomingCount: dashboard.upcoming.length,
+        overdueCount: dashboard.overdue.length,
+        completedThisMonthCount: dashboard.completedThisMonth,
+      });
     } catch (error: any) {
       console.error('Error getting compliance dashboard:', error);
       res.status(500).json({ error: error.message });
@@ -3640,7 +3649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List compliance items
-  app.get('/api/compliance/items', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/items', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       const filters = {
         scope: req.query.scope as string | undefined,
@@ -3669,7 +3678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single compliance item
-  app.get('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/items/:id', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       const item = await storage.getComplianceItem(req.params.id);
       if (!item) {
@@ -3690,7 +3699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create compliance item
-  app.post('/api/compliance/items', requireComplianceAccess, async (req: any, res) => {
+  app.post('/api/compliance/items', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3708,7 +3717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update compliance item
-  app.patch('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+  app.patch('/api/compliance/items/:id', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3723,7 +3732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete compliance item
-  app.delete('/api/compliance/items/:id', requireComplianceAccess, async (req: any, res) => {
+  app.delete('/api/compliance/items/:id', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3738,7 +3747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete compliance item
-  app.post('/api/compliance/items/:id/complete', requireComplianceAccess, async (req: any, res) => {
+  app.post('/api/compliance/items/:id/complete', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3757,7 +3766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reopen compliance item
-  app.post('/api/compliance/items/:id/reopen', requireComplianceAccess, async (req: any, res) => {
+  app.post('/api/compliance/items/:id/reopen', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3772,7 +3781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload compliance document
-  app.post('/api/compliance/items/:itemId/documents', requireComplianceAccess, upload.single('file'), async (req: any, res) => {
+  app.post('/api/compliance/items/:itemId/documents', isAuthenticated, requireComplianceAccess, upload.single('file'), async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -3819,7 +3828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List compliance documents for an item
-  app.get('/api/compliance/items/:itemId/documents', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/items/:itemId/documents', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       const documents = await storage.listComplianceDocuments(req.params.itemId);
       res.json(documents);
@@ -3830,7 +3839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Download compliance document
-  app.get('/api/compliance/documents/:id/download', requireComplianceAccess, async (req: any, res) => {
+  app.get('/api/compliance/documents/:id/download', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       const doc = await storage.getComplianceDocument(req.params.id);
       if (!doc) {
@@ -3855,7 +3864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete compliance document
-  app.delete('/api/compliance/documents/:id', requireComplianceAccess, async (req: any, res) => {
+  app.delete('/api/compliance/documents/:id', isAuthenticated, requireComplianceAccess, async (req: any, res) => {
     try {
       if (req.complianceAccess !== 'full') {
         return res.status(403).json({ error: 'Write access required' });
@@ -5411,15 +5420,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get subscription for a community
+  // Get subscription for a community (auto-creates if none exists)
   app.get('/api/communities/:communityId/subscription', isAuthenticated, async (req: any, res) => {
     try {
       const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
       const { communityId } = req.params;
-      const subscription = await communitySubscriptionService.getSubscriptionWithTier(communityId);
+      let subscription = await communitySubscriptionService.getSubscriptionWithTier(communityId);
+
+      // Auto-create subscription if none exists
       if (!subscription) {
-        return res.status(404).json({ error: 'No subscription found for this community' });
+        // Get community to check door count
+        const tenant = await storage.getTenant(communityId);
+        if (!tenant) {
+          return res.status(404).json({ error: 'Community not found' });
+        }
+
+        // Use tenant's door count or default to 50
+        const doorCount = tenant.doorCount || 50;
+        subscription = await communitySubscriptionService.createSubscription(communityId, doorCount);
       }
+
+      // Sync credits from old ai_analysis_credits system if new system shows 0
+      // This handles both newly created and existing subscriptions that haven't synced
+      if (subscription.creditsUsed === 0) {
+        const oldCredits = await storage.getAiAnalysisCredits(communityId);
+        if (oldCredits && oldCredits.creditsUsedThisMonth > 0) {
+          // Update the new subscription with the old credit usage
+          await db
+            .update(schema.communitySubscriptions)
+            .set({ aiCreditsUsed: oldCredits.creditsUsedThisMonth })
+            .where(eq(schema.communitySubscriptions.communityId, communityId));
+
+          // Re-fetch to get updated values
+          subscription = await communitySubscriptionService.getSubscriptionWithTier(communityId);
+        }
+      }
+
       res.json(subscription);
     } catch (error: any) {
       console.error('Error getting community subscription:', error);
@@ -6214,7 +6250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { verifyRequest, isSyncConfigured } = await import('./sync/protocol');
     const { syncFeatures, canReceive } = await import('./sync/registry');
     const { handleSyncAction } = await import('./sync/handlers');
-    return { verifyRequest, isSyncConfigured, syncFeatures, canReceive, handleSyncAction };
+    const { getPartnerUrl } = await import('./sync/client');
+    return { verifyRequest, isSyncConfigured, syncFeatures, canReceive, handleSyncAction, getPartnerUrl };
   };
 
   // Public feature registry - allows partner apps to discover capabilities
@@ -6343,11 +6380,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check sync configuration status (authenticated)
   app.get('/api/sync/status', isAuthenticated, async (req: any, res) => {
     try {
-      const { isSyncConfigured } = await getSyncModules();
+      const { isSyncConfigured, getPartnerUrl } = await getSyncModules();
       res.json({
         homehub: {
           configured: isSyncConfigured('homehub'),
-          url: process.env.HOMEHUB_APP_URL || process.env.HOMEHUB_URL || 'https://homehub.replit.app',
+          url: getPartnerUrl('homehub') || 'https://homehub.replit.app',
         },
       });
     } catch (error: any) {

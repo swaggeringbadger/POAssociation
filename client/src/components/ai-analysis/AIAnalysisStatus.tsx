@@ -40,7 +40,16 @@ export function AIAnalysisStatusCard({ analysisId, onComplete, onCancel }: AIAna
     enabled: !!analysisId,
   });
 
-  // Update elapsed time
+  // Initialize elapsed time from server's startedAt when status updates
+  useEffect(() => {
+    if (status?.startedAt) {
+      const serverStartTime = new Date(status.startedAt).getTime();
+      const elapsed = Math.floor((Date.now() - serverStartTime) / 1000);
+      setElapsedTime(Math.max(0, elapsed));
+    }
+  }, [status?.startedAt]);
+
+  // Update elapsed time every second
   useEffect(() => {
     if (status?.status === 'completed' || status?.status === 'failed') {
       return;
@@ -65,7 +74,8 @@ export function AIAnalysisStatusCard({ analysisId, onComplete, onCancel }: AIAna
       return;
     }
 
-    const estimatedSeconds = status?.estimatedTimeSeconds || 120;
+    // Default to 450 seconds (7.5 minutes) - AI analysis typically takes 7-8 minutes
+    const estimatedSeconds = status?.estimatedTimeSeconds || 450;
     const calculatedProgress = Math.min(95, (elapsedTime / estimatedSeconds) * 100);
     setProgress(calculatedProgress);
   }, [elapsedTime, status, onComplete]);
@@ -197,9 +207,7 @@ export function AIAnalysisStatusCard({ analysisId, onComplete, onCancel }: AIAna
 
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Elapsed: {formatTime(elapsedTime)}</span>
-            {status?.estimatedTimeSeconds && (
-              <span>Est. remaining: {formatTime(Math.max(0, status.estimatedTimeSeconds - elapsedTime))}</span>
-            )}
+            <span>Est. remaining: {formatTime(Math.max(0, (status?.estimatedTimeSeconds || 450) - elapsedTime))}</span>
           </div>
 
           {/* Progress stages */}

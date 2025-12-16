@@ -14,13 +14,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Building, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { usePropertySubscription, usePropertyActivity } from "@/hooks/useAccountAdminData";
-import { getPropertyOverallStatus, type UsageStatus } from "@/lib/usageStatus";
+import { usePropertySubscription, usePropertyActivity, usePropertyUsageStatus } from "@/hooks/useAccountAdminData";
 import { PropertyMetricsCard } from "./PropertyMetricsCard";
 import { PropertyActivityCard } from "./PropertyActivityCard";
 import { PropertyBillingCard } from "./PropertyBillingCard";
 import { PropertyActionsCard } from "./PropertyActionsCard";
 import type { Tenant } from "@/lib/api";
+
+type UsageStatus = 'normal' | 'warning' | 'critical';
 
 interface PropertyTileProps {
   property: Tenant;
@@ -41,7 +42,7 @@ function MiniUsageIndicator({ status }: { status: UsageStatus }) {
         status === 'warning' && "bg-yellow-500",
         status === 'critical' && "bg-red-500 animate-pulse"
       )}
-      title={status === 'critical' ? 'Usage at limit' : 'Approaching usage limit'}
+      title={status === 'critical' ? 'Credit limit reached' : 'Approaching credit limit'}
     />
   );
 }
@@ -58,7 +59,7 @@ export function PropertyTile({ property, isExpanded, onToggle }: PropertyTilePro
   );
 
   // Get overall status for border color indicator
-  const overallStatus = subscription ? getPropertyOverallStatus(subscription) : 'normal';
+  const overallStatus = usePropertyUsageStatus(subscription);
 
   return (
     <Collapsible

@@ -1,9 +1,31 @@
 import crypto from "crypto";
 import { signPayload, SyncPayload } from "./protocol";
 
+/**
+ * Get HomeHub URL based on environment
+ * Production: APP_URL contains 'hazelhippo.com' → use HOMEHUB_APP_URL_PROD
+ * Development: Otherwise → use HOMEHUB_APP_URL_DEV
+ */
+function getHomeHubUrl(): string {
+  const appUrl = process.env.APP_URL || "";
+  const isProduction = appUrl.includes("hazelhippo.com");
+
+  if (isProduction) {
+    return process.env.HOMEHUB_APP_URL_PROD || "https://hazelhippo.com";
+  }
+
+  // Development - use dev URL with fallback chain
+  return (
+    process.env.HOMEHUB_APP_URL_DEV ||
+    process.env.HOMEHUB_APP_URL ||
+    process.env.HOMEHUB_URL ||
+    "https://homehub.replit.app"
+  );
+}
+
 const PARTNER_APPS: Record<string, { url: string; secret: string | undefined }> = {
   homehub: {
-    url: process.env.HOMEHUB_APP_URL || process.env.HOMEHUB_URL || "https://homehub.replit.app",
+    url: getHomeHubUrl(),
     secret: process.env.SYNC_SECRET_HOMEHUB,
   },
 };

@@ -3,6 +3,8 @@
  *
  * Compact display for sidebar/header showing remaining credits
  * and subscription tier information.
+ *
+ * Uses the new community subscription system for credit tracking.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -15,20 +17,54 @@ import {
 } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { Zap, AlertTriangle, Info } from 'lucide-react';
-import { getAiCreditStatus, type AiCreditStatus } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
+import { getCommunitySubscription, type CommunitySubscription } from '@/lib/api';
+
+// Internal type for display, mapped from subscription
+interface CreditStatus {
+  creditsRemaining: number;
+  creditsUsedThisCycle: number;
+  monthlyAllowance: number;
+  overageCostPerCredit: string;
+  billingCycleEnd: string;
+  hasOverride: boolean;
+  overrideReason?: string;
+}
 
 interface CreditDisplayProps {
   compact?: boolean;
   showDetails?: boolean;
 }
 
+// Map subscription to credit status format
+function mapSubscriptionToCredits(sub: CommunitySubscription): CreditStatus {
+  const effectiveCredits = sub.effectiveCredits ?? sub.tier?.includedCredits ?? 0;
+  const creditsUsed = sub.creditsUsed ?? 0;
+  const remaining = sub.creditsRemaining ?? Math.max(0, effectiveCredits - creditsUsed);
+
+  return {
+    creditsRemaining: remaining,
+    creditsUsedThisCycle: creditsUsed,
+    monthlyAllowance: effectiveCredits,
+    overageCostPerCredit: (sub.effectiveOverageCost ?? sub.tier?.defaultOverageCost ?? 2).toFixed(2),
+    billingCycleEnd: sub.currentPeriodEnd,
+    hasOverride: sub.customAiCredits !== null || sub.customOverageCost !== null,
+    overrideReason: sub.pricingNote ?? undefined,
+  };
+}
+
 export function CreditDisplay({ compact = false, showDetails = true }: CreditDisplayProps) {
-  const { data: credits, isLoading, error } = useQuery<AiCreditStatus>({
-    queryKey: ['ai-credit-status'],
-    queryFn: getAiCreditStatus,
+  const { currentTenant } = useAppStore();
+
+  const { data: subscription, isLoading, error } = useQuery({
+    queryKey: ['community-subscription', currentTenant?.id],
+    queryFn: () => getCommunitySubscription(currentTenant!.id),
+    enabled: !!currentTenant?.id,
     staleTime: 60000, // 1 minute
     retry: 1,
   });
+
+  const credits = subscription ? mapSubscriptionToCredits(subscription) : null;
 
   if (isLoading) {
     return (
@@ -132,7 +168,7 @@ export function CreditDisplay({ compact = false, showDetails = true }: CreditDis
   );
 }
 
-function CreditDetailsContent({ credits }: { credits: AiCreditStatus }) {
+function CreditDetailsContent({ credits }: { credits: CreditStatus }) {
   const usagePercent = credits.monthlyAllowance > 0
     ? ((credits.monthlyAllowance - credits.creditsRemaining) / credits.monthlyAllowance) * 100
     : 0;

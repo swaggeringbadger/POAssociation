@@ -170,6 +170,7 @@ export interface IStorage {
   getTenantSubscription(tenantId: string): Promise<any | undefined>;
   updateTenantSubscription(tenantId: string, planId: string, changedByUserId?: string, changeReason?: string): Promise<any>;
   updateSubscriptionUsage(tenantId: string, usage: { communities?: number; users?: number; storageGb?: number; forms?: number; applications?: number }): Promise<void>;
+  incrementTenantApplicationCount(tenantId: string): Promise<void>;
   checkFeatureAccess(tenantId: string, feature: string): Promise<{ hasAccess: boolean; limit: number | null; current: number; reason?: string }>;
 
   // Compliance Categories
@@ -1807,6 +1808,15 @@ export class DbStorage implements IStorage {
     }
   }
 
+  async incrementTenantApplicationCount(tenantId: string): Promise<void> {
+    await db.execute(sql`
+      UPDATE tenant_subscriptions
+      SET usage_applications_current_month = COALESCE(usage_applications_current_month, 0) + 1,
+          updated_at = NOW()
+      WHERE tenant_id = ${tenantId}
+    `);
+  }
+
   async checkFeatureAccess(
     tenantId: string,
     feature: string
@@ -1992,30 +2002,56 @@ export class DbStorage implements IStorage {
     return { ...result.item, category: result.category, documents };
   }
 
-  async createComplianceItem(item: schema.InsertComplianceItem): Promise<schema.ComplianceItem> {
+  async createComplianceItem(item: any): Promise<schema.ComplianceItem> {
     // Calculate initial status based on due date
     const now = new Date();
-    const dueDate = new Date(item.dueDate);
+    // Ensure dueDate is a proper Date object
+    const parsedDueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     let status = 'pending';
-    if (dueDate < now) {
+    if (parsedDueDate < now) {
       status = 'overdue';
-    } else if (dueDate <= thirtyDaysFromNow) {
+    } else if (parsedDueDate <= thirtyDaysFromNow) {
       status = 'upcoming';
     }
 
     const [created] = await db
       .insert(schema.complianceItems)
-      .values({ ...item, status })
+      .values({
+        scope: String(item.scope),
+        propertyId: item.propertyId || null,
+        managementCompanyId: item.managementCompanyId || null,
+        categoryId: String(item.categoryId),
+        title: String(item.title),
+        description: item.description || null,
+        dueDate: parsedDueDate,
+        recurrencePattern: item.recurrencePattern || 'none',
+        recurrenceDay: item.recurrenceDay || null,
+        recurrenceMonth: item.recurrenceMonth || null,
+        priority: item.priority || 'normal',
+        reminderDays: item.reminderDays || [30, 14, 7, 1],
+        notes: item.notes || null,
+        externalReference: item.externalReference || null,
+        createdByUserId: item.createdByUserId || null,
+        demoCodeId: item.demoCodeId || null,
+        status: status,
+      })
       .returning();
     return created;
   }
 
   async updateComplianceItem(id: string, updates: Partial<schema.InsertComplianceItem>): Promise<schema.ComplianceItem> {
+    // Convert dueDate to Date object if provided as string
+    const processedUpdates = {
+      ...updates,
+      ...(updates.dueDate ? { dueDate: new Date(updates.dueDate) } : {}),
+      updatedAt: new Date()
+    };
+
     const [updated] = await db
       .update(schema.complianceItems)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(processedUpdates)
       .where(eq(schema.complianceItems.id, id))
       .returning();
     return updated;

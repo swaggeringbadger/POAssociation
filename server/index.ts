@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { analysisWorker } from "./services/analysisWorker";
 import { billingScheduler } from "./services/billingScheduler";
+import { seedCommunityTiers } from "./seed-tiers";
 
 const app = express();
 
@@ -49,6 +50,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure community tiers are seeded with correct values
+  await seedCommunityTiers();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

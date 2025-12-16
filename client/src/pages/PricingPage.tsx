@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ContactModal } from "@/components/ContactModal";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowRight,
   Check,
@@ -31,49 +33,57 @@ import {
 import { cn } from "@/lib/utils";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 
-// Pricing data - kept in sync with content/pricing.md and shared/subscriptionTypes.ts
-const TIERS = [
-  {
-    name: "Small",
-    doors: "1-50",
-    price: 29,
-    yearly: 290,
-    credits: 10,
-    overage: 2.0,
-    popular: false,
-    description: "Perfect for small communities",
-  },
-  {
-    name: "Medium",
-    doors: "51-150",
-    price: 79,
-    yearly: 790,
-    credits: 25,
-    overage: 1.75,
-    popular: true,
-    description: "For growing communities",
-  },
-  {
-    name: "Large",
-    doors: "151-500",
-    price: 149,
-    yearly: 1490,
-    credits: 50,
-    overage: 1.5,
-    popular: false,
-    description: "For established communities",
-  },
-  {
-    name: "Extra Large",
-    doors: "501+",
-    price: 299,
-    yearly: 2990,
-    credits: 100,
-    overage: 1.25,
-    popular: false,
-    description: "For large communities",
-  },
-];
+// Tier display type
+interface TierDisplay {
+  name: string;
+  doors: string;
+  price: number;
+  yearly: number;
+  credits: number;
+  overage: number;
+  popular: boolean;
+  description: string;
+}
+
+// Fetch tiers from API
+async function fetchPricingTiers(): Promise<TierDisplay[]> {
+  const response = await fetch('/api/subscription/tiers');
+  if (!response.ok) {
+    throw new Error('Failed to fetch pricing tiers');
+  }
+  const tiers = await response.json();
+
+  // Transform API response to display format
+  return tiers.map((tier: any) => ({
+    name: tier.name.replace(' Community', ''),
+    doors: tier.maxDoors ? `${tier.minDoors}-${tier.maxDoors}` : `${tier.minDoors}+`,
+    price: tier.basePriceMonthly,
+    yearly: tier.basePriceYearly,
+    credits: tier.includedCredits,
+    overage: tier.defaultOverageCost,
+    popular: tier.tierCode === 'medium',
+    description: getDescription(tier.tierCode),
+  }));
+}
+
+function getDescription(tierCode: string): string {
+  const descriptions: Record<string, string> = {
+    small: 'Perfect for small communities',
+    medium: 'For growing communities',
+    large: 'For established communities',
+    xl: 'For large communities',
+  };
+  return descriptions[tierCode] || '';
+}
+
+// Hook to fetch pricing tiers
+function usePricingTiers() {
+  return useQuery({
+    queryKey: ['pricing-tiers'],
+    queryFn: fetchPricingTiers,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+}
 
 const CREDIT_OPERATIONS = [
   {
@@ -293,11 +303,49 @@ function BillingToggle({
 
 // Tier Cards
 function TierCards({ isAnnual }: { isAnnual: boolean }) {
+  const { data: tiers, isLoading, error } = usePricingTiers();
+
+  if (isLoading) {
+    return (
+      <section className="pb-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="flex flex-col">
+                <CardHeader className="pb-4">
+                  <Skeleton className="h-6 w-24 mb-2" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-10 w-32 mt-4" />
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <Skeleton className="h-16 w-full mb-4" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (error || !tiers) {
+    return (
+      <section className="pb-16">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-muted-foreground">Unable to load pricing. Please refresh the page.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="pb-16">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {TIERS.map((tier) => (
+          {tiers.map((tier) => (
             <Card
               key={tier.name}
               className={cn(

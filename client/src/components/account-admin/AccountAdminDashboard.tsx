@@ -5,14 +5,14 @@
  * - Single property: Full-width expanded layout
  * - Multiple properties: Grid of expandable tiles with summary header
  * - Accordion behavior: One tile expanded at a time
- * - Subscription-focused metrics and management
+ * - Token-based metrics (AI credits, applications)
  */
 
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building, Users, HardDrive, FileCheck, AlertTriangle, CheckCircle } from "lucide-react";
+import { Building, Sparkles, FileCheck, AlertTriangle, CheckCircle, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccountAdminSummary, usePropertySubscription, usePropertyActivity } from "@/hooks/useAccountAdminData";
 import { PropertyTile } from "./PropertyTile";
@@ -73,9 +73,10 @@ function DashboardHeader({
 }: {
   summary: {
     totalProperties: number;
-    totalUsers: number;
-    totalStorageGb: number;
+    totalCreditsUsed: number;
+    totalCreditsIncluded: number;
     totalApplicationsThisMonth: number;
+    totalOverageCost: number;
     propertiesAtLimit: number;
     propertiesWarning: number;
     propertiesHealthy: number;
@@ -96,6 +97,7 @@ function DashboardHeader({
   }
 
   const hasIssues = summary.propertiesAtLimit > 0 || summary.propertiesWarning > 0;
+  const creditsRemaining = Math.max(0, summary.totalCreditsIncluded - summary.totalCreditsUsed);
 
   return (
     <div className="space-y-6">
@@ -130,22 +132,24 @@ function DashboardHeader({
           trend="Under your management"
         />
         <StatsCard
-          title="Total Users"
-          value={summary.totalUsers.toString()}
-          icon={Users}
-          trend="Across all properties"
-        />
-        <StatsCard
-          title="Storage Used"
-          value={`${summary.totalStorageGb.toFixed(1)} GB`}
-          icon={HardDrive}
-          trend="Combined storage"
+          title="AI Credits Used"
+          value={`${summary.totalCreditsUsed} / ${summary.totalCreditsIncluded}`}
+          icon={Sparkles}
+          trend={`${creditsRemaining} credits remaining`}
+          variant={summary.propertiesAtLimit > 0 ? "warning" : "default"}
         />
         <StatsCard
           title="Applications"
           value={summary.totalApplicationsThisMonth.toString()}
           icon={FileCheck}
           trend="This month"
+        />
+        <StatsCard
+          title="Overage Costs"
+          value={summary.totalOverageCost > 0 ? `$${summary.totalOverageCost.toFixed(2)}` : '$0.00'}
+          icon={DollarSign}
+          trend={summary.totalOverageCost > 0 ? "Estimated this period" : "No overages"}
+          variant={summary.totalOverageCost > 0 ? "warning" : "success"}
         />
       </div>
 
@@ -159,13 +163,13 @@ function DashboardHeader({
           {summary.propertiesWarning > 0 && (
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-yellow-600" />
-              <span>{summary.propertiesWarning} approaching limits</span>
+              <span>{summary.propertiesWarning} approaching credit limits</span>
             </div>
           )}
           {summary.propertiesAtLimit > 0 && (
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-600" />
-              <span>{summary.propertiesAtLimit} at limit</span>
+              <span>{summary.propertiesAtLimit} at credit limit</span>
             </div>
           )}
         </div>
@@ -180,6 +184,12 @@ function DashboardHeader({
 function SinglePropertyDashboard({ property }: { property: any }) {
   const { data: subscription, isLoading: subLoading } = usePropertySubscription(property.id, true);
   const { data: activity, isLoading: actLoading } = usePropertyActivity(property.id, true);
+
+  const effectiveCredits = subscription?.effectiveCredits ?? subscription?.tier?.includedCredits ?? 0;
+  const creditsUsed = subscription?.creditsUsed ?? 0;
+  const creditsRemaining = subscription?.creditsRemaining ?? Math.max(0, effectiveCredits - creditsUsed);
+  const applicationsThisMonth = subscription?.applicationsThisMonth ?? 0;
+  const overageCost = subscription?.estimatedOverageCost ?? 0;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -201,28 +211,31 @@ function SinglePropertyDashboard({ property }: { property: any }) {
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          title="Users"
-          value={(subscription?.usageUsers || 0).toString()}
-          icon={Users}
-          trend={subscription?.plan?.maxUsers ? `of ${subscription.plan.maxUsers} allowed` : "Unlimited"}
+          title="AI Credits Used"
+          value={`${creditsUsed} / ${effectiveCredits}`}
+          icon={Sparkles}
+          trend={`${creditsRemaining} remaining`}
+          variant={creditsRemaining === 0 ? "warning" : "default"}
         />
         <StatsCard
-          title="Storage Used"
-          value={`${(subscription?.usageStorageGb || 0).toFixed(1)} GB`}
-          icon={HardDrive}
-          trend={subscription?.plan?.maxStorageGb ? `of ${subscription.plan.maxStorageGb} GB` : "Unlimited"}
-        />
-        <StatsCard
-          title="Forms"
-          value={(subscription?.usageForms || 0).toString()}
-          icon={FileCheck}
-          trend={subscription?.plan?.maxForms ? `of ${subscription.plan.maxForms} forms` : "Unlimited"}
+          title="Credits Remaining"
+          value={creditsRemaining.toString()}
+          icon={Sparkles}
+          trend={effectiveCredits > 0 ? `${Math.round((creditsRemaining / effectiveCredits) * 100)}% of monthly allowance` : "No limit"}
+          variant={creditsRemaining === 0 ? "warning" : "success"}
         />
         <StatsCard
           title="Applications"
-          value={(subscription?.usageApplicationsCurrentMonth || 0).toString()}
+          value={applicationsThisMonth.toString()}
           icon={FileCheck}
           trend="This month"
+        />
+        <StatsCard
+          title="Overage Costs"
+          value={overageCost > 0 ? `$${overageCost.toFixed(2)}` : '$0.00'}
+          icon={DollarSign}
+          trend={overageCost > 0 ? "Estimated this period" : "No overages"}
+          variant={overageCost > 0 ? "warning" : "success"}
         />
       </div>
 

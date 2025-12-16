@@ -140,14 +140,12 @@ export class AnalysisWorker {
         }
       }
 
-      // Step 5: Generate AI mockups and blueprint if enabled
-      const mockupUrls: string[] = [];
+      // Step 5: Generate AI site plan/blueprint if enabled
+      const mockupUrls: string[] = []; // Empty - mockups disabled
       let blueprintUrl: string | undefined;
       let imageGenCost = 0;
 
       if (options.includeMockups && imageGenerationService.getActiveProvider()) {
-        console.log(`[AnalysisWorker] Generating AI mockups for ${analysis.id}`);
-
         const mockupContext = {
           projectType: application.projectType || '',
           projectDescription: application.description || '',
@@ -157,26 +155,13 @@ export class AnalysisWorker {
         };
 
         if (satelliteImageBase64) {
-          console.log(`[AnalysisWorker] Including satellite image in AI mockup context for property-specific generation`);
+          console.log(`[AnalysisWorker] Including satellite image for site plan generation`);
         } else {
-          console.log(`[AnalysisWorker] No satellite image available - AI will generate generic mockups`);
+          console.log(`[AnalysisWorker] No satellite image available for site plan`);
         }
 
-        // Generate mockups
-        const mockups = await imageGenerationService.generateMockupVariations(
-          mockupContext,
-          options.mockupCount || 2,
-          { quality: options.mockupQuality }
-        );
-
-        // Store mockups (in production, upload to cloud storage)
-        for (const mockup of mockups) {
-          // For now, store as data URLs (in production, upload to S3/GCS)
-          mockupUrls.push(`data:${mockup.mimeType};base64,${mockup.base64}`);
-        }
-
-        // Generate blueprint-style site plan
-        console.log(`[AnalysisWorker] Generating blueprint for ${analysis.id}`);
+        // Generate site plan/blueprint only
+        console.log(`[AnalysisWorker] Generating site plan for ${analysis.id}`);
         const blueprint = await imageGenerationService.generateBlueprint(
           mockupContext,
           { quality: options.mockupQuality }
@@ -184,15 +169,15 @@ export class AnalysisWorker {
 
         if (blueprint) {
           blueprintUrl = `data:${blueprint.mimeType};base64,${blueprint.base64}`;
-          console.log(`[AnalysisWorker] Blueprint generated successfully`);
+          console.log(`[AnalysisWorker] Site plan generated successfully`);
         }
 
-        // Calculate image gen cost (mockups + blueprint)
-        const totalImages = mockups.length + (blueprint ? 1 : 0);
+        // Calculate image gen cost (site plan only)
+        const totalImages = blueprint ? 1 : 0;
         const costResult = imageGenerationService.calculateCosts({
           standardCount: options.mockupQuality === 'standard' ? totalImages : 0,
           highCount: options.mockupQuality === 'high' ? totalImages : 0,
-          provider: 'stability_ai',
+          provider: 'gemini3pro',
         });
         imageGenCost = parseFloat(costResult.total);
       }
