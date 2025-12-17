@@ -3,12 +3,12 @@ import { signPayload, SyncPayload } from "./protocol";
 
 /**
  * Get HomeHub URL based on environment
- * Production: APP_URL contains 'hazelhippo.com' → use HOMEHUB_APP_URL_PROD
- * Development: Otherwise → use HOMEHUB_APP_URL_DEV
+ * Production: APP_URL contains 'poassociation.com' → use production HomeHub URL
+ * Development: Otherwise → use dev URL
  */
-function getHomeHubUrl(): string {
+export function getHomeHubUrl(): string {
   const appUrl = process.env.APP_URL || "";
-  const isProduction = appUrl.includes("hazelhippo.com");
+  const isProduction = appUrl.includes("poassociation.com");
 
   if (isProduction) {
     return process.env.HOMEHUB_APP_URL_PROD || "https://hazelhippo.com";

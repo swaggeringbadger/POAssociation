@@ -6217,7 +6217,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = Buffer.from(JSON.stringify({ payload, signature }))
         .toString("base64url");
 
-      const homeHubUrl = process.env.HOMEHUB_URL || "https://homehub.replit.app";
+      const { getHomeHubUrl } = await import('./sync/client');
+      const homeHubUrl = getHomeHubUrl();
       const redirectUrl = `${homeHubUrl}/sso-callback?token=${token}`;
 
       res.json({ redirectUrl });
@@ -6230,10 +6231,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check if HomeHub SSO is configured
   app.get('/api/homehub/status', isAuthenticated, async (req: any, res) => {
     try {
+      const { getHomeHubUrl } = await import('./sync/client');
       const configured = !!process.env.HOMEHUB_SSO_SECRET;
       res.json({
         configured,
-        homeHubUrl: process.env.HOMEHUB_URL || "https://homehub.replit.app"
+        homeHubUrl: getHomeHubUrl()
       });
     } catch (error: any) {
       console.error('Error checking HomeHub status:', error);
@@ -6250,8 +6252,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { verifyRequest, isSyncConfigured } = await import('./sync/protocol');
     const { syncFeatures, canReceive } = await import('./sync/registry');
     const { handleSyncAction } = await import('./sync/handlers');
-    const { getPartnerUrl } = await import('./sync/client');
-    return { verifyRequest, isSyncConfigured, syncFeatures, canReceive, handleSyncAction, getPartnerUrl };
+    const { getPartnerUrl, getHomeHubUrl } = await import('./sync/client');
+    return { verifyRequest, isSyncConfigured, syncFeatures, canReceive, handleSyncAction, getPartnerUrl, getHomeHubUrl };
   };
 
   // Public feature registry - allows partner apps to discover capabilities
@@ -6380,11 +6382,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check sync configuration status (authenticated)
   app.get('/api/sync/status', isAuthenticated, async (req: any, res) => {
     try {
-      const { isSyncConfigured, getPartnerUrl } = await getSyncModules();
+      const { isSyncConfigured, getPartnerUrl, getHomeHubUrl } = await getSyncModules();
       res.json({
         homehub: {
           configured: isSyncConfigured('homehub'),
-          url: getPartnerUrl('homehub') || 'https://homehub.replit.app',
+          url: getPartnerUrl('homehub') || getHomeHubUrl(),
         },
       });
     } catch (error: any) {
