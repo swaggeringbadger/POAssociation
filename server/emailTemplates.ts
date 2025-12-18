@@ -706,3 +706,282 @@ export function contactFormTemplate(
     `,
   });
 }
+
+// ============================================
+// Invitation Email Templates
+// ============================================
+
+/**
+ * Bulk Community Invitation
+ * Sent when a new POA/HOA onboards and invites all their members
+ */
+export function bulkCommunityInviteTemplate(
+  recipientName: string,
+  communityName: string,
+  inviterName: string,
+  inviteLink: string,
+  communityDescription?: string
+): string {
+  return buildEmailTemplate({
+    title: "You're Invited!",
+    preheader: `${inviterName} has invited you to join ${communityName} on POAssociation`,
+    recipientName,
+    communityName,
+    status: 'action',
+    mainContent: `
+      <p>Great news! <span class="accent-text">${inviterName}</span> has invited you to join <span class="accent-text">${communityName}</span> on POAssociation.</p>
+      ${communityDescription ? `
+        <div class="highlight-box">
+          <p>${communityDescription}</p>
+        </div>
+      ` : ''}
+      <p>POAssociation is a modern platform that makes it easy to:</p>
+      <ul style="margin: 16px 0; padding-left: 24px; color: ${TEXT_DARK};">
+        <li style="margin: 8px 0;">Submit architectural modification requests online</li>
+        <li style="margin: 8px 0;">Track the status of your applications in real-time</li>
+        <li style="margin: 8px 0;">Communicate directly with your community board</li>
+        <li style="margin: 8px 0;">Access community documents and guidelines</li>
+      </ul>
+      <p>Click the button below to create your account and get started!</p>
+    `,
+    actionButton: {
+      text: "Accept Invitation",
+      url: inviteLink,
+    },
+    secondaryContent: `
+      <strong>Questions?</strong><br>If you have any questions about this invitation, please contact your community administrator or reply to this email.
+    `,
+  });
+}
+
+/**
+ * Household Member Invitation
+ * Sent when a homeowner invites a spouse/family member to share their applications
+ */
+export function householdMemberInviteTemplate(
+  recipientName: string,
+  inviterName: string,
+  communityName: string,
+  relationship: string,
+  inviteLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Join Your Household",
+    preheader: `${inviterName} has invited you to join their household on POAssociation`,
+    recipientName,
+    communityName,
+    status: 'action',
+    mainContent: `
+      <p><span class="accent-text">${inviterName}</span> has invited you to join their household as their <span class="accent-text">${relationship}</span> on POAssociation.</p>
+      <div class="highlight-box">
+        <p><strong>What does this mean?</strong><br>
+        As a household member, you'll have full access to:</p>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+          <li>All past and future applications submitted by your household</li>
+          <li>The ability to submit new applications on behalf of your home</li>
+          <li>Real-time updates and notifications about your projects</li>
+        </ul>
+      </div>
+      <p>Click below to accept this invitation and join the household.</p>
+    `,
+    actionButton: {
+      text: "Join Household",
+      url: inviteLink,
+    },
+    secondaryContent: `
+      <strong>Not expecting this?</strong><br>If you don't recognize this invitation or believe it was sent in error, you can safely ignore this email.
+    `,
+  });
+}
+
+/**
+ * Household Member Joined Notification
+ * Sent to the primary homeowner when a household member accepts their invitation
+ */
+export function householdMemberJoinedTemplate(
+  recipientName: string,
+  memberName: string,
+  memberEmail: string,
+  communityName: string,
+  dashboardLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Household Member Joined",
+    preheader: `${memberName} has joined your household on POAssociation`,
+    recipientName,
+    communityName,
+    status: 'success',
+    mainContent: `
+      <p>Great news! <span class="accent-text">${memberName}</span> (${memberEmail}) has accepted your invitation and joined your household.</p>
+      <div class="highlight-box">
+        <p><strong>What's next?</strong><br>
+        ${memberName} now has full access to your household's applications. They can view all past submissions and create new applications on behalf of your home.</p>
+      </div>
+      <p>You can manage your household members anytime from your account settings.</p>
+    `,
+    actionButton: {
+      text: "View Household Settings",
+      url: dashboardLink,
+    },
+    secondaryContent: `
+      <strong>Need to make changes?</strong><br>You can remove household members or invite additional family members from your household settings.
+    `,
+  });
+}
+
+/**
+ * Contractor Application Invitation
+ * Sent when a homeowner invites a contractor to collaborate on a specific application
+ */
+export function contractorInviteTemplate(
+  recipientName: string,
+  inviterName: string,
+  applicationTitle: string,
+  communityName: string,
+  inviteLink: string,
+  projectDescription?: string
+): string {
+  return buildEmailTemplate({
+    title: "Collaborate on a Project",
+    preheader: `${inviterName} has invited you to collaborate on "${applicationTitle}"`,
+    recipientName,
+    status: 'action',
+    mainContent: `
+      <p><span class="accent-text">${inviterName}</span> has invited you to collaborate on their application for <span class="accent-text">"${applicationTitle}"</span> in <span class="accent-text">${communityName}</span>.</p>
+      ${projectDescription ? `
+        <div class="highlight-box">
+          <p><strong>Project Details:</strong><br>${projectDescription}</p>
+        </div>
+      ` : ''}
+      <p>As a collaborator, you'll be able to:</p>
+      <ul style="margin: 16px 0; padding-left: 24px; color: ${TEXT_DARK};">
+        <li style="margin: 8px 0;">View and edit the application details</li>
+        <li style="margin: 8px 0;">Upload documents and plans</li>
+        <li style="margin: 8px 0;">Receive updates on the application status</li>
+        <li style="margin: 8px 0;">Communicate with the homeowner and reviewers</li>
+      </ul>
+      <p>Click below to accept this invitation and start collaborating.</p>
+    `,
+    actionButton: {
+      text: "Accept & Collaborate",
+      url: inviteLink,
+    },
+    secondaryContent: `
+      <strong>Build Your Reputation</strong><br>Successfully completed projects help build your contractor profile on POAssociation, making it easier for other homeowners to find and hire you.
+    `,
+  });
+}
+
+/**
+ * Contractor Invitation Accepted Notification
+ * Sent to the homeowner when a contractor accepts their invitation
+ */
+export function contractorInviteAcceptedTemplate(
+  recipientName: string,
+  contractorName: string,
+  contractorCompany: string | undefined,
+  applicationTitle: string,
+  communityName: string,
+  applicationLink: string
+): string {
+  const contractorDisplay = contractorCompany
+    ? `${contractorName} from ${contractorCompany}`
+    : contractorName;
+
+  return buildEmailTemplate({
+    title: "Contractor Joined",
+    preheader: `${contractorDisplay} has joined your application`,
+    recipientName,
+    communityName,
+    status: 'success',
+    mainContent: `
+      <p><span class="accent-text">${contractorDisplay}</span> has accepted your invitation and joined your application for <span class="accent-text">"${applicationTitle}"</span>.</p>
+      <div class="highlight-box">
+        <p><strong>What's next?</strong><br>
+        Your contractor can now view and contribute to your application. They'll be able to upload documents, edit details, and receive status updates alongside you.</p>
+      </div>
+      <p>You can view the application and communicate with your contractor by clicking below.</p>
+    `,
+    actionButton: {
+      text: "View Application",
+      url: applicationLink,
+    },
+    secondaryContent: `
+      <strong>Working Together</strong><br>Collaborating with your contractor through POAssociation helps ensure everyone stays on the same page throughout the approval process.
+    `,
+  });
+}
+
+/**
+ * Contractor Referral Email
+ * Sent to contractors with their referral link to share with POAs/HOAs
+ */
+export function contractorReferralTemplate(
+  recipientName: string,
+  referralCode: string,
+  referralLink: string,
+  dashboardLink: string
+): string {
+  return buildEmailTemplate({
+    title: "Your Referral Link",
+    preheader: "Share your referral link and earn rewards when communities sign up",
+    recipientName,
+    status: 'info',
+    mainContent: `
+      <p>Thanks for being part of the POAssociation contractor network! Here's your personal referral link to share with property owners associations and HOAs.</p>
+      <div class="highlight-box" style="text-align: center;">
+        <p style="margin-bottom: 8px;"><strong>Your Referral Code</strong></p>
+        <p style="font-size: 24px; font-weight: bold; color: #3b82f6; margin: 8px 0; font-family: monospace;">${referralCode}</p>
+        <p style="font-size: 12px; color: #6b7280; word-break: break-all;">${referralLink}</p>
+      </div>
+      <p><strong>How it works:</strong></p>
+      <ul style="margin: 16px 0; padding-left: 24px; color: ${TEXT_DARK};">
+        <li style="margin: 8px 0;">Share your link with POAs, HOAs, or property managers</li>
+        <li style="margin: 8px 0;">When they sign up using your link, you get credit</li>
+        <li style="margin: 8px 0;">Earn rewards for each qualified referral</li>
+        <li style="margin: 8px 0;">Track your referrals from your dashboard</li>
+      </ul>
+    `,
+    actionButton: {
+      text: "View Referral Dashboard",
+      url: dashboardLink,
+    },
+    secondaryContent: `
+      <strong>Pro Tip</strong><br>The best referrals come from communities you already work with. They've seen your quality work and trust your recommendations!
+    `,
+  });
+}
+
+/**
+ * Contractor Referral Signup Notification
+ * Sent to contractor when a POA signs up using their referral code
+ */
+export function contractorReferralSignupTemplate(
+  recipientName: string,
+  communityName: string,
+  referralCode: string,
+  dashboardLink: string
+): string {
+  return buildEmailTemplate({
+    title: "New Referral Signup!",
+    preheader: `${communityName} signed up using your referral code`,
+    recipientName,
+    status: 'success',
+    mainContent: `
+      <p>Congratulations! A new community has signed up for POAssociation using your referral code.</p>
+      <div class="highlight-box" style="text-align: center;">
+        <p style="margin-bottom: 8px;"><strong>New Community</strong></p>
+        <p style="font-size: 20px; font-weight: bold; color: #10b981; margin: 8px 0;">${communityName}</p>
+        <p style="font-size: 12px; color: #6b7280;">Referral Code: ${referralCode}</p>
+      </div>
+      <p>This referral is now being tracked. Once the community completes their onboarding and becomes a qualified referral, you'll be notified about your reward.</p>
+    `,
+    actionButton: {
+      text: "View All Referrals",
+      url: dashboardLink,
+    },
+    secondaryContent: `
+      <strong>Keep It Going!</strong><br>Every community you refer helps grow the network and earns you rewards. Keep sharing your referral link!
+    `,
+  });
+}

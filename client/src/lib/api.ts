@@ -142,6 +142,22 @@ export interface PropertyRepInfo {
   fallbackTitle: string | null;
 }
 
+export interface EmailTemplateParameter {
+  key: string;
+  label: string;
+  type: 'string' | 'url' | 'select';
+  options?: string[];
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  description: string;
+  status: 'success' | 'info' | 'warning' | 'action';
+  parameters: EmailTemplateParameter[];
+  sampleData: Record<string, string>;
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -175,6 +191,36 @@ class ApiClient {
   async getAllAiAnalyses(limit = 100): Promise<any[]> {
     const response = await fetch(`${this.baseUrl}/admin/ai-analyses?limit=${limit}`);
     if (!response.ok) throw new Error("Failed to fetch AI analyses");
+    return response.json();
+  }
+
+  // Email Template Dashboard
+  async getEmailTemplates(): Promise<{ templates: EmailTemplate[] }> {
+    const response = await fetch(`${this.baseUrl}/admin/email-templates`);
+    if (!response.ok) throw new Error("Failed to fetch email templates");
+    return response.json();
+  }
+
+  async previewEmailTemplate(templateId: string, sampleData: Record<string, string>): Promise<{ subject: string; html: string }> {
+    const response = await fetch(`${this.baseUrl}/admin/email-templates/${templateId}/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sampleData }),
+    });
+    if (!response.ok) throw new Error("Failed to preview email template");
+    return response.json();
+  }
+
+  async sendTestEmail(templateId: string, sampleData: Record<string, string>): Promise<{ success: boolean; sentTo: string }> {
+    const response = await fetch(`${this.baseUrl}/admin/email-templates/${templateId}/send-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sampleData }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to send test email");
+    }
     return response.json();
   }
 
@@ -771,6 +817,214 @@ class ApiClient {
     }
     return response.json();
   }
+
+  // ============================================
+  // CO-APPLICANT SYSTEM
+  // ============================================
+
+  // Household Members
+  async getHouseholdMembers(tenantId: string): Promise<any[]> {
+    const response = await fetch(`/api/households/${tenantId}/members`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get household members');
+    }
+    return response.json();
+  }
+
+  async inviteHouseholdMember(tenantId: string, data: {
+    email: string;
+    name?: string;
+    relationship?: string;
+  }): Promise<any> {
+    const response = await fetch(`/api/households/${tenantId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to invite household member');
+    }
+    return response.json();
+  }
+
+  async removeHouseholdMember(tenantId: string, memberId: string): Promise<void> {
+    const response = await fetch(`/api/households/${tenantId}/members/${memberId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to remove household member');
+    }
+  }
+
+  async leaveHousehold(tenantId: string, memberId: string): Promise<void> {
+    const response = await fetch(`/api/households/${tenantId}/members/${memberId}/leave`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to leave household');
+    }
+  }
+
+  async getMyHouseholdMemberships(): Promise<any[]> {
+    const response = await fetch('/api/households/my-memberships');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get memberships');
+    }
+    return response.json();
+  }
+
+  // Contractors
+  async getMyContractorProfile(): Promise<any> {
+    const response = await fetch('/api/contractors/me');
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get contractor profile');
+    }
+    return response.json();
+  }
+
+  async createContractorProfile(data: {
+    companyName?: string;
+    businessType?: string;
+    licenseNumber?: string;
+    businessPhone?: string;
+    businessEmail?: string;
+    website?: string;
+    serviceArea?: string;
+    isPubliclySearchable?: boolean;
+  }): Promise<any> {
+    const response = await fetch('/api/contractors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create contractor profile');
+    }
+    return response.json();
+  }
+
+  async updateContractorProfile(id: string, data: any): Promise<any> {
+    const response = await fetch(`/api/contractors/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update contractor profile');
+    }
+    return response.json();
+  }
+
+  async searchContractors(query: string): Promise<any[]> {
+    const response = await fetch(`/api/contractors/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to search contractors');
+    }
+    return response.json();
+  }
+
+  async generateReferralCode(contractorId: string, customCode?: string): Promise<{
+    referralCode: string;
+    referralUrl: string;
+  }> {
+    const response = await fetch(`/api/contractors/${contractorId}/referral-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customCode }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate referral code');
+    }
+    return response.json();
+  }
+
+  async getContractorDashboard(contractorId: string): Promise<any> {
+    const response = await fetch(`/api/contractors/${contractorId}/dashboard`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get contractor dashboard');
+    }
+    return response.json();
+  }
+
+  async getContractorReferrals(contractorId: string): Promise<any> {
+    const response = await fetch(`/api/contractors/${contractorId}/referrals`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get contractor referrals');
+    }
+    return response.json();
+  }
+
+  // Application Collaborators
+  async getApplicationCollaborators(applicationId: string): Promise<any[]> {
+    const response = await fetch(`/api/applications/${applicationId}/collaborators`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get collaborators');
+    }
+    return response.json();
+  }
+
+  async inviteContractorToApplication(applicationId: string, data: {
+    email?: string;
+    contractorId?: string;
+    name?: string;
+  }): Promise<any> {
+    const response = await fetch(`/api/applications/${applicationId}/collaborators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to invite contractor');
+    }
+    return response.json();
+  }
+
+  async removeContractorFromApplication(applicationId: string, collaboratorId: string): Promise<void> {
+    const response = await fetch(`/api/applications/${applicationId}/collaborators/${collaboratorId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to remove contractor');
+    }
+  }
+
+  // Invitations
+  async resendInvitation(invitationId: string): Promise<any> {
+    const response = await fetch(`/api/invitations/${invitationId}/resend`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to resend invitation');
+    }
+    return response.json();
+  }
+
+  async revokeInvitation(invitationId: string): Promise<void> {
+    const response = await fetch(`/api/invitations/${invitationId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to revoke invitation');
+    }
+  }
 }
 
 export const api = new ApiClient();
@@ -780,7 +1034,7 @@ export const api = new ApiClient();
  * Used by components that need flexible API calls
  */
 export async function apiRequest<T = any>(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   data?: any
 ): Promise<T> {
@@ -792,7 +1046,7 @@ export async function apiRequest<T = any>(
     },
   };
 
-  if (data && (method === 'POST' || method === 'PATCH')) {
+  if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
     options.body = JSON.stringify(data);
   }
 
@@ -2104,4 +2358,117 @@ export function downloadInvoicePdf(invoiceId: string, invoiceNumber: string): vo
 // Send invoice via email
 export async function sendInvoice(invoiceId: string): Promise<{ success: boolean; invoice: InvoiceWithLineItems }> {
   return apiRequest('POST', `/api/invoices/${invoiceId}/send`);
+}
+
+// ============================================
+// TOUR PROGRESS API
+// ============================================
+
+export interface TourProgress {
+  id: string;
+  userId: string;
+  pageKey: string;
+  role: string;
+  completedAt: string;
+  demoCodeId?: string;
+  createdAt: string;
+}
+
+export interface TourCompletionCheck {
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface TourCompleteResponse {
+  success: boolean;
+  alreadyCompleted?: boolean;
+  progress: TourProgress;
+}
+
+// Get all tour progress for the current user
+export async function getTourProgressList(): Promise<TourProgress[]> {
+  return apiRequest('GET', '/api/tour/progress');
+}
+
+// Check if a specific tour has been completed
+export async function checkTourCompleted(pageKey: string, role: string): Promise<TourCompletionCheck> {
+  return apiRequest('GET', `/api/tour/progress/${encodeURIComponent(pageKey)}/${encodeURIComponent(role)}`);
+}
+
+// Mark a tour as completed
+export async function markTourComplete(
+  pageKey: string,
+  role: string,
+  demoCodeId?: string
+): Promise<TourCompleteResponse> {
+  return apiRequest('POST', '/api/tour/complete', { pageKey, role, demoCodeId });
+}
+
+// Reset tour progress (for testing/development)
+export async function resetTourProgress(pageKey?: string, role?: string): Promise<{ success: boolean }> {
+  const params = new URLSearchParams();
+  if (pageKey) params.append('pageKey', pageKey);
+  if (role) params.append('role', role);
+  const queryString = params.toString();
+  return apiRequest('DELETE', `/api/tour/progress${queryString ? `?${queryString}` : ''}`);
+}
+
+// ============================================
+// TOUR CONTENT API (For TourProvider)
+// ============================================
+
+export interface TourContentOverride {
+  id: string;
+  pageKey: string;
+  role: string;
+  pageTitle: string;
+  isEnabled: boolean;
+  steps: Array<{
+    title: string;
+    description: string;
+    iconName: string;
+  }>;
+  updatedByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Get tour content overrides (for TourProvider)
+export async function getTourContentOverrides(): Promise<TourContentOverride[]> {
+  return apiRequest('GET', '/api/tour/content');
+}
+
+// ============================================
+// TOUR ADMIN API (Super Admin Only)
+// ============================================
+
+export interface AdminToursResponse {
+  overrides: TourContentOverride[];
+}
+
+// Get all tours for admin (overrides from database)
+export async function getAdminTours(): Promise<AdminToursResponse> {
+  return apiRequest('GET', '/api/admin/tours');
+}
+
+// Update/create tour override
+export async function updateAdminTour(
+  pageKey: string,
+  role: string,
+  data: {
+    pageTitle: string;
+    isEnabled: boolean;
+    steps: Array<{
+      title: string;
+      description: string;
+      iconName: string;
+    }>;
+  }
+): Promise<TourContentOverride> {
+  return apiRequest('PUT', `/api/admin/tours/${encodeURIComponent(pageKey)}/${encodeURIComponent(role)}`, data);
+}
+
+// Reset tour to default (delete override)
+export async function resetAdminTour(pageKey: string, role: string): Promise<{ success: boolean }> {
+  return apiRequest('DELETE', `/api/admin/tours/${encodeURIComponent(pageKey)}/${encodeURIComponent(role)}`);
 }

@@ -2223,6 +2223,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // Email Template Dashboard (super admin only)
+  // ============================================
+
+  // List all email templates
+  app.get("/api/admin/email-templates", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { getAllTemplates } = await import('./emailTemplateRegistry');
+      const templates = getAllTemplates();
+      res.json({ templates });
+    } catch (error: any) {
+      console.error('Error listing email templates:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Preview an email template with sample data
+  app.post("/api/admin/email-templates/:templateId/preview", isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      const { sampleData } = req.body;
+
+      const { generatePreview } = await import('./emailTemplateRegistry');
+      const preview = generatePreview(templateId, sampleData || {});
+
+      if (!preview) {
+        return res.status(404).json({ error: `Template not found: ${templateId}` });
+      }
+
+      res.json(preview);
+    } catch (error: any) {
+      console.error('Error generating email preview:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send test email to the requesting admin
+  app.post("/api/admin/email-templates/:templateId/send-test", isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { templateId } = req.params;
+      const { sampleData } = req.body;
+
+      // Get the current user's email
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user?.email) {
+        return res.status(400).json({ error: 'User email not found' });
+      }
+
+      // Generate the email
+      const { generatePreview } = await import('./emailTemplateRegistry');
+      const preview = generatePreview(templateId, sampleData || {});
+
+      if (!preview) {
+        return res.status(404).json({ error: `Template not found: ${templateId}` });
+      }
+
+      // Send the test email
+      const { emailService } = await import('./emailService');
+      const result = await emailService.send({
+        to: user.email,
+        subject: `[TEST] ${preview.subject}`,
+        html: preview.html,
+      });
+
+      if (result.success) {
+        console.log(`[Admin] Test email sent to ${user.email} for template: ${templateId}`);
+        res.json({ success: true, sentTo: user.email });
+      } else {
+        res.status(500).json({ error: result.error || 'Failed to send test email' });
+      }
+    } catch (error: any) {
+      console.error('Error sending test email:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // List all demo codes
   app.get("/api/admin/demo-codes", isAuthenticated, requireSuperAdmin, async (req, res) => {
     try {
@@ -6125,13 +6206,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { radarService } = await import('./services/radarService');
 
-      const { address } = req.body;
+      const { address, latitude, longitude } = req.body;
+      console.log('[Address Validate] Request body:', { address, latitude, longitude });
 
       if (!address || typeof address !== 'string') {
         return res.status(400).json({ error: 'Address is required' });
       }
 
-      const result = await radarService.validateAddress(address);
+      // If coordinates are provided (from autocomplete selection), use them directly
+      // This avoids re-geocoding which could return a different result
+      const coords = latitude && longitude ? { latitude, longitude } : undefined;
+      console.log('[Address Validate] Using coordinates:', coords);
+
+      const result = await radarService.validateAddress(address, coords);
+      console.log('[Address Validate] Result:', result);
       res.json(result);
     } catch (error: any) {
       console.error('Error validating address:', error);
@@ -6383,10 +6471,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/sync/status', isAuthenticated, async (req: any, res) => {
     try {
       const { isSyncConfigured, getPartnerUrl, getHomeHubUrl } = await getSyncModules();
+
+      const appUrl = process.env.APP_URL || '';
+      const isProduction = appUrl.includes('poassociation.com');
+
       res.json({
         homehub: {
           configured: isSyncConfigured('homehub'),
-          url: getPartnerUrl('homehub') || getHomeHubUrl(),
+          resolvedUrl: getHomeHubUrl(),
+        },
+        environment: {
+          APP_URL: appUrl || 'NOT SET',
+          isProduction,
         },
       });
     } catch (error: any) {
@@ -6535,6 +6631,1085 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ updated: true });
     } catch (error: any) {
       console.error('[Sync] Error acknowledging dev instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // CO-APPLICANT SYSTEM ENDPOINTS
+  // ============================================
+
+  // Generate a secure invitation token
+  const generateInvitationToken = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    return Array.from({ length: 64 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  // ------------------------------------------
+  // INVITATIONS
+  // ------------------------------------------
+
+  // Get invitation by token (public - for invitation accept page)
+  app.get('/api/invitations/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      const invitation = await storage.getInvitationByToken(token);
+
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      // Check if expired
+      if (new Date() > invitation.expiresAt) {
+        await storage.updateInvitationStatus(invitation.id, 'expired');
+        return res.status(410).json({ error: 'Invitation has expired' });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(410).json({ error: `Invitation is ${invitation.status}` });
+      }
+
+      // Get additional context based on invitation type
+      let context: any = {};
+      if (invitation.type === 'household_member' && invitation.tenantId) {
+        const tenant = await storage.getTenant(invitation.tenantId);
+        const inviter = await storage.getUser(invitation.invitedByUserId);
+        context = {
+          communityName: tenant?.name,
+          inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A household member',
+        };
+      } else if (invitation.type === 'contractor_application' && invitation.applicationId) {
+        const application = await storage.getApplication(invitation.applicationId);
+        if (application) {
+          const tenant = await storage.getTenant(application.tenantId);
+          context = {
+            applicationTitle: application.title,
+            communityName: tenant?.name,
+          };
+        }
+      }
+
+      res.json({
+        id: invitation.id,
+        type: invitation.type,
+        inviteeEmail: invitation.inviteeEmail,
+        inviteeName: invitation.inviteeName,
+        expiresAt: invitation.expiresAt,
+        ...context,
+      });
+    } catch (error: any) {
+      console.error('Error getting invitation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Accept invitation
+  app.post('/api/invitations/:token/accept', isAuthenticated, async (req: any, res) => {
+    try {
+      const { token } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const invitation = await storage.getInvitationByToken(token);
+
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      if (new Date() > invitation.expiresAt) {
+        await storage.updateInvitationStatus(invitation.id, 'expired');
+        return res.status(410).json({ error: 'Invitation has expired' });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(410).json({ error: `Invitation is ${invitation.status}` });
+      }
+
+      // Process based on invitation type
+      if (invitation.type === 'household_member' && invitation.householdMemberId) {
+        // Accept household member invitation
+        await storage.acceptHouseholdInvitation(invitation.householdMemberId, userId);
+
+        // Also add homeowner role to the tenant if not already present
+        if (invitation.tenantId) {
+          const existingRoles = await storage.getUserRolesForTenant(userId, invitation.tenantId);
+          if (!existingRoles.some(r => r.role === 'homeowner')) {
+            await storage.assignUserRole({
+              userId,
+              tenantId: invitation.tenantId,
+              role: 'homeowner',
+            });
+          }
+
+          // Send notification to primary homeowner
+          const householdMember = await storage.getHouseholdMember(invitation.householdMemberId);
+          if (householdMember?.primaryUserId) {
+            const primaryUser = await storage.getUser(householdMember.primaryUserId);
+            const newMember = await storage.getUser(userId);
+            const tenant = await storage.getTenant(invitation.tenantId);
+
+            if (primaryUser?.email && newMember && tenant) {
+              const { emailService } = await import('./emailService');
+              const dashboardLink = `${process.env.APP_URL || ''}/settings/household`;
+              await emailService.sendHouseholdMemberJoined(
+                primaryUser.email,
+                primaryUser.displayName || 'Homeowner',
+                newMember.displayName || newMember.email || 'Family member',
+                newMember.email || '',
+                tenant.name,
+                dashboardLink
+              );
+            }
+          }
+        }
+      } else if (invitation.type === 'contractor_application' && invitation.applicationCollaboratorId) {
+        // Accept contractor collaboration invitation
+        await storage.updateApplicationCollaboratorStatus(
+          invitation.applicationCollaboratorId,
+          'active',
+          new Date()
+        );
+
+        // Create contractor profile if not exists
+        let contractor = await storage.getContractorByUserId(userId);
+        if (!contractor) {
+          contractor = await storage.createContractor({
+            userId,
+            isPubliclySearchable: true,
+          });
+        }
+
+        // Send notification to homeowner who invited
+        if (invitation.applicationId) {
+          const application = await storage.getApplication(invitation.applicationId);
+          if (application?.submittedByUserId) {
+            const homeowner = await storage.getUser(application.submittedByUserId);
+            const contractorUser = await storage.getUser(userId);
+            const tenant = await storage.getTenant(application.tenantId);
+
+            if (homeowner?.email && contractorUser && tenant) {
+              const { emailService } = await import('./emailService');
+              const applicationLink = `${process.env.APP_URL || ''}/applications/${application.id}`;
+              await emailService.sendContractorInviteAccepted(
+                homeowner.email,
+                homeowner.displayName || 'Homeowner',
+                contractorUser.displayName || contractorUser.email || 'Contractor',
+                contractor?.companyName || undefined,
+                application.title || 'Architectural Application',
+                tenant.name,
+                applicationLink
+              );
+            }
+          }
+        }
+      }
+
+      // Mark invitation as accepted
+      await storage.updateInvitationStatus(invitation.id, 'accepted', new Date());
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error accepting invitation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Decline invitation
+  app.post('/api/invitations/:token/decline', async (req, res) => {
+    try {
+      const { token } = req.params;
+      const invitation = await storage.getInvitationByToken(token);
+
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(410).json({ error: `Invitation is ${invitation.status}` });
+      }
+
+      // Update related entities
+      if (invitation.type === 'household_member' && invitation.householdMemberId) {
+        await storage.updateHouseholdMemberStatus(invitation.householdMemberId, 'removed');
+      } else if (invitation.type === 'contractor_application' && invitation.applicationCollaboratorId) {
+        await storage.updateApplicationCollaboratorStatus(invitation.applicationCollaboratorId, 'removed', undefined, new Date());
+      }
+
+      await storage.updateInvitationStatus(invitation.id, 'declined', undefined, new Date());
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error declining invitation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Resend invitation
+  app.post('/api/invitations/:id/resend', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const invitation = await storage.getInvitation(id);
+
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      // Only the inviter can resend
+      if (invitation.invitedByUserId !== userId) {
+        return res.status(403).json({ error: 'Only the original inviter can resend' });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({ error: 'Can only resend pending invitations' });
+      }
+
+      // Update resend count
+      const updated = await storage.resendInvitation(id);
+
+      // TODO: Send email notification
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error resending invitation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Revoke invitation
+  app.delete('/api/invitations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const invitation = await storage.getInvitation(id);
+
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      // Only the inviter can revoke
+      if (invitation.invitedByUserId !== userId) {
+        return res.status(403).json({ error: 'Only the original inviter can revoke' });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({ error: 'Can only revoke pending invitations' });
+      }
+
+      await storage.revokeInvitation(id);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error revoking invitation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ------------------------------------------
+  // HOUSEHOLD MEMBERS
+  // ------------------------------------------
+
+  // List household members for current user in a tenant
+  app.get('/api/households/:tenantId/members', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const members = await storage.getHouseholdMembersForPrimaryUser(userId, tenantId);
+
+      res.json(members);
+    } catch (error: any) {
+      console.error('Error listing household members:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Invite household member
+  app.post('/api/households/:tenantId/members', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { email, name, relationship } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Check if user has homeowner role in this tenant
+      const roles = await storage.getUserRolesForTenant(userId, tenantId);
+      if (!roles.some(r => r.role === 'homeowner')) {
+        return res.status(403).json({ error: 'Only homeowners can invite household members' });
+      }
+
+      // Create household member record
+      const householdMember = await storage.createHouseholdMember({
+        primaryUserId: userId,
+        tenantId,
+        relationship,
+        status: 'pending',
+      });
+
+      // Generate invitation token
+      const token = generateInvitationToken();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+
+      // Create invitation
+      const invitation = await storage.createInvitation({
+        token,
+        type: 'household_member',
+        invitedByUserId: userId,
+        inviteeEmail: email.toLowerCase(),
+        inviteeName: name,
+        tenantId,
+        householdMemberId: householdMember.id,
+        status: 'pending',
+        expiresAt,
+      });
+
+      // Send email invitation
+      const inviteUrl = `${process.env.APP_URL || ''}/invite/${invitation.token}`;
+      const inviter = await storage.getUser(userId);
+      const tenant = await storage.getTenant(tenantId);
+
+      if (inviter && tenant) {
+        const { emailService } = await import('./emailService');
+        await emailService.sendHouseholdMemberInvite(
+          email.toLowerCase(),
+          name || 'there',
+          inviter.displayName || inviter.email || 'A homeowner',
+          tenant.name,
+          relationship || 'family member',
+          inviteUrl
+        );
+      }
+
+      res.status(201).json({
+        householdMember,
+        invitation: {
+          id: invitation.id,
+          token: invitation.token,
+          inviteUrl: `${process.env.APP_URL || ''}/invite/${invitation.token}`,
+          expiresAt: invitation.expiresAt,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error inviting household member:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove household member (by primary user)
+  app.delete('/api/households/:tenantId/members/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const member = await storage.getHouseholdMember(id);
+
+      if (!member) {
+        return res.status(404).json({ error: 'Household member not found' });
+      }
+
+      // Only primary user can remove members
+      if (member.primaryUserId !== userId) {
+        return res.status(403).json({ error: 'Only the primary household member can remove others' });
+      }
+
+      await storage.updateHouseholdMemberStatus(id, 'removed', userId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error removing household member:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Leave household (by member themselves)
+  app.post('/api/households/:tenantId/members/:id/leave', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const member = await storage.getHouseholdMember(id);
+
+      if (!member) {
+        return res.status(404).json({ error: 'Household member not found' });
+      }
+
+      // Only the member themselves can leave
+      if (member.memberUserId !== userId) {
+        return res.status(403).json({ error: 'You can only leave a household you are a member of' });
+      }
+
+      await storage.updateHouseholdMemberStatus(id, 'left', userId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error leaving household:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get my household memberships (households I've been invited to)
+  app.get('/api/households/my-memberships', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const memberships = await storage.getHouseholdMembershipsForUser(userId);
+
+      res.json(memberships);
+    } catch (error: any) {
+      console.error('Error getting household memberships:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ------------------------------------------
+  // CONTRACTORS
+  // ------------------------------------------
+
+  // Get my contractor profile
+  app.get('/api/contractors/me', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const contractor = await storage.getContractorByUserId(userId);
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'No contractor profile found' });
+      }
+
+      // Get user info
+      const user = await storage.getUser(userId);
+
+      res.json({ ...contractor, user });
+    } catch (error: any) {
+      console.error('Error getting contractor profile:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create contractor profile
+  app.post('/api/contractors', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      // Check if already exists
+      const existing = await storage.getContractorByUserId(userId);
+      if (existing) {
+        return res.status(400).json({ error: 'Contractor profile already exists' });
+      }
+
+      const {
+        companyName,
+        businessType,
+        licenseNumber,
+        businessPhone,
+        businessEmail,
+        website,
+        serviceArea,
+        isPubliclySearchable = true,
+      } = req.body;
+
+      const contractor = await storage.createContractor({
+        userId,
+        companyName,
+        businessType,
+        licenseNumber,
+        businessPhone,
+        businessEmail,
+        website,
+        serviceArea,
+        isPubliclySearchable,
+      });
+
+      res.status(201).json(contractor);
+    } catch (error: any) {
+      console.error('Error creating contractor profile:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update contractor profile
+  app.patch('/api/contractors/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const contractor = await storage.getContractor(id);
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Contractor not found' });
+      }
+
+      // Only the contractor can update their own profile
+      if (contractor.userId !== userId) {
+        return res.status(403).json({ error: 'Can only update your own contractor profile' });
+      }
+
+      const {
+        companyName,
+        businessType,
+        licenseNumber,
+        businessPhone,
+        businessEmail,
+        website,
+        serviceArea,
+        isPubliclySearchable,
+      } = req.body;
+
+      const updated = await storage.updateContractor(id, {
+        companyName,
+        businessType,
+        licenseNumber,
+        businessPhone,
+        businessEmail,
+        website,
+        serviceArea,
+        isPubliclySearchable,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating contractor profile:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Search contractors (for homeowners to find contractors)
+  app.get('/api/contractors/search', isAuthenticated, async (req: any, res) => {
+    try {
+      const { q, limit = 20 } = req.query;
+
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ error: 'Search query is required' });
+      }
+
+      const contractors = await storage.searchContractors(q, parseInt(limit as string));
+
+      res.json(contractors);
+    } catch (error: any) {
+      console.error('Error searching contractors:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate or customize referral code
+  app.post('/api/contractors/:id/referral-code', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { customCode } = req.body;
+
+      const contractor = await storage.getContractor(id);
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Contractor not found' });
+      }
+
+      if (contractor.userId !== userId) {
+        return res.status(403).json({ error: 'Can only manage your own referral code' });
+      }
+
+      const code = await storage.generateReferralCode(id, customCode);
+      const referralUrl = `${process.env.APP_URL || ''}/r/${code}`;
+      const dashboardLink = `${process.env.APP_URL || ''}/contractor/referrals`;
+
+      // Send referral link email to contractor
+      const contractorUser = await storage.getUser(contractor.userId);
+      if (contractorUser?.email) {
+        const { emailService } = await import('./emailService');
+        await emailService.sendContractorReferralLink(
+          contractorUser.email,
+          contractorUser.displayName || 'Contractor',
+          code,
+          referralUrl,
+          dashboardLink
+        );
+      }
+
+      res.json({ referralCode: code, referralUrl });
+    } catch (error: any) {
+      console.error('Error generating referral code:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get contractor dashboard (cross-tenant applications)
+  app.get('/api/contractors/:id/dashboard', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const contractor = await storage.getContractor(id);
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Contractor not found' });
+      }
+
+      if (contractor.userId !== userId) {
+        return res.status(403).json({ error: 'Can only view your own dashboard' });
+      }
+
+      const dashboard = await storage.getContractorDashboard(id);
+
+      res.json(dashboard);
+    } catch (error: any) {
+      console.error('Error getting contractor dashboard:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get contractor referrals
+  app.get('/api/contractors/:id/referrals', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const contractor = await storage.getContractor(id);
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Contractor not found' });
+      }
+
+      if (contractor.userId !== userId) {
+        return res.status(403).json({ error: 'Can only view your own referrals' });
+      }
+
+      const referrals = await storage.getContractorReferrals(id);
+      const stats = await storage.getReferralStats(id);
+
+      res.json({ referrals, stats });
+    } catch (error: any) {
+      console.error('Error getting contractor referrals:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ------------------------------------------
+  // APPLICATION COLLABORATORS
+  // ------------------------------------------
+
+  // Get collaborators on an application
+  app.get('/api/applications/:id/collaborators', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const application = await storage.getApplication(id);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Check access - owner, household member, or management
+      const canAccess = application.submittedByUserId === userId ||
+        await storage.isHouseholdMemberOf(userId, application.submittedByUserId!, application.tenantId);
+
+      // Also check role-based access
+      if (!canAccess) {
+        const { role } = await storage.getUserEffectiveRole(userId, application.tenantId);
+        if (!role || !['management_rep', 'management_manager', 'account_admin', 'super_admin', 'poa_board_member'].includes(role)) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      }
+
+      const collaborators = await storage.getApplicationCollaborators(id);
+
+      res.json(collaborators);
+    } catch (error: any) {
+      console.error('Error getting collaborators:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Invite contractor to application
+  app.post('/api/applications/:id/collaborators', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { email, contractorId, name } = req.body;
+
+      const application = await storage.getApplication(id);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Only owner or household member can invite
+      const canInvite = application.submittedByUserId === userId ||
+        await storage.isHouseholdMemberOf(userId, application.submittedByUserId!, application.tenantId);
+
+      if (!canInvite) {
+        return res.status(403).json({ error: 'Only the application owner or household member can invite contractors' });
+      }
+
+      let contractor;
+
+      if (contractorId) {
+        // Existing contractor
+        contractor = await storage.getContractor(contractorId);
+        if (!contractor) {
+          return res.status(404).json({ error: 'Contractor not found' });
+        }
+      } else if (email) {
+        // New contractor via email
+        // Check if user exists with this email
+        const existingUser = await storage.getUserByEmail(email.toLowerCase());
+        if (existingUser) {
+          contractor = await storage.getContractorByUserId(existingUser.id);
+          if (!contractor) {
+            // Create contractor profile for existing user
+            contractor = await storage.createContractor({
+              userId: existingUser.id,
+              isPubliclySearchable: true,
+            });
+          }
+        }
+      } else {
+        return res.status(400).json({ error: 'Either email or contractorId is required' });
+      }
+
+      // Only create collaborator record if we have a contractor
+      // For email-only invites, the collaborator is created when they accept
+      let collaborator;
+      if (contractor) {
+        collaborator = await storage.createApplicationCollaborator({
+          applicationId: id,
+          contractorId: contractor.id,
+          invitedByUserId: userId,
+          status: 'pending',
+          canEditForm: true,
+          canUploadDocuments: true,
+        });
+      }
+
+      // Generate invitation token
+      const token = generateInvitationToken();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 14); // 14 days for contractors
+
+      // Create invitation
+      const invitation = await storage.createInvitation({
+        token,
+        type: 'contractor_application',
+        invitedByUserId: userId,
+        inviteeEmail: email?.toLowerCase() || '',
+        inviteeName: name,
+        applicationId: id,
+        applicationCollaboratorId: collaborator?.id,
+        status: 'pending',
+        expiresAt,
+      });
+
+      // Send email invitation
+      const inviteUrl = `${process.env.APP_URL || ''}/invite/${invitation.token}`;
+      if (email) {
+        const inviter = await storage.getUser(userId);
+        const tenant = await storage.getTenant(application.tenantId);
+
+        if (inviter && tenant) {
+          const { emailService } = await import('./emailService');
+          await emailService.sendContractorInvite(
+            email.toLowerCase(),
+            name || 'Contractor',
+            inviter.displayName || inviter.email || 'A homeowner',
+            application.title || 'Architectural Application',
+            tenant.name,
+            inviteUrl,
+            application.description || undefined
+          );
+        }
+      }
+
+      res.status(201).json({
+        collaborator,
+        invitation: {
+          id: invitation.id,
+          token: invitation.token,
+          inviteUrl,
+          expiresAt: invitation.expiresAt,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error inviting contractor:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove contractor from application
+  app.delete('/api/applications/:applicationId/collaborators/:collaboratorId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId, collaboratorId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Only owner can remove
+      if (application.submittedByUserId !== userId) {
+        const isHouseholdMember = await storage.isHouseholdMemberOf(userId, application.submittedByUserId!, application.tenantId);
+        if (!isHouseholdMember) {
+          return res.status(403).json({ error: 'Only the application owner can remove contractors' });
+        }
+      }
+
+      await storage.updateApplicationCollaboratorStatus(collaboratorId, 'removed', undefined, new Date());
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error removing contractor:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ------------------------------------------
+  // REFERRAL LANDING
+  // ------------------------------------------
+
+  // Get referral info (public)
+  app.get('/api/r/:code', async (req, res) => {
+    try {
+      const { code } = req.params;
+
+      const contractor = await storage.getContractorByReferralCode(code.toUpperCase());
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Invalid referral code' });
+      }
+
+      // Get contractor's user info
+      const user = await storage.getUser(contractor.userId);
+
+      res.json({
+        referralCode: contractor.referralCode,
+        companyName: contractor.companyName,
+        contractorName: user ? `${user.firstName} ${user.lastName}`.trim() : null,
+      });
+    } catch (error: any) {
+      console.error('Error getting referral info:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Track referral when POA signs up (called during POA signup flow)
+  app.post('/api/r/:code/track', async (req, res) => {
+    try {
+      const { code } = req.params;
+      const { tenantId } = req.body;
+
+      if (!tenantId) {
+        return res.status(400).json({ error: 'tenantId is required' });
+      }
+
+      const contractor = await storage.getContractorByReferralCode(code.toUpperCase());
+
+      if (!contractor) {
+        return res.status(404).json({ error: 'Invalid referral code' });
+      }
+
+      // Create referral record
+      const referral = await storage.createContractorReferral({
+        contractorId: contractor.id,
+        tenantId,
+        referralCode: code.toUpperCase(),
+        status: 'pending',
+      });
+
+      // Send notification to contractor
+      const contractorUser = await storage.getUser(contractor.userId);
+      const tenant = await storage.getTenant(tenantId);
+
+      if (contractorUser?.email && tenant) {
+        const { emailService } = await import('./emailService');
+        const dashboardLink = `${process.env.APP_URL || ''}/contractor/referrals`;
+        await emailService.sendContractorReferralSignup(
+          contractorUser.email,
+          contractorUser.displayName || 'Contractor',
+          tenant.name,
+          code.toUpperCase(),
+          dashboardLink
+        );
+      }
+
+      res.json(referral);
+    } catch (error: any) {
+      console.error('Error tracking referral:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // TOUR PROGRESS ENDPOINTS
+  // ============================================
+
+  // Get all tour progress for the current user
+  app.get('/api/tour/progress', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const progress = await storage.getUserTourProgressList(userId);
+      res.json(progress);
+    } catch (error: any) {
+      console.error('Error getting tour progress:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if a specific tour has been completed
+  app.get('/api/tour/progress/:pageKey/:role', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { pageKey, role } = req.params;
+      const progress = await storage.getTourProgress(userId, pageKey, role);
+
+      res.json({
+        completed: !!progress,
+        completedAt: progress?.completedAt || null,
+      });
+    } catch (error: any) {
+      console.error('Error checking tour progress:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark a tour as completed
+  app.post('/api/tour/complete', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { pageKey, role, demoCodeId } = req.body;
+
+      if (!pageKey || !role) {
+        return res.status(400).json({ error: 'pageKey and role are required' });
+      }
+
+      // Check if already completed
+      const existing = await storage.getTourProgress(userId, pageKey, role);
+      if (existing) {
+        return res.json({ success: true, alreadyCompleted: true, progress: existing });
+      }
+
+      const progress = await storage.markTourCompleted({
+        userId,
+        pageKey,
+        role,
+        demoCodeId,
+      });
+
+      res.json({ success: true, progress });
+    } catch (error: any) {
+      console.error('Error marking tour complete:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reset tour progress (for testing/development)
+  app.delete('/api/tour/progress', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { pageKey, role } = req.query;
+
+      await storage.resetTourProgress(
+        userId,
+        pageKey as string | undefined,
+        role as string | undefined
+      );
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error resetting tour progress:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public endpoint for TourProvider to get active tours with customizations
+  app.get('/api/tour/content', isAuthenticated, async (req: any, res) => {
+    try {
+      // Get all overrides from database
+      const overrides = await storage.listTourContentOverrides();
+      res.json(overrides);
+    } catch (error: any) {
+      console.error('Error getting tour content:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // TOUR CONTENT ADMIN ENDPOINTS (Super Admin)
+  // ============================================
+
+  // List all tours (merged defaults + overrides) - for admin page
+  app.get('/api/admin/tours', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const overrides = await storage.listTourContentOverrides();
+      res.json({ overrides });
+    } catch (error: any) {
+      console.error('Error listing tours:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update/create tour override
+  app.put('/api/admin/tours/:pageKey/:role', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { pageKey, role } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { pageTitle, isEnabled, steps } = req.body;
+
+      if (!pageTitle || !steps || !Array.isArray(steps)) {
+        return res.status(400).json({ error: 'pageTitle and steps are required' });
+      }
+
+      // Validate steps structure
+      for (const step of steps) {
+        if (!step.title || !step.description || !step.iconName) {
+          return res.status(400).json({ error: 'Each step must have title, description, and iconName' });
+        }
+      }
+
+      const override = await storage.upsertTourContentOverride({
+        pageKey,
+        role,
+        pageTitle,
+        isEnabled: isEnabled ?? true,
+        steps,
+        updatedByUserId: userId,
+      });
+
+      res.json(override);
+    } catch (error: any) {
+      console.error('Error updating tour:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reset tour to default (delete override)
+  app.delete('/api/admin/tours/:pageKey/:role', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      const { pageKey, role } = req.params;
+
+      await storage.deleteTourContentOverride(pageKey, role);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error resetting tour:', error);
       res.status(500).json({ error: error.message });
     }
   });

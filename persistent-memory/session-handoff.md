@@ -1,182 +1,182 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-08
-**Current Session:** Calendar Event Creation Fixes
+**Last Updated:** 2025-12-18
+**Current Session:** Memory Refresh & Documentation Update
 
 ---
 
-## SESSION SUMMARY (2025-12-08)
+## CURRENT STATE SUMMARY
 
-### Fixed Issues:
+### Work In Progress (Uncommitted Changes)
 
-1. **Property/Tenant Dropdown Empty** - The calendar event modal was using `getManagedProperties()` which only returns tenants for `account_admin` role. Created new endpoint `GET /api/events/tenants` that returns all tenants the user has access to based on their roles.
+Based on git status, the following features have been developed but not yet committed:
 
-2. **Event Creation Permission Error** - All event routes were checking `req.complianceAccess` instead of `req.eventsAccess`. Fixed all event-related routes to check the correct permission property.
+#### 1. Co-Applicant System (Major Feature)
+**Status:** Schema complete, backend routes added, frontend components created
 
-3. **rrule ESM Import Fix** - Updated `shared/recurrence.ts` to use default import style for rrule library to fix ESM/CommonJS interop issue.
+**New Database Tables:**
+- `household_members` - Links household members to primary homeowners within a tenant
+- `contractors` - Contractor profiles (cross-tenant, linked to user)
+- `application_collaborators` - Links contractors to specific applications
+- `invitations` - Universal invitation tracking (household members + contractors)
+- `contractor_referrals` - Track POA signups via contractor referral codes
 
-### Changes Made:
+**New Frontend Pages:**
+- `ContractorDashboard.tsx` - Contractor's main dashboard
+- `ContractorProfile.tsx` - Contractor profile management
+- `ContractorReferrals.tsx` - Contractor referral tracking
+- `HouseholdSettings.tsx` - Manage household members
+- `InvitationAccept.tsx` - Accept invitation flow
+- `ReferralLanding.tsx` - Landing page for referral links
 
-**Server (`server/routes.ts`):**
-- Added `GET /api/events/tenants` endpoint
-- Changed all `req.complianceAccess` to `req.eventsAccess` in event routes
+**New Components:**
+- `InviteContractorDialog.tsx` - Dialog to invite contractor to application
+- `InviteHouseholdMemberDialog.tsx` - Dialog to invite household member
+- `ProcessingOverlay.tsx` - Full-screen processing indicator
+- `QRCodeDisplay.tsx` - QR code display component
 
-**Client (`client/src/pages/Calendar.tsx`):**
-- Changed from `api.getManagedProperties()` to `getEventTenants()`
+**Migration:** `migrations/0002_co_applicant_system.sql` - Full migration ready
 
-**Client (`client/src/lib/api.ts`):**
-- Added `getEventTenants()` function
+#### 2. Tour/Onboarding System
+**Status:** Components created, admin customization ready
 
-**Shared (`shared/recurrence.ts`):**
-- Fixed rrule import for ESM compatibility
+**New Database Tables:**
+- `user_tour_progress` - Tracks which page tours a user has completed per role
+- `tour_content_overrides` - Admin customizations to tour content
 
----
+**New Files:**
+- `client/src/components/tour/` - Tour UI components
+- `client/src/lib/tour/` - Tour logic and content
+- `client/src/pages/admin/TourContent.tsx` - Admin tour management
 
-## IMMEDIATE NEXT STEPS FOR NEXT SESSION
+#### 3. Email Template System
+**Status:** Backend complete, admin UI created
 
-### 1. Test Recurring Events Feature
+**New Files:**
+- `server/emailTemplateRegistry.ts` - Centralized email template registry
+- `client/src/pages/admin/EmailTemplates.tsx` - Admin email template management
 
-The new recurring events feature allows scheduling events that repeat on patterns like "every 3rd Thursday".
+**Enhanced:**
+- `server/emailService.ts` - Extended email service
+- `server/emailTemplates.ts` - Additional email templates
 
-#### Testing Recurring Events
+#### 4. Inter-App Sync with HomeHub
+**Status:** Functional, dev instructions system added
 
-1. **Create a Recurring Event**
-   - Login as Emily (management_manager) or board member
-   - Go to Calendar page
-   - Click "New Event"
-   - Fill in event details (title, type, date/time)
-   - Go to "Repeat" tab
-   - Select frequency: Daily, Weekly, Monthly, or Yearly
-   - For "3rd Thursday" pattern: Select Monthly > "On the Third Thursday"
-   - Set end option: Never, After N occurrences, or On specific date
-   - Preview shows next 5 occurrences
-   - Save the event
+**New Database Tables:**
+- `sync_events` - Track sync events for debugging/audit
+- `dev_instructions` - Claude-to-Claude developer instructions across apps
 
-2. **View Recurring Events on Calendar**
-   - Recurring event instances show a repeat icon
-   - Each occurrence appears on its respective date
-   - Events expand dynamically (no pre-created DB rows)
+**New Files:**
+- `scripts/send-homehub-instruction.ts` - Script to send instructions to HomeHub
 
-3. **Edit/Delete Recurring Events**
-   - Click on a recurring event instance
-   - Dialog asks: "This occurrence only", "This and all future", or "All occurrences"
-   - "This occurrence only" creates an exception for that specific date
-   - "This and all future" splits the series
-   - "All occurrences" modifies/deletes the entire series
+**Enhanced:**
+- `server/sync/client.ts` - Sync client improvements
 
-#### Recurrence Patterns Supported
-- **Daily**: Every N days
-- **Weekly**: Every N weeks on specific days (Mon, Wed, Fri, etc.)
-- **Monthly by date**: Every N months on day X (e.g., 15th of every month)
-- **Monthly by weekday**: Every N months on Nth weekday (e.g., 3rd Thursday)
-- **Yearly**: Every N years on same date
-
-#### End Options
-- **Never**: Repeats indefinitely
-- **After N occurrences**: Stops after N repeats
-- **On date**: Stops on specific end date
-
----
-
-## Current Status
-
-### Latest Session Summary (2025-12-07)
-
-**Session Goal:** Add Recurring Events Feature to Calendar
-
-**Status:** IMPLEMENTATION COMPLETE - READY FOR TESTING
-
-**Completed This Session:**
-
-1. **Database Schema (`shared/schema.ts`):**
-   - Added `exceptionDates` field (comma-separated deleted dates)
-   - Added `originalOccurrenceDate` field (for exception events)
-   - Existing fields: `recurrenceRule`, `recurrenceEndDate`, `parentEventId`
-
-2. **Shared Utilities (`shared/recurrence.ts`):**
-   - `configToRRule()` - Convert UI config to iCal RRULE format
-   - `rruleToConfig()` - Parse RRULE back to UI config
-   - `describeRecurrence()` - Human-readable description
-   - `getNextOccurrences()` - Preview next N dates
-   - `getOccurrencesInRange()` - Expand within date range
-
-3. **Server Recurrence Expander (`server/recurrenceExpander.ts`):**
-   - `expandRecurringEvents()` - Expand recurring events within range
-   - Applies exception dates (deleted occurrences)
-   - Applies exception events (modified occurrences)
-   - Returns virtual instances with metadata
-
-4. **Storage Layer Updates (`server/storage.ts`):**
-   - Modified `getCalendarEvents()` to expand recurring events
-   - Added `addEventExceptionDate()` - Mark occurrence as deleted
-   - Added `createEventException()` - Create modified occurrence
-   - Added `splitRecurringSeries()` - Split series for "this and future"
-   - Added `endRecurringSeries()` - End series at date
-
-5. **API Endpoints (`server/routes.ts`):**
-   - `POST /api/events/:id/occurrence` - Edit single occurrence
-   - `DELETE /api/events/:id/occurrence` - Delete occurrence(s)
-   - editMode/deleteMode: 'single', 'thisAndFuture', 'all'
-
-6. **RecurrenceSelector Component:**
-   - User-friendly recurrence pattern selector
-   - Frequency, interval, weekday selection
-   - Monthly "On day X" vs "On Nth weekday" toggle
-   - End options with preview of next occurrences
-
-7. **RecurrenceEditDialog Component:**
-   - Dialog for choosing edit/delete scope
-   - Options: "This occurrence", "This and future", "All occurrences"
-
-8. **EventModal Updates:**
-   - New "Repeat" tab with RecurrenceSelector
-   - Loads existing recurrence config when editing
-   - Generates RRULE on save
-
-9. **Calendar Page Updates:**
-   - Handles recurring event instances
-   - Shows RecurrenceEditDialog when editing/deleting
-   - Repeat icon on recurring event instances
+#### 5. Other Enhancements
+- `ApplicationWizard.tsx` - Enhanced with co-applicant support
+- `ApplicationDetail.tsx` - Enhanced with collaborator display
+- `DashboardLayout.tsx` - New navigation items
+- `App.tsx` - New routes for contractor/household pages
+- `rbac.ts` - Added contractor role support
+- `api.ts` - ~370 new lines for new endpoints
+- `routes.ts` - ~1180 new lines for new API endpoints
+- `storage.ts` - ~618 new lines for new storage methods
 
 ---
 
-## Files Created/Modified This Session
+## MIGRATION STATUS
 
-### New Files:
-- `/shared/recurrence.ts` - Recurrence utility functions
-- `/server/recurrenceExpander.ts` - Server-side expansion logic
-- `/client/src/components/calendar/RecurrenceSelector.tsx` - UI component
-- `/client/src/components/calendar/RecurrenceEditDialog.tsx` - Edit/delete dialog
+**Pending Migration:** `migrations/0002_co_applicant_system.sql`
 
-### Modified Files:
-- `/shared/schema.ts` - Added exceptionDates, originalOccurrenceDate fields
-- `/server/storage.ts` - Recurrence expansion and exception handling
-- `/server/routes.ts` - Occurrence edit/delete endpoints
-- `/client/src/components/calendar/EventModal.tsx` - Recurrence tab
-- `/client/src/pages/Calendar.tsx` - Recurring event handling
-- `/client/src/lib/api.ts` - New types and API functions
+This migration adds:
+- 12 new tables (contractors, household_members, invitations, etc.)
+- New columns on existing tables (ai_analyses, applications, events, tenants, user_tenant_roles, workflow_templates)
+- All required indexes and foreign keys
 
-### Dependencies Added:
-- `rrule` - RFC 5545 recurrence rule library
+**To apply:**
+```bash
+npm run db:push
+```
 
 ---
 
-## Demo Personas
+## FILES MODIFIED (Not Committed)
 
-| Persona | Name | Role | Access |
-|---------|------|------|--------|
-| **Emily** | Emily Foster | management_manager, account_admin | Full access to all |
-| **Sarah** | Sarah Chen | poa_board_member, homeowner | Board + homeowner at Markland |
-| **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
-| **Alex** | Alex Rivera | poa_board_contributor | Contributor at Markland |
+### Major Changes:
+| File | Lines Changed | Description |
+|------|---------------|-------------|
+| `server/routes.ts` | +1181 | Co-applicant, contractor, invitation endpoints |
+| `server/storage.ts` | +618 | Storage methods for new tables |
+| `shared/schema.ts` | +342 | New tables and types |
+| `client/src/lib/api.ts` | +371 | API client for new endpoints |
+| `client/src/components/ApplicationWizard.tsx` | +272 | Co-applicant integration |
+| `server/emailTemplates.ts` | +279 | New email templates |
+| `server/emailService.ts` | +193 | Enhanced email service |
+
+### New Files (Untracked):
+```
+client/src/components/InviteContractorDialog.tsx
+client/src/components/InviteHouseholdMemberDialog.tsx
+client/src/components/ProcessingOverlay.tsx
+client/src/components/QRCodeDisplay.tsx
+client/src/components/admin/
+client/src/components/tour/
+client/src/lib/tour/
+client/src/pages/ContractorDashboard.tsx
+client/src/pages/ContractorProfile.tsx
+client/src/pages/ContractorReferrals.tsx
+client/src/pages/HouseholdSettings.tsx
+client/src/pages/InvitationAccept.tsx
+client/src/pages/ReferralLanding.tsx
+client/src/pages/admin/EmailTemplates.tsx
+client/src/pages/admin/TourContent.tsx
+migrations/0002_co_applicant_system.sql
+scripts/send-homehub-instruction.ts
+server/emailTemplateRegistry.ts
+```
 
 ---
 
-## Project Overview
+## NEXT STEPS
+
+### Immediate Priorities
+
+1. **Apply Database Migration**
+   ```bash
+   npm run db:push
+   ```
+
+2. **Test Co-Applicant Flow**
+   - Login as homeowner
+   - Go to Household Settings
+   - Invite a household member
+   - Test invitation acceptance flow
+
+3. **Test Contractor Flow**
+   - Create contractor profile
+   - Invite contractor to application
+   - Test contractor dashboard
+
+4. **Test Tour System**
+   - Login as different roles
+   - Verify tours appear on first visit
+   - Test admin tour customization
+
+### Future Enhancements
+
+- Contractor license verification integration
+- Contractor search/directory for homeowners
+- Tour analytics (completion rates, drop-off points)
+- Email delivery tracking
+
+---
+
+## PROJECT OVERVIEW
 
 **POA Association Portal** - A multi-tenant SaaS platform for HOA/POA community management with:
 - Multi-tenant architecture with subdomain isolation
-- Role-based access control (8 user roles including management_rep)
+- Role-based access control (9 roles including contractor)
 - Dynamic JSON schema-driven forms with AI generation
 - Architectural review board (ARB) application workflows
 - AI-powered application analysis
@@ -184,7 +184,10 @@ The new recurring events feature allows scheduling events that repeat on pattern
 - Complete billing system with Stripe integration
 - Property-rep assignment system
 - Community custom landing pages
-- **Recurring events support** (NEW)
+- Recurring events support
+- **Co-applicant system** (NEW - household members + contractors)
+- **Onboarding tours** (NEW - role-based guided tours)
+- **Inter-app sync** (NEW - HomeHub integration)
 
 ### Tech Stack
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 + shadcn/ui
@@ -199,53 +202,94 @@ The new recurring events feature allows scheduling events that repeat on pattern
 
 ---
 
-## Feature Implementation Status
+## USER ROLES
 
-### COMPLETE - Recurring Events
-
-**Key Files:**
-- `/shared/recurrence.ts` - RRULE utilities
-- `/server/recurrenceExpander.ts` - Event expansion
-- `/server/storage.ts` - getCalendarEvents with expansion
-- `/server/routes.ts` - Occurrence edit/delete endpoints
-- `/client/src/components/calendar/RecurrenceSelector.tsx` - UI
-- `/client/src/components/calendar/EventModal.tsx` - Recurrence tab
-
-**RRULE Examples:**
-| Pattern | RRULE |
-|---------|-------|
-| Daily every 2 days | `FREQ=DAILY;INTERVAL=2` |
-| Weekly Mon/Wed/Fri | `FREQ=WEEKLY;BYDAY=MO,WE,FR` |
-| Monthly on 15th | `FREQ=MONTHLY;BYMONTHDAY=15` |
-| Monthly 3rd Thursday | `FREQ=MONTHLY;BYDAY=TH;BYSETPOS=3` |
-| Yearly | `FREQ=YEARLY` |
-
-### COMPLETE - Community Custom Landing Pages
-
-**Key Files:**
-- `/shared/schema.ts` - heroImageUrl field on tenants
-- `/server/routes.ts` - GET /api/public/:subdomain/info endpoint
-- `/client/src/pages/CommunityLanding.tsx` - Landing page component
-- `/client/src/App.tsx` - Subdomain routing
-- `/client/src/components/CommunitySettingsCard.tsx` - Hero image settings
-
-### COMPLETE - Management Rep Property Assignment
-
-### COMPLETE - Billing & Usage System
+| Role | Description |
+|------|-------------|
+| `super_admin` | Platform administrator |
+| `account_admin` | Management company admin |
+| `management_manager` | Management company manager |
+| `management_rep` | Property representative |
+| `poa_board_member` | Board member with full access |
+| `poa_board_contributor` | Board member with limited access |
+| `homeowner` | Property owner |
+| `household_member` | Member of homeowner's household |
+| `contractor` | External contractor (NEW) |
 
 ---
 
-## API Endpoints Reference
+## DEMO PERSONAS
+
+| Persona | Name | Role | Access |
+|---------|------|------|--------|
+| **Emily** | Emily Foster | management_manager, account_admin | Full access to all |
+| **Sarah** | Sarah Chen | poa_board_member, homeowner | Board + homeowner at Markland |
+| **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
+| **Alex** | Alex Rivera | poa_board_contributor | Contributor at Markland |
+
+---
+
+## IMPORTANT CONVENTIONS
+
+### Server Restart After Code Changes
+After making server-side code changes, restart the server:
+```bash
+pkill -f "tsx server/index.ts"
+```
+Then click **Run** in Replit.
+
+### Application Number Format
+**Format:** `{tenant-last-4-chars}-{year}-{random-4-alphanumeric}`
+**Example:** `A1B2-2025-XY9Z`
+
+### Feature Flags
+Managed in `shared/featureDefinitions.ts` - see `/home/runner/workspace/global-memory.md`
+
+---
+
+## KNOWN ISSUES
+
+### Pre-existing TypeScript Errors (Low Priority)
+- Some TypeScript errors exist in provision.ts and other files
+- These are pre-existing and don't affect runtime
+- New components compile cleanly
+
+---
+
+## API ENDPOINTS REFERENCE
+
+### Co-Applicant System
+```
+# Household Members
+GET    /api/household/members                    # Get household members
+POST   /api/household/members                    # Invite household member
+DELETE /api/household/members/:id                # Remove household member
+
+# Contractors
+GET    /api/contractors/profile                  # Get contractor profile
+POST   /api/contractors/profile                  # Create/update profile
+GET    /api/contractors/referrals                # Get referral stats
+
+# Application Collaborators
+GET    /api/applications/:id/collaborators       # Get collaborators
+POST   /api/applications/:id/collaborators       # Invite contractor
+DELETE /api/applications/:id/collaborators/:id   # Remove collaborator
+
+# Invitations
+GET    /api/invitations/:token                   # Get invitation details
+POST   /api/invitations/:token/accept            # Accept invitation
+POST   /api/invitations/:token/decline           # Decline invitation
+```
 
 ### Recurring Events
 ```
-POST   /api/events/:id/occurrence    # Edit occurrence (body: { originalDate, editMode, ...updates })
-DELETE /api/events/:id/occurrence    # Delete occurrence (body: { originalDate, deleteMode })
+POST   /api/events/:id/occurrence    # Edit occurrence
+DELETE /api/events/:id/occurrence    # Delete occurrence
 ```
 
 ### Public Community Info
 ```
-GET    /api/public/:subdomain/info  # Get community info without auth
+GET    /api/public/:subdomain/info   # Get community info without auth
 ```
 
 ### Property Rep Assignment
@@ -254,45 +298,3 @@ GET    /api/properties/:propertyId/reps           # Get rep assignments
 POST   /api/properties/:propertyId/reps           # Assign rep
 DELETE /api/property-rep-assignments/:id          # Remove assignment
 ```
-
----
-
-## Important Conventions
-
-### Server Restart After Code Changes
-**IMPORTANT:** After making server-side code changes, always restart the Replit server to ensure changes take effect. The tsx hot-reload doesn't always work reliably for service files.
-
-```bash
-pkill -f "tsx server/index.ts"
-```
-
-Then click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
-
-### Application Number Format
-**Format:** `{tenant-last-4-chars}-{year}-{random-4-alphanumeric}`
-**Example:** `A1B2-2025-XY9Z`
-
----
-
-## Known Issues
-
-### Pre-existing TypeScript Errors (Low Priority)
-- Some TypeScript errors exist in provision.ts and other files
-- These are pre-existing and don't affect runtime
-- The new components compile cleanly
-
----
-
-## Future Enhancements
-
-### Recurring Events
-- Email notifications for recurring event reminders
-- Holiday exclusion support
-- Business day calculations
-
-### Community Landing Pages
-- Add events calendar section (show multiple upcoming events)
-- Add community announcements/news section
-
-### Property-Level Permission Enforcement
-- Restrict ACTIONS on unassigned properties (not just visibility)

@@ -204,6 +204,7 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
   '/admin/ai-activity': ['super_admin'],
   '/admin/demo-codes': ['super_admin'],
   '/admin/demo-codes/:id': ['super_admin'],
+  '/admin/tours': ['super_admin'],
 };
 
 /**

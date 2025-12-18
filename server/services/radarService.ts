@@ -150,8 +150,17 @@ export class RadarService {
   /**
    * Validate a complete address
    * Returns verification status and formatted address
+   *
+   * @param address - The address string to validate
+   * @param knownCoordinates - Optional coordinates from autocomplete selection.
+   *   When provided, we trust the autocomplete result and use reverse geocoding
+   *   to get address components, avoiding the issue where forward geocoding
+   *   returns completely different results.
    */
-  async validateAddress(address: string): Promise<AddressValidationResult> {
+  async validateAddress(
+    address: string,
+    knownCoordinates?: { latitude: number; longitude: number }
+  ): Promise<AddressValidationResult> {
     if (!this.isConfigured()) {
       console.warn('[Radar] API key not configured, skipping validation');
       return {
@@ -166,6 +175,33 @@ export class RadarService {
     }
 
     try {
+      // If we have coordinates from autocomplete selection, trust them!
+      // The autocomplete already validated this address - don't re-geocode
+      // which can return completely different results.
+      if (knownCoordinates) {
+        console.log('[Radar] Using known coordinates from autocomplete:', knownCoordinates);
+
+        // Use reverse geocode to get detailed address components
+        const reverseResult = await this.reverseGeocode(
+          knownCoordinates.latitude,
+          knownCoordinates.longitude
+        );
+
+        // Return with the original address string (user's selection) but
+        // use reverse geocode for components. Mark as verified since
+        // it came from autocomplete.
+        return {
+          isValid: true,
+          formattedAddress: address, // Keep the address user selected
+          latitude: knownCoordinates.latitude,
+          longitude: knownCoordinates.longitude,
+          confidence: 'exact',
+          verificationStatus: 'verified',
+          components: reverseResult.components,
+        };
+      }
+
+      // No coordinates provided - do forward geocoding (manual entry case)
       const params = new URLSearchParams({
         query: address,
         layers: 'address',

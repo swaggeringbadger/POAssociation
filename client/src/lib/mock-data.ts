@@ -1,5 +1,5 @@
 
-import { Home, FileText, Settings, Users, Users2, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar, Receipt } from "lucide-react";
+import { Home, FileText, Settings, Users, Users2, LayoutDashboard, Building2, ShieldCheck, Building, TreePine, Sparkles, GitBranch, Calendar, Receipt, Mail, BookOpen } from "lucide-react";
 
 // Types for our mockup
 export type Role =
@@ -141,6 +141,18 @@ export const SUPER_ADMIN_NAV_ITEMS = [
     label: 'Demo Codes',
     icon: ShieldCheck,
     href: '/admin/demo-codes',
+    roles: ['super_admin']
+  },
+  {
+    label: 'Email Templates',
+    icon: Mail,
+    href: '/admin/email-templates',
+    roles: ['super_admin']
+  },
+  {
+    label: 'Tour Content',
+    icon: BookOpen,
+    href: '/admin/tours',
     roles: ['super_admin']
   },
 ];

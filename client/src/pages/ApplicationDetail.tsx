@@ -2,12 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
-import { listApplicationSignatures, listApplicationAnalyses, type AiAnalysis } from "@/lib/api";
+import { listApplicationSignatures, listApplicationAnalyses, type AiAnalysis, api } from "@/lib/api";
+import { InviteContractorDialog } from "@/components/InviteContractorDialog";
 import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool, Sparkles, ExternalLink, List, Grid2X2, Grid3X3, CheckCircle, XCircle, Clock, ChevronDown } from "lucide-react";
+import { Loader2, ArrowLeft, Download, FileText, Eye, X, ZoomIn, ZoomOut, BookOpen, Info, CircleDot, Edit, Upload, Trash2, PenTool, Sparkles, ExternalLink, List, Grid2X2, Grid3X3, CheckCircle, XCircle, Clock, ChevronDown, Wrench, UserPlus, Building2 } from "lucide-react";
 import { AIAnalysisButton, AIAnalysisStatusCard, AIAnalysisResults } from "@/components/ai-analysis";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
@@ -92,6 +93,7 @@ export default function ApplicationDetail() {
   const [quickActionNotes, setQuickActionNotes] = useState("");
   const [quickActionSelected, setQuickActionSelected] = useState<string | null>(null);
   const [showQuickActionDialog, setShowQuickActionDialog] = useState(false);
+  const [showInviteContractorDialog, setShowInviteContractorDialog] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -158,6 +160,32 @@ export default function ApplicationDetail() {
     queryKey: [`/api/applications/${applicationId}/signatures`],
     queryFn: () => listApplicationSignatures(applicationId),
     enabled: !!applicationId,
+  });
+
+  // Fetch collaborators for this application
+  const { data: collaborators = [] } = useQuery({
+    queryKey: ['application-collaborators', applicationId],
+    queryFn: () => api.getApplicationCollaborators(applicationId),
+    enabled: !!applicationId,
+  });
+
+  // Remove collaborator mutation
+  const removeCollaboratorMutation = useMutation({
+    mutationFn: (collaboratorId: string) => api.removeContractorFromApplication(applicationId, collaboratorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['application-collaborators', applicationId] });
+      toast({
+        title: 'Collaborator removed',
+        description: 'The contractor has been removed from this application.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
   });
 
   // Fetch AI analyses for this application
@@ -1546,6 +1574,104 @@ export default function ApplicationDetail() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Collaborators Section */}
+      {(isSubmitter || collaborators.length > 0) && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                Contractor Collaborators
+              </CardTitle>
+              <CardDescription>
+                Contractors invited to help with this application
+              </CardDescription>
+            </div>
+            {isSubmitter && (
+              <Button onClick={() => setShowInviteContractorDialog(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Invite Contractor
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            {collaborators.length > 0 ? (
+              <div className="space-y-3">
+                {collaborators.map((collab: any) => (
+                  <div key={collab.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <div className="font-medium">
+                          {collab.contractor?.companyName ||
+                            `${collab.contractor?.user?.firstName || ''} ${collab.contractor?.user?.lastName || ''}`.trim() ||
+                            collab.contractor?.user?.email ||
+                            'Contractor'}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {collab.contractor?.businessType && (
+                            <span className="capitalize">{collab.contractor.businessType.replace(/_/g, ' ')}</span>
+                          )}
+                          {collab.contractor?.user?.email && (
+                            <span> • {collab.contractor.user.email}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={collab.status === 'active' ? 'default' : 'secondary'}>
+                        {collab.status === 'active' ? (
+                          <><CheckCircle className="h-3 w-3 mr-1" />Active</>
+                        ) : collab.status === 'pending' ? (
+                          <><Clock className="h-3 w-3 mr-1" />Pending</>
+                        ) : (
+                          collab.status
+                        )}
+                      </Badge>
+                      {isSubmitter && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm('Remove this contractor from the application?')) {
+                              removeCollaboratorMutation.mutate(collab.id);
+                            }
+                          }}
+                          disabled={removeCollaboratorMutation.isPending}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Wrench className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No contractors have been invited to this application yet.</p>
+                {isSubmitter && (
+                  <p className="text-sm mt-1">Click "Invite Contractor" to get help from a professional.</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Invite Contractor Dialog */}
+      {application && (
+        <InviteContractorDialog
+          open={showInviteContractorDialog}
+          onOpenChange={setShowInviteContractorDialog}
+          applicationId={applicationId}
+          tenantId={application.tenantId}
+        />
       )}
 
       {/* Workflow Section */}

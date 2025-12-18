@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ChevronLeft, ChevronRight, Check, FileText, CircleDot } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, FileText, CircleDot, Wrench, X, Plus, Mail, User } from 'lucide-react';
 import type { FormData, DocumentRequirement } from '@shared/additionalInfoTypes';
 import type { AdditionalInfoConfig } from '@shared/additionalInfoTypes';
 import { useAppStore } from '@/lib/store';
@@ -22,6 +22,7 @@ import { DynamicAdditionalInfoForm } from './DynamicAdditionalInfoForm';
 import { DocumentUpload } from './DocumentUpload';
 import { SignatureCanvas } from './SignatureCanvas';
 import { AddressInput } from './AddressInput';
+import { ProcessingOverlay, useProcessingSteps } from './ProcessingOverlay';
 import { apiRequest, createSignature } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +31,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
 
 interface ApplicationWizardProps {
   projectType: string;
@@ -47,6 +54,11 @@ interface AddressValidation {
   latitude: number | null;
   longitude: number | null;
   verificationStatus: 'verified' | 'unverified' | 'ambiguous';
+}
+
+interface PendingContractorInvite {
+  email: string;
+  name?: string;
 }
 
 export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
@@ -66,6 +78,21 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
   const [signatureId, setSignatureId] = useState<string | null>(null);
   const [isCreatingSignature, setIsCreatingSignature] = useState(false);
+
+  // Contractor invite state (pending invites to send after application creation)
+  const [pendingContractorInvites, setPendingContractorInvites] = useState<PendingContractorInvite[]>([]);
+  const [contractorInviteOpen, setContractorInviteOpen] = useState(false);
+  const [newContractorEmail, setNewContractorEmail] = useState('');
+  const [newContractorName, setNewContractorName] = useState('');
+
+  // Processing steps for pizza tracker overlay
+  const processingSteps = useProcessingSteps([
+    { id: 'fetch-config', label: 'Loading form configuration' },
+    { id: 'fetch-templates', label: 'Retrieving project templates' },
+    { id: 'validate-template', label: 'Validating template' },
+    { id: 'create-application', label: 'Creating your application' },
+    { id: 'send-invites', label: 'Sending contractor invitations' },
+  ]);
 
   // Form for step 1 (project details)
   const form = useForm<ProjectDetails>({
@@ -160,24 +187,36 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   const handleStep2Complete = async () => {
     // Create application when moving from step 2 to 3
     // This gives us an applicationId for document uploads
+
+    // Start the processing overlay
+    processingSteps.startProcessing();
+
     try {
       console.log('[ApplicationWizard] Step 2 complete - starting application creation');
       console.log('[ApplicationWizard] projectType:', projectType);
       console.log('[ApplicationWizard] tenantId:', currentTenant?.id);
 
+      // Step 1: Fetch form configuration
+      processingSteps.startStep('fetch-config');
       const formTemplate = await apiRequest(
         'GET',
         `/api/additional-info/${currentTenant?.id}/${projectType}`
       );
       console.log('[ApplicationWizard] formTemplate retrieved:', formTemplate);
+      processingSteps.completeStep('fetch-config', 'Configuration loaded');
 
+      // Step 2: Fetch templates
+      processingSteps.startStep('fetch-templates');
       const templates = await apiRequest(
         'GET',
         `/api/tenants/${currentTenant?.id}/forms`
       );
       console.log('[ApplicationWizard] templates retrieved, count:', templates.length);
       console.log('[ApplicationWizard] templates:', templates.map((t: any) => ({ id: t.id, projectType: t.projectType, version: t.version, isActive: t.isActive })));
+      processingSteps.completeStep('fetch-templates', `Found ${templates.length} templates`);
 
+      // Step 3: Validate template
+      processingSteps.startStep('validate-template');
       const activeTemplate = templates.find(
         (t: any) => t.projectType === projectType && t.isActive
       );
@@ -185,8 +224,10 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
 
       if (!activeTemplate) {
         console.error('[ApplicationWizard] No active template found for projectType:', projectType);
+        processingSteps.failStep('validate-template', 'No active template found');
         throw new Error('No active form template found');
       }
+      processingSteps.completeStep('validate-template', `Using v${activeTemplate.version}`);
 
       // Calculate completeness score
       const requiredFields = Object.keys(formTemplate.scoring_weights || {});
@@ -203,7 +244,8 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
       const applicationNumber = `${tenantLast4}-${year}-${randomCode}`;
       console.log('[ApplicationWizard] applicationNumber:', applicationNumber);
 
-      // Create the application
+      // Step 4: Create the application
+      processingSteps.startStep('create-application', `#${applicationNumber}`);
       console.log('[ApplicationWizard] Creating application with data:', {
         tenantId: currentTenant?.id,
         projectType,
@@ -237,8 +279,42 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
         status: 'draft', // Start as draft until final submission
       });
       console.log('[ApplicationWizard] Application created:', application);
+      processingSteps.completeStep('create-application', `Application #${applicationNumber} created`);
 
       setCreatedApplicationId(application.id);
+
+      // Step 5: Send pending contractor invites
+      if (pendingContractorInvites.length > 0) {
+        processingSteps.startStep('send-invites', `${pendingContractorInvites.length} contractor(s)`);
+        console.log('[ApplicationWizard] Sending contractor invites:', pendingContractorInvites);
+        let sentCount = 0;
+        for (const invite of pendingContractorInvites) {
+          try {
+            await api.inviteContractorToApplication(application.id, {
+              email: invite.email,
+              name: invite.name,
+            });
+            console.log('[ApplicationWizard] Invite sent to:', invite.email);
+            sentCount++;
+          } catch (inviteError) {
+            console.error('[ApplicationWizard] Failed to send invite to:', invite.email, inviteError);
+            // Don't block the flow if an invite fails
+          }
+        }
+        processingSteps.completeStep('send-invites', `${sentCount} invite(s) sent`);
+
+        toast({
+          title: `Contractor${pendingContractorInvites.length > 1 ? 's' : ''} invited`,
+          description: `Invitation${pendingContractorInvites.length > 1 ? 's' : ''} sent to ${pendingContractorInvites.length} contractor${pendingContractorInvites.length > 1 ? 's' : ''}.`,
+        });
+      } else {
+        // Skip the invites step if no contractors
+        processingSteps.completeStep('send-invites', 'No contractors to invite');
+      }
+
+      // Finish processing before navigating
+      processingSteps.finishProcessing();
+
       setCurrentStep(3);
       // Update page title with application number
       setCurrentPageTitle(application.applicationNumber);
@@ -248,6 +324,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
       });
     } catch (error: any) {
       console.error('[ApplicationWizard] Error in handleStep2Complete:', error);
+      processingSteps.finishProcessing();
       toast({
         title: "Error",
         description: error.message,
@@ -336,6 +413,56 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
     }
   };
 
+  // Contractor invite helpers
+  const handleAddContractorInvite = () => {
+    if (!newContractorEmail.trim()) {
+      toast({
+        title: "Email required",
+        description: "Please enter the contractor's email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newContractorEmail.trim())) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check for duplicates
+    if (pendingContractorInvites.some(invite => invite.email.toLowerCase() === newContractorEmail.trim().toLowerCase())) {
+      toast({
+        title: "Already added",
+        description: "This contractor has already been added.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPendingContractorInvites([
+      ...pendingContractorInvites,
+      { email: newContractorEmail.trim(), name: newContractorName.trim() || undefined },
+    ]);
+    setNewContractorEmail('');
+    setNewContractorName('');
+    setContractorInviteOpen(false);
+
+    toast({
+      title: "Contractor added",
+      description: "They will receive an invitation when your application is submitted.",
+    });
+  };
+
+  const handleRemoveContractorInvite = (email: string) => {
+    setPendingContractorInvites(pendingContractorInvites.filter(invite => invite.email !== email));
+  };
+
   const canProceed = () => {
     if (currentStep === 1) return isValid;
     if (currentStep === 2) return Object.keys(additionalInfoData).length > 0;
@@ -410,6 +537,114 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
               <p className="text-sm text-muted-foreground mt-2">
                 Include scope, materials, timeline, and potential impact on neighbors
               </p>
+            </div>
+
+            {/* Contractor Invite Section */}
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <div className="flex items-center gap-2 mb-3">
+                <Wrench className="h-5 w-5 text-muted-foreground" />
+                <span className="font-medium">Working with a contractor?</span>
+                <span className="text-sm text-muted-foreground">(optional)</span>
+              </div>
+
+              {/* Show added contractors */}
+              {pendingContractorInvites.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {pendingContractorInvites.map((invite) => (
+                    <div
+                      key={invite.email}
+                      className="flex items-center justify-between bg-background border rounded-md px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            {invite.name || invite.email}
+                          </p>
+                          {invite.name && (
+                            <p className="text-xs text-muted-foreground">{invite.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveContractorInvite(invite.email)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Collapsible open={contractorInviteOpen} onOpenChange={setContractorInviteOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="gap-1">
+                    <Plus className="h-4 w-4" />
+                    {pendingContractorInvites.length > 0 ? 'Add another contractor' : 'Add a contractor'}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="contractor-email" className="text-sm">
+                      Contractor's Email <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="contractor-email"
+                        type="email"
+                        placeholder="contractor@example.com"
+                        value={newContractorEmail}
+                        onChange={(e) => setNewContractorEmail(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contractor-name" className="text-sm">
+                      Name or Company <span className="text-muted-foreground text-xs">(optional)</span>
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="contractor-name"
+                        placeholder="John's Fencing Co."
+                        value={newContractorName}
+                        onChange={(e) => setNewContractorName(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddContractorInvite}
+                    >
+                      Add Contractor
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setContractorInviteOpen(false);
+                        setNewContractorEmail('');
+                        setNewContractorName('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Your contractor will receive an email invitation to collaborate on this application.
+                    They'll be able to view and help complete the application details.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </div>
         );
@@ -496,6 +731,32 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
               </CardContent>
             </Card>
 
+            {/* Contractors Section */}
+            {pendingContractorInvites.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wrench className="h-5 w-5" />
+                    Invited Contractors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {pendingContractorInvites.map((invite) => (
+                      <div key={invite.email} className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-green-600" />
+                        <span className="font-medium">{invite.name || invite.email}</span>
+                        {invite.name && (
+                          <span className="text-muted-foreground">({invite.email})</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">- Invitation sent</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Additional Information</CardTitle>
@@ -543,6 +804,13 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-8">
+      {/* Processing Overlay - Pizza Tracker */}
+      <ProcessingOverlay
+        isOpen={processingSteps.isProcessing}
+        title="Creating Your Application"
+        steps={processingSteps.steps}
+      />
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">

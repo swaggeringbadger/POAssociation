@@ -301,6 +301,71 @@ export interface IStorage {
   // Homeowner Verification
   verifyHomeowner(userId: string, tenantId: string, applicationId: string): Promise<schema.UserTenantRole | undefined>;
   isHomeownerVerified(userId: string, tenantId: string): Promise<boolean>;
+
+  // ============================================
+  // CO-APPLICANT SYSTEM
+  // ============================================
+
+  // Invitations
+  createInvitation(invitation: schema.InsertInvitation): Promise<schema.Invitation>;
+  getInvitation(id: string): Promise<schema.Invitation | undefined>;
+  getInvitationByToken(token: string): Promise<schema.Invitation | undefined>;
+  getPendingInvitationsForEmail(email: string): Promise<schema.Invitation[]>;
+  updateInvitationStatus(id: string, status: string, acceptedAt?: Date, declinedAt?: Date): Promise<schema.Invitation>;
+  revokeInvitation(id: string): Promise<schema.Invitation>;
+  resendInvitation(id: string): Promise<schema.Invitation>;
+  expireOldInvitations(): Promise<number>;
+
+  // Household Members
+  createHouseholdMember(member: schema.InsertHouseholdMember): Promise<schema.HouseholdMember>;
+  getHouseholdMember(id: string): Promise<schema.HouseholdMember | undefined>;
+  getHouseholdMembersForPrimaryUser(primaryUserId: string, tenantId: string): Promise<(schema.HouseholdMember & { memberUser: schema.User | null })[]>;
+  getHouseholdMembershipsForUser(userId: string): Promise<(schema.HouseholdMember & { primaryUser: schema.User; tenant: schema.Tenant })[]>;
+  updateHouseholdMemberStatus(id: string, status: string, removedByUserId?: string): Promise<schema.HouseholdMember>;
+  acceptHouseholdInvitation(householdMemberId: string, memberUserId: string): Promise<schema.HouseholdMember>;
+  isHouseholdMemberOf(userId: string, primaryUserId: string, tenantId: string): Promise<boolean>;
+  getActiveHouseholdMemberIds(primaryUserId: string, tenantId: string): Promise<string[]>;
+
+  // Contractors
+  createContractor(contractor: schema.InsertContractor): Promise<schema.Contractor>;
+  getContractor(id: string): Promise<schema.Contractor | undefined>;
+  getContractorByUserId(userId: string): Promise<schema.Contractor | undefined>;
+  getContractorByReferralCode(code: string): Promise<schema.Contractor | undefined>;
+  updateContractor(id: string, updates: Partial<schema.InsertContractor>): Promise<schema.Contractor>;
+  searchContractors(query: string, limit?: number): Promise<(schema.Contractor & { user: schema.User })[]>;
+  generateReferralCode(contractorId: string, customCode?: string): Promise<string>;
+  incrementContractorApplicationCount(contractorId: string): Promise<void>;
+  incrementContractorReferralCount(contractorId: string, successful?: boolean): Promise<void>;
+
+  // Application Collaborators
+  createApplicationCollaborator(collaborator: schema.InsertApplicationCollaborator): Promise<schema.ApplicationCollaborator>;
+  getApplicationCollaborator(id: string): Promise<schema.ApplicationCollaborator | undefined>;
+  getApplicationCollaborators(applicationId: string): Promise<(schema.ApplicationCollaborator & { contractor: schema.Contractor & { user: schema.User } })[]>;
+  getCollaboratorApplications(contractorId: string): Promise<(schema.ApplicationCollaborator & { application: schema.Application & { tenant: schema.Tenant } })[]>;
+  updateApplicationCollaboratorStatus(id: string, status: string, acceptedAt?: Date, removedAt?: Date): Promise<schema.ApplicationCollaborator>;
+  canContractorAccessApplication(userId: string, applicationId: string): Promise<boolean>;
+  getContractorDashboard(contractorId: string): Promise<{
+    applications: (schema.ApplicationCollaborator & { application: schema.Application & { tenant: schema.Tenant } })[];
+    stats: { totalApplications: number; activeApplications: number; completedApplications: number };
+  }>;
+
+  // Contractor Referrals
+  createContractorReferral(referral: schema.InsertContractorReferral): Promise<schema.ContractorReferral>;
+  getContractorReferrals(contractorId: string): Promise<(schema.ContractorReferral & { tenant: schema.Tenant })[]>;
+  updateReferralStatus(id: string, status: string, qualifiedAt?: Date, paidAt?: Date, payoutAmount?: string, payoutNotes?: string): Promise<schema.ContractorReferral>;
+  getReferralStats(contractorId: string): Promise<{ total: number; qualified: number; paid: number; pending: number }>;
+
+  // Tour Progress
+  getTourProgress(userId: string, pageKey: string, role: string): Promise<schema.UserTourProgress | undefined>;
+  getUserTourProgressList(userId: string): Promise<schema.UserTourProgress[]>;
+  markTourCompleted(data: schema.InsertUserTourProgress): Promise<schema.UserTourProgress>;
+  resetTourProgress(userId: string, pageKey?: string, role?: string): Promise<void>;
+
+  // Tour Content Overrides (Admin)
+  listTourContentOverrides(): Promise<schema.TourContentOverride[]>;
+  getTourContentOverride(pageKey: string, role: string): Promise<schema.TourContentOverride | undefined>;
+  upsertTourContentOverride(data: schema.InsertTourContentOverride): Promise<schema.TourContentOverride>;
+  deleteTourContentOverride(pageKey: string, role: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -3158,6 +3223,559 @@ export class DbStorage implements IStorage {
     const roles = await this.getUserRolesForTenant(userId, tenantId);
     const homeownerRole = roles.find(r => r.role === 'homeowner');
     return homeownerRole?.isVerified ?? false;
+  }
+
+  // ============================================
+  // CO-APPLICANT SYSTEM IMPLEMENTATIONS
+  // ============================================
+
+  // Invitations
+  async createInvitation(invitation: schema.InsertInvitation): Promise<schema.Invitation> {
+    const [created] = await db.insert(schema.invitations).values(invitation).returning();
+    return created;
+  }
+
+  async getInvitation(id: string): Promise<schema.Invitation | undefined> {
+    const [invitation] = await db.select().from(schema.invitations).where(eq(schema.invitations.id, id));
+    return invitation;
+  }
+
+  async getInvitationByToken(token: string): Promise<schema.Invitation | undefined> {
+    const [invitation] = await db.select().from(schema.invitations).where(eq(schema.invitations.token, token));
+    return invitation;
+  }
+
+  async getPendingInvitationsForEmail(email: string): Promise<schema.Invitation[]> {
+    return db.select()
+      .from(schema.invitations)
+      .where(
+        and(
+          eq(schema.invitations.inviteeEmail, email.toLowerCase()),
+          eq(schema.invitations.status, 'pending')
+        )
+      );
+  }
+
+  async updateInvitationStatus(id: string, status: string, acceptedAt?: Date, declinedAt?: Date): Promise<schema.Invitation> {
+    const updates: any = { status };
+    if (acceptedAt) updates.acceptedAt = acceptedAt;
+    if (declinedAt) updates.declinedAt = declinedAt;
+
+    const [updated] = await db.update(schema.invitations)
+      .set(updates)
+      .where(eq(schema.invitations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async revokeInvitation(id: string): Promise<schema.Invitation> {
+    const [revoked] = await db.update(schema.invitations)
+      .set({ status: 'revoked' })
+      .where(eq(schema.invitations.id, id))
+      .returning();
+    return revoked;
+  }
+
+  async resendInvitation(id: string): Promise<schema.Invitation> {
+    const [updated] = await db.update(schema.invitations)
+      .set({
+        emailResendCount: sql`${schema.invitations.emailResendCount} + 1`,
+        lastResendAt: new Date()
+      })
+      .where(eq(schema.invitations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async expireOldInvitations(): Promise<number> {
+    const result = await db.update(schema.invitations)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(schema.invitations.status, 'pending'),
+          lt(schema.invitations.expiresAt, new Date())
+        )
+      );
+    return result.rowCount ?? 0;
+  }
+
+  // Household Members
+  async createHouseholdMember(member: schema.InsertHouseholdMember): Promise<schema.HouseholdMember> {
+    const [created] = await db.insert(schema.householdMembers).values(member).returning();
+    return created;
+  }
+
+  async getHouseholdMember(id: string): Promise<schema.HouseholdMember | undefined> {
+    const [member] = await db.select().from(schema.householdMembers).where(eq(schema.householdMembers.id, id));
+    return member;
+  }
+
+  async getHouseholdMembersForPrimaryUser(primaryUserId: string, tenantId: string): Promise<(schema.HouseholdMember & { memberUser: schema.User | null })[]> {
+    const members = await db.select({
+      householdMember: schema.householdMembers,
+      memberUser: schema.users,
+    })
+      .from(schema.householdMembers)
+      .leftJoin(schema.users, eq(schema.householdMembers.memberUserId, schema.users.id))
+      .where(
+        and(
+          eq(schema.householdMembers.primaryUserId, primaryUserId),
+          eq(schema.householdMembers.tenantId, tenantId),
+          or(
+            eq(schema.householdMembers.status, 'pending'),
+            eq(schema.householdMembers.status, 'active')
+          )
+        )
+      );
+
+    return members.map(m => ({
+      ...m.householdMember,
+      memberUser: m.memberUser,
+    }));
+  }
+
+  async getHouseholdMembershipsForUser(userId: string): Promise<(schema.HouseholdMember & { primaryUser: schema.User; tenant: schema.Tenant })[]> {
+    const memberships = await db.select({
+      householdMember: schema.householdMembers,
+      primaryUser: schema.users,
+      tenant: schema.tenants,
+    })
+      .from(schema.householdMembers)
+      .innerJoin(schema.users, eq(schema.householdMembers.primaryUserId, schema.users.id))
+      .innerJoin(schema.tenants, eq(schema.householdMembers.tenantId, schema.tenants.id))
+      .where(
+        and(
+          eq(schema.householdMembers.memberUserId, userId),
+          eq(schema.householdMembers.status, 'active')
+        )
+      );
+
+    return memberships.map(m => ({
+      ...m.householdMember,
+      primaryUser: m.primaryUser,
+      tenant: m.tenant,
+    }));
+  }
+
+  async updateHouseholdMemberStatus(id: string, status: string, removedByUserId?: string): Promise<schema.HouseholdMember> {
+    const updates: any = { status, updatedAt: new Date() };
+    if (status === 'removed' || status === 'left') {
+      updates.removedAt = new Date();
+      if (removedByUserId) updates.removedByUserId = removedByUserId;
+    }
+
+    const [updated] = await db.update(schema.householdMembers)
+      .set(updates)
+      .where(eq(schema.householdMembers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async acceptHouseholdInvitation(householdMemberId: string, memberUserId: string): Promise<schema.HouseholdMember> {
+    const [updated] = await db.update(schema.householdMembers)
+      .set({
+        memberUserId,
+        status: 'active',
+        acceptedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(schema.householdMembers.id, householdMemberId))
+      .returning();
+    return updated;
+  }
+
+  async isHouseholdMemberOf(userId: string, primaryUserId: string, tenantId: string): Promise<boolean> {
+    const [member] = await db.select()
+      .from(schema.householdMembers)
+      .where(
+        and(
+          eq(schema.householdMembers.memberUserId, userId),
+          eq(schema.householdMembers.primaryUserId, primaryUserId),
+          eq(schema.householdMembers.tenantId, tenantId),
+          eq(schema.householdMembers.status, 'active')
+        )
+      );
+    return !!member;
+  }
+
+  async getActiveHouseholdMemberIds(primaryUserId: string, tenantId: string): Promise<string[]> {
+    const members = await db.select({ memberUserId: schema.householdMembers.memberUserId })
+      .from(schema.householdMembers)
+      .where(
+        and(
+          eq(schema.householdMembers.primaryUserId, primaryUserId),
+          eq(schema.householdMembers.tenantId, tenantId),
+          eq(schema.householdMembers.status, 'active'),
+          isNotNull(schema.householdMembers.memberUserId)
+        )
+      );
+    return members.map(m => m.memberUserId!).filter(Boolean);
+  }
+
+  // Contractors
+  async createContractor(contractor: schema.InsertContractor): Promise<schema.Contractor> {
+    const [created] = await db.insert(schema.contractors).values(contractor).returning();
+    return created;
+  }
+
+  async getContractor(id: string): Promise<schema.Contractor | undefined> {
+    const [contractor] = await db.select().from(schema.contractors).where(eq(schema.contractors.id, id));
+    return contractor;
+  }
+
+  async getContractorByUserId(userId: string): Promise<schema.Contractor | undefined> {
+    const [contractor] = await db.select().from(schema.contractors).where(eq(schema.contractors.userId, userId));
+    return contractor;
+  }
+
+  async getContractorByReferralCode(code: string): Promise<schema.Contractor | undefined> {
+    const [contractor] = await db.select().from(schema.contractors).where(eq(schema.contractors.referralCode, code.toUpperCase()));
+    return contractor;
+  }
+
+  async updateContractor(id: string, updates: Partial<schema.InsertContractor>): Promise<schema.Contractor> {
+    const [updated] = await db.update(schema.contractors)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.contractors.id, id))
+      .returning();
+    return updated;
+  }
+
+  async searchContractors(query: string, limit = 20): Promise<(schema.Contractor & { user: schema.User })[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    const results = await db.select({
+      contractor: schema.contractors,
+      user: schema.users,
+    })
+      .from(schema.contractors)
+      .innerJoin(schema.users, eq(schema.contractors.userId, schema.users.id))
+      .where(
+        and(
+          eq(schema.contractors.isPubliclySearchable, true),
+          or(
+            sql`LOWER(${schema.contractors.companyName}) LIKE ${searchTerm}`,
+            sql`LOWER(${schema.users.firstName}) LIKE ${searchTerm}`,
+            sql`LOWER(${schema.users.lastName}) LIKE ${searchTerm}`,
+            sql`LOWER(${schema.users.email}) LIKE ${searchTerm}`
+          )
+        )
+      )
+      .limit(limit);
+
+    return results.map(r => ({
+      ...r.contractor,
+      user: r.user,
+    }));
+  }
+
+  async generateReferralCode(contractorId: string, customCode?: string): Promise<string> {
+    // Generate a unique referral code
+    let code: string;
+    if (customCode) {
+      code = customCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      // Check if custom code is already taken
+      const existing = await this.getContractorByReferralCode(code);
+      if (existing && existing.id !== contractorId) {
+        throw new Error('This referral code is already taken');
+      }
+    } else {
+      // Generate random 8-character code
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoiding ambiguous characters
+      code = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    await db.update(schema.contractors)
+      .set({
+        referralCode: code,
+        referralCodeCreatedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(schema.contractors.id, contractorId));
+
+    return code;
+  }
+
+  async incrementContractorApplicationCount(contractorId: string): Promise<void> {
+    await db.update(schema.contractors)
+      .set({
+        totalApplications: sql`${schema.contractors.totalApplications} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.contractors.id, contractorId));
+  }
+
+  async incrementContractorReferralCount(contractorId: string, successful = false): Promise<void> {
+    const updates: any = {
+      totalReferrals: sql`${schema.contractors.totalReferrals} + 1`,
+      updatedAt: new Date()
+    };
+    if (successful) {
+      updates.successfulReferrals = sql`${schema.contractors.successfulReferrals} + 1`;
+    }
+    await db.update(schema.contractors)
+      .set(updates)
+      .where(eq(schema.contractors.id, contractorId));
+  }
+
+  // Application Collaborators
+  async createApplicationCollaborator(collaborator: schema.InsertApplicationCollaborator): Promise<schema.ApplicationCollaborator> {
+    const [created] = await db.insert(schema.applicationCollaborators).values(collaborator).returning();
+    // Increment contractor's application count
+    await this.incrementContractorApplicationCount(collaborator.contractorId);
+    return created;
+  }
+
+  async getApplicationCollaborator(id: string): Promise<schema.ApplicationCollaborator | undefined> {
+    const [collaborator] = await db.select().from(schema.applicationCollaborators).where(eq(schema.applicationCollaborators.id, id));
+    return collaborator;
+  }
+
+  async getApplicationCollaborators(applicationId: string): Promise<(schema.ApplicationCollaborator & { contractor: schema.Contractor & { user: schema.User } })[]> {
+    const collaborators = await db.select({
+      collaborator: schema.applicationCollaborators,
+      contractor: schema.contractors,
+      user: schema.users,
+    })
+      .from(schema.applicationCollaborators)
+      .innerJoin(schema.contractors, eq(schema.applicationCollaborators.contractorId, schema.contractors.id))
+      .innerJoin(schema.users, eq(schema.contractors.userId, schema.users.id))
+      .where(
+        and(
+          eq(schema.applicationCollaborators.applicationId, applicationId),
+          or(
+            eq(schema.applicationCollaborators.status, 'pending'),
+            eq(schema.applicationCollaborators.status, 'active')
+          )
+        )
+      );
+
+    return collaborators.map(c => ({
+      ...c.collaborator,
+      contractor: {
+        ...c.contractor,
+        user: c.user,
+      },
+    }));
+  }
+
+  async getCollaboratorApplications(contractorId: string): Promise<(schema.ApplicationCollaborator & { application: schema.Application & { tenant: schema.Tenant } })[]> {
+    const collaborations = await db.select({
+      collaborator: schema.applicationCollaborators,
+      application: schema.applications,
+      tenant: schema.tenants,
+    })
+      .from(schema.applicationCollaborators)
+      .innerJoin(schema.applications, eq(schema.applicationCollaborators.applicationId, schema.applications.id))
+      .innerJoin(schema.tenants, eq(schema.applications.tenantId, schema.tenants.id))
+      .where(eq(schema.applicationCollaborators.contractorId, contractorId))
+      .orderBy(desc(schema.applicationCollaborators.invitedAt));
+
+    return collaborations.map(c => ({
+      ...c.collaborator,
+      application: {
+        ...c.application,
+        tenant: c.tenant,
+      },
+    }));
+  }
+
+  async updateApplicationCollaboratorStatus(id: string, status: string, acceptedAt?: Date, removedAt?: Date): Promise<schema.ApplicationCollaborator> {
+    const updates: any = { status };
+    if (acceptedAt) updates.acceptedAt = acceptedAt;
+    if (removedAt) updates.removedAt = removedAt;
+
+    const [updated] = await db.update(schema.applicationCollaborators)
+      .set(updates)
+      .where(eq(schema.applicationCollaborators.id, id))
+      .returning();
+    return updated;
+  }
+
+  async canContractorAccessApplication(userId: string, applicationId: string): Promise<boolean> {
+    // First, get the contractor profile for this user
+    const contractor = await this.getContractorByUserId(userId);
+    if (!contractor) return false;
+
+    // Check if they have an active collaboration on this application
+    const [collaboration] = await db.select()
+      .from(schema.applicationCollaborators)
+      .where(
+        and(
+          eq(schema.applicationCollaborators.contractorId, contractor.id),
+          eq(schema.applicationCollaborators.applicationId, applicationId),
+          eq(schema.applicationCollaborators.status, 'active')
+        )
+      );
+
+    return !!collaboration;
+  }
+
+  async getContractorDashboard(contractorId: string): Promise<{
+    applications: (schema.ApplicationCollaborator & { application: schema.Application & { tenant: schema.Tenant } })[];
+    stats: { totalApplications: number; activeApplications: number; completedApplications: number };
+  }> {
+    const applications = await this.getCollaboratorApplications(contractorId);
+
+    const stats = {
+      totalApplications: applications.length,
+      activeApplications: applications.filter(a => a.status === 'active' || a.status === 'pending').length,
+      completedApplications: applications.filter(a => a.status === 'completed').length,
+    };
+
+    return { applications, stats };
+  }
+
+  // Contractor Referrals
+  async createContractorReferral(referral: schema.InsertContractorReferral): Promise<schema.ContractorReferral> {
+    const [created] = await db.insert(schema.contractorReferrals).values(referral).returning();
+    // Increment contractor's referral count
+    await this.incrementContractorReferralCount(referral.contractorId);
+    return created;
+  }
+
+  async getContractorReferrals(contractorId: string): Promise<(schema.ContractorReferral & { tenant: schema.Tenant })[]> {
+    const referrals = await db.select({
+      referral: schema.contractorReferrals,
+      tenant: schema.tenants,
+    })
+      .from(schema.contractorReferrals)
+      .innerJoin(schema.tenants, eq(schema.contractorReferrals.tenantId, schema.tenants.id))
+      .where(eq(schema.contractorReferrals.contractorId, contractorId))
+      .orderBy(desc(schema.contractorReferrals.signedUpAt));
+
+    return referrals.map(r => ({
+      ...r.referral,
+      tenant: r.tenant,
+    }));
+  }
+
+  async updateReferralStatus(id: string, status: string, qualifiedAt?: Date, paidAt?: Date, payoutAmount?: string, payoutNotes?: string): Promise<schema.ContractorReferral> {
+    const updates: any = { status, updatedAt: new Date() };
+    if (qualifiedAt) updates.qualifiedAt = qualifiedAt;
+    if (paidAt) updates.paidAt = paidAt;
+    if (payoutAmount) updates.payoutAmount = payoutAmount;
+    if (payoutNotes) updates.payoutNotes = payoutNotes;
+
+    const [updated] = await db.update(schema.contractorReferrals)
+      .set(updates)
+      .where(eq(schema.contractorReferrals.id, id))
+      .returning();
+
+    // If marking as qualified/successful, update contractor's successful referral count
+    if (status === 'qualified') {
+      await this.incrementContractorReferralCount(updated.contractorId, true);
+    }
+
+    return updated;
+  }
+
+  async getReferralStats(contractorId: string): Promise<{ total: number; qualified: number; paid: number; pending: number }> {
+    const referrals = await db.select({ status: schema.contractorReferrals.status })
+      .from(schema.contractorReferrals)
+      .where(eq(schema.contractorReferrals.contractorId, contractorId));
+
+    return {
+      total: referrals.length,
+      qualified: referrals.filter(r => r.status === 'qualified').length,
+      paid: referrals.filter(r => r.status === 'paid').length,
+      pending: referrals.filter(r => r.status === 'pending').length,
+    };
+  }
+
+  // ============================================
+  // Tour Progress
+  // ============================================
+
+  async getTourProgress(userId: string, pageKey: string, role: string): Promise<schema.UserTourProgress | undefined> {
+    const [progress] = await db.select()
+      .from(schema.userTourProgress)
+      .where(
+        and(
+          eq(schema.userTourProgress.userId, userId),
+          eq(schema.userTourProgress.pageKey, pageKey),
+          eq(schema.userTourProgress.role, role)
+        )
+      );
+    return progress;
+  }
+
+  async getUserTourProgressList(userId: string): Promise<schema.UserTourProgress[]> {
+    return db.select()
+      .from(schema.userTourProgress)
+      .where(eq(schema.userTourProgress.userId, userId));
+  }
+
+  async markTourCompleted(data: schema.InsertUserTourProgress): Promise<schema.UserTourProgress> {
+    const [progress] = await db.insert(schema.userTourProgress)
+      .values({
+        ...data,
+        completedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [schema.userTourProgress.userId, schema.userTourProgress.pageKey, schema.userTourProgress.role],
+        set: {
+          completedAt: new Date(),
+        },
+      })
+      .returning();
+    return progress;
+  }
+
+  async resetTourProgress(userId: string, pageKey?: string, role?: string): Promise<void> {
+    const conditions = [eq(schema.userTourProgress.userId, userId)];
+    if (pageKey) {
+      conditions.push(eq(schema.userTourProgress.pageKey, pageKey));
+    }
+    if (role) {
+      conditions.push(eq(schema.userTourProgress.role, role));
+    }
+    await db.delete(schema.userTourProgress).where(and(...conditions));
+  }
+
+  // Tour Content Overrides (Admin)
+  async listTourContentOverrides(): Promise<schema.TourContentOverride[]> {
+    return db.select()
+      .from(schema.tourContentOverrides)
+      .orderBy(schema.tourContentOverrides.pageKey, schema.tourContentOverrides.role);
+  }
+
+  async getTourContentOverride(pageKey: string, role: string): Promise<schema.TourContentOverride | undefined> {
+    const [override] = await db.select()
+      .from(schema.tourContentOverrides)
+      .where(
+        and(
+          eq(schema.tourContentOverrides.pageKey, pageKey),
+          eq(schema.tourContentOverrides.role, role)
+        )
+      );
+    return override;
+  }
+
+  async upsertTourContentOverride(data: schema.InsertTourContentOverride): Promise<schema.TourContentOverride> {
+    const [override] = await db.insert(schema.tourContentOverrides)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [schema.tourContentOverrides.pageKey, schema.tourContentOverrides.role],
+        set: {
+          pageTitle: data.pageTitle,
+          isEnabled: data.isEnabled,
+          steps: data.steps,
+          updatedByUserId: data.updatedByUserId,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return override;
+  }
+
+  async deleteTourContentOverride(pageKey: string, role: string): Promise<void> {
+    await db.delete(schema.tourContentOverrides)
+      .where(
+        and(
+          eq(schema.tourContentOverrides.pageKey, pageKey),
+          eq(schema.tourContentOverrides.role, role)
+        )
+      );
   }
 }
 

@@ -12,6 +12,13 @@ import {
   commentNotificationTemplate,
   invoiceTemplate,
   paymentReceivedTemplate,
+  bulkCommunityInviteTemplate,
+  householdMemberInviteTemplate,
+  householdMemberJoinedTemplate,
+  contractorInviteTemplate,
+  contractorInviteAcceptedTemplate,
+  contractorReferralTemplate,
+  contractorReferralSignupTemplate,
 } from './emailTemplates';
 
 interface EmailPayload {
@@ -275,6 +282,192 @@ export class EmailService {
     return this.send({
       to: recipientEmail,
       subject: `Payment Received - Invoice ${invoiceNumber}`,
+      html,
+    });
+  }
+
+  // ============================================
+  // Invitation Emails
+  // ============================================
+
+  /**
+   * Send bulk community invitation email
+   */
+  async sendBulkCommunityInvite(
+    recipientEmail: string,
+    recipientName: string,
+    communityName: string,
+    inviterName: string,
+    inviteLink: string,
+    communityDescription?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = bulkCommunityInviteTemplate(
+      recipientName,
+      communityName,
+      inviterName,
+      inviteLink,
+      communityDescription
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `You're Invited to Join ${communityName}`,
+      html,
+    });
+  }
+
+  /**
+   * Send household member invitation email
+   */
+  async sendHouseholdMemberInvite(
+    recipientEmail: string,
+    recipientName: string,
+    inviterName: string,
+    communityName: string,
+    relationship: string,
+    inviteLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = householdMemberInviteTemplate(
+      recipientName,
+      inviterName,
+      communityName,
+      relationship,
+      inviteLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `${inviterName} invited you to join their household`,
+      html,
+    });
+  }
+
+  /**
+   * Send notification when household member joins
+   */
+  async sendHouseholdMemberJoined(
+    recipientEmail: string,
+    recipientName: string,
+    memberName: string,
+    memberEmail: string,
+    communityName: string,
+    dashboardLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = householdMemberJoinedTemplate(
+      recipientName,
+      memberName,
+      memberEmail,
+      communityName,
+      dashboardLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `${memberName} joined your household`,
+      html,
+    });
+  }
+
+  /**
+   * Send contractor application invitation email
+   */
+  async sendContractorInvite(
+    recipientEmail: string,
+    recipientName: string,
+    inviterName: string,
+    applicationTitle: string,
+    communityName: string,
+    inviteLink: string,
+    projectDescription?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = contractorInviteTemplate(
+      recipientName,
+      inviterName,
+      applicationTitle,
+      communityName,
+      inviteLink,
+      projectDescription
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `${inviterName} invited you to collaborate on "${applicationTitle}"`,
+      html,
+    });
+  }
+
+  /**
+   * Send notification when contractor accepts invitation
+   */
+  async sendContractorInviteAccepted(
+    recipientEmail: string,
+    recipientName: string,
+    contractorName: string,
+    contractorCompany: string | undefined,
+    applicationTitle: string,
+    communityName: string,
+    applicationLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = contractorInviteAcceptedTemplate(
+      recipientName,
+      contractorName,
+      contractorCompany,
+      applicationTitle,
+      communityName,
+      applicationLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `${contractorName} joined your application`,
+      html,
+    });
+  }
+
+  /**
+   * Send contractor referral link email
+   */
+  async sendContractorReferralLink(
+    recipientEmail: string,
+    recipientName: string,
+    referralCode: string,
+    referralLink: string,
+    dashboardLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = contractorReferralTemplate(
+      recipientName,
+      referralCode,
+      referralLink,
+      dashboardLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: 'Your POAssociation Referral Link',
+      html,
+    });
+  }
+
+  /**
+   * Send notification when a community signs up using referral code
+   */
+  async sendContractorReferralSignup(
+    recipientEmail: string,
+    recipientName: string,
+    communityName: string,
+    referralCode: string,
+    dashboardLink: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = contractorReferralSignupTemplate(
+      recipientName,
+      communityName,
+      referralCode,
+      dashboardLink
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `New Referral: ${communityName} signed up!`,
       html,
     });
   }

@@ -3,7 +3,7 @@ import { signPayload, SyncPayload } from "./protocol";
 
 /**
  * Get HomeHub URL based on environment
- * Production: APP_URL contains 'poassociation.com' → use production HomeHub URL
+ * Production: APP_URL contains 'poassociation.com' → use https://hazelhippo.com
  * Development: Otherwise → use dev URL
  */
 export function getHomeHubUrl(): string {
@@ -11,16 +11,11 @@ export function getHomeHubUrl(): string {
   const isProduction = appUrl.includes("poassociation.com");
 
   if (isProduction) {
-    return process.env.HOMEHUB_APP_URL_PROD || "https://hazelhippo.com";
+    return "https://hazelhippo.com";
   }
 
-  // Development - use dev URL with fallback chain
-  return (
-    process.env.HOMEHUB_APP_URL_DEV ||
-    process.env.HOMEHUB_APP_URL ||
-    process.env.HOMEHUB_URL ||
-    "https://homehub.replit.app"
-  );
+  // Development fallback
+  return process.env.HOMEHUB_APP_URL || "https://homehub.replit.app";
 }
 
 const PARTNER_APPS: Record<string, { url: string; secret: string | undefined }> = {
@@ -152,4 +147,19 @@ export async function checkHomeHubHealth(): Promise<SyncResponse<{
   features: string[];
 }>> {
   return sendSyncRequest("homehub", "health.check", {});
+}
+
+/**
+ * Send developer instructions/requests to HomeHub team
+ * These are stored and visible to developers working on HomeHub
+ */
+export async function sendDeveloperInstruction(data: {
+  title: string;
+  category: 'api_request' | 'bug_report' | 'feature_request' | 'documentation' | 'other';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  requestedBy: string;
+  context?: Record<string, any>;
+}): Promise<SyncResponse<{ instructionId: string; acknowledged: boolean }>> {
+  return sendSyncRequest("homehub", "developer.instruction", data);
 }

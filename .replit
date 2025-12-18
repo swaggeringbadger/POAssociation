@@ -41,3 +41,13 @@ waitForPort = 5000
 [agent]
 mockupState = "FULLSTACK"
 integrations = ["javascript_log_in_with_replit:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+
+[userenv.development]
+APP_URL = "https://3790db04-5cf2-445f-8181-a43c1b7b7d66-00-3mqxrhnfh6gcs.worf.replit.dev"
+
+[userenv.production]
+APP_URL = "https://poassociation.com"

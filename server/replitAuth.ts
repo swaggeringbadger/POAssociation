@@ -108,17 +108,59 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/login", (req, res, next) => {
     ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
+
+    // Store returnTo in session so we can redirect after OAuth completes
+    const returnTo = req.query.returnTo as string;
+    if (returnTo && returnTo.startsWith('/')) {
+      (req.session as any).returnTo = returnTo;
+      // Save session before redirecting to OAuth
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Auth] Failed to save session with returnTo:', err);
+        }
+        passport.authenticate(`replitauth:${req.hostname}`, {
+          prompt: "login consent",
+          scope: ["openid", "email", "profile", "offline_access"],
+        })(req, res, next);
+      });
+    } else {
+      passport.authenticate(`replitauth:${req.hostname}`, {
+        prompt: "login consent",
+        scope: ["openid", "email", "profile", "offline_access"],
+      })(req, res, next);
+    }
   });
 
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
+    }, (err: any, user: any, info: any) => {
+      if (err) {
+        console.error('[Auth] Callback error:', err);
+        return next(err);
+      }
+      if (!user) {
+        console.log('[Auth] No user from callback, redirecting to login');
+        return res.redirect('/api/login');
+      }
+
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error('[Auth] Login error:', loginErr);
+          return next(loginErr);
+        }
+
+        // Check for stored returnTo URL
+        const returnTo = (req.session as any).returnTo;
+        // Clear it from session
+        delete (req.session as any).returnTo;
+
+        // Redirect to returnTo or default to /
+        const redirectUrl = returnTo && returnTo.startsWith('/') ? returnTo : '/';
+        console.log('[Auth] Successful login, redirecting to:', redirectUrl);
+        res.redirect(redirectUrl);
+      });
     })(req, res, next);
   });
 

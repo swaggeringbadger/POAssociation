@@ -73,6 +73,8 @@ export function AddressInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Use ref to track selection across render cycles (avoids stale closure in setTimeout)
+  const hasSelectedRef = useRef(false);
 
   // Check if Radar is configured
   const { data: addressStatus } = useQuery({
@@ -91,9 +93,10 @@ export function AddressInput({
     staleTime: 30000,
   });
 
-  // Validation mutation
+  // Validation mutation - accepts address and optional coordinates from autocomplete selection
   const validateMutation = useMutation({
-    mutationFn: (address: string) => apiRequest('POST', '/api/address/validate', { address }),
+    mutationFn: (params: { address: string; latitude?: number; longitude?: number }) =>
+      apiRequest('POST', '/api/address/validate', params),
     onSuccess: (result: AddressValidationResult) => {
       setValidationResult(result);
       if (result.isValid && result.formattedAddress) {
@@ -130,6 +133,7 @@ export function AddressInput({
     const newValue = e.target.value;
     setInputValue(newValue);
     setHasSelectedSuggestion(false);
+    hasSelectedRef.current = false; // Reset ref too
     setValidationResult(null);
     setShowSuggestions(true);
     setSelectedIndex(-1);
@@ -138,14 +142,26 @@ export function AddressInput({
 
   // Handle suggestion selection
   const handleSelectSuggestion = useCallback((suggestion: AddressSuggestion) => {
+    console.log('[AddressInput] Selected suggestion:', suggestion);
+    console.log('[AddressInput] Coordinates:', suggestion.latitude, suggestion.longitude);
+
+    // Set ref FIRST to prevent blur handler from firing (ref survives across renders)
+    hasSelectedRef.current = true;
+
     setInputValue(suggestion.formattedAddress);
     onChange(suggestion.formattedAddress);
     setHasSelectedSuggestion(true);
     setShowSuggestions(false);
     setSelectedIndex(-1);
 
-    // Validate the selected address
-    validateMutation.mutate(suggestion.formattedAddress);
+    // Validate the selected address - pass coordinates from autocomplete to avoid re-geocoding mismatch
+    const payload = {
+      address: suggestion.formattedAddress,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    };
+    console.log('[AddressInput] Sending validation payload:', payload);
+    validateMutation.mutate(payload);
   }, [onChange, validateMutation]);
 
   // Handle keyboard navigation
@@ -172,8 +188,16 @@ export function AddressInput({
     // Delay to allow click on suggestion
     setTimeout(() => {
       setShowSuggestions(false);
-      if (inputValue && !hasSelectedSuggestion && !validationResult && addressStatus?.configured) {
-        validateMutation.mutate(inputValue);
+      // Use ref instead of state to avoid stale closure issue
+      // The state value would be from when handleBlur was called, not when setTimeout fires
+      if (!hasSelectedRef.current && !validateMutation.isPending) {
+        // Get current input value from the DOM to avoid stale closure
+        const currentValue = inputRef.current?.value || '';
+        if (currentValue && addressStatus?.configured) {
+          console.log('[AddressInput] Blur validation for manual entry:', currentValue);
+          // Manual entry without selecting from autocomplete - no coordinates available
+          validateMutation.mutate({ address: currentValue });
+        }
       }
     }, 200);
   };

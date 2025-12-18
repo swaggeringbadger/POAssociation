@@ -1422,3 +1422,345 @@ export const insertDevInstructionSchema = createInsertSchema(devInstructions).om
 });
 export type InsertDevInstruction = z.infer<typeof insertDevInstructionSchema>;
 export type DevInstruction = typeof devInstructions.$inferSelect;
+
+// ============================================
+// CO-APPLICANT SYSTEM TABLES
+// ============================================
+
+// Household member status enum
+export const householdMemberStatusSchema = z.enum([
+  'pending',    // Invitation sent, not yet accepted
+  'active',     // Member has accepted and is active
+  'removed',    // Removed by primary homeowner
+  'left'        // Member left voluntarily
+]);
+export type HouseholdMemberStatus = z.infer<typeof householdMemberStatusSchema>;
+
+// Household Members - Links household members to primary homeowners within a tenant
+export const householdMembers = pgTable("household_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  primaryUserId: varchar("primary_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  memberUserId: varchar("member_user_id").references(() => users.id, { onDelete: "cascade" }), // null until invitation accepted
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Relationship details
+  relationship: text("relationship"), // 'spouse', 'adult_child', 'parent', 'other'
+
+  // Status tracking
+  status: text("status").notNull().default('pending'), // 'pending', 'active', 'removed', 'left'
+  invitedAt: timestamp("invited_at").defaultNow().notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  removedAt: timestamp("removed_at"),
+  removedByUserId: varchar("removed_by_user_id").references(() => users.id),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  primaryUserIdx: index("household_members_primary_user_idx").on(table.primaryUserId),
+  memberUserIdx: index("household_members_member_user_idx").on(table.memberUserId),
+  tenantIdx: index("household_members_tenant_idx").on(table.tenantId),
+  statusIdx: index("household_members_status_idx").on(table.status),
+}));
+
+export const insertHouseholdMemberSchema = createInsertSchema(householdMembers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  invitedAt: true,
+});
+export type InsertHouseholdMember = z.infer<typeof insertHouseholdMemberSchema>;
+export type HouseholdMember = typeof householdMembers.$inferSelect;
+
+// Contractor business type enum
+export const contractorBusinessTypeSchema = z.enum([
+  'general_contractor',
+  'landscaper',
+  'fencing',
+  'roofing',
+  'painting',
+  'electrical',
+  'plumbing',
+  'hvac',
+  'pool_spa',
+  'concrete_masonry',
+  'architect',
+  'engineer',
+  'designer',
+  'other'
+]);
+export type ContractorBusinessType = z.infer<typeof contractorBusinessTypeSchema>;
+
+// Contractors - Contractor profiles (cross-tenant, linked to user)
+export const contractors = pgTable("contractors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+
+  // Business info
+  companyName: text("company_name"),
+  businessType: text("business_type"), // See contractorBusinessTypeSchema
+  licenseNumber: text("license_number"),
+  isLicenseVerified: boolean("is_license_verified").default(false),
+
+  // Contact
+  businessPhone: text("business_phone"),
+  businessEmail: text("business_email"),
+  website: text("website"),
+  serviceArea: text("service_area"), // Description of areas served
+
+  // Profile visibility
+  isPubliclySearchable: boolean("is_publicly_searchable").default(true), // Can homeowners find them
+
+  // Referral system
+  referralCode: text("referral_code").unique(), // Auto-generated or custom
+  referralCodeCreatedAt: timestamp("referral_code_created_at"),
+
+  // Stats (denormalized for performance)
+  totalApplications: integer("total_applications").default(0),
+  totalReferrals: integer("total_referrals").default(0),
+  successfulReferrals: integer("successful_referrals").default(0),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("contractors_user_idx").on(table.userId),
+  referralCodeIdx: index("contractors_referral_code_idx").on(table.referralCode),
+  searchableIdx: index("contractors_searchable_idx").on(table.isPubliclySearchable),
+  businessTypeIdx: index("contractors_business_type_idx").on(table.businessType),
+}));
+
+export const insertContractorSchema = createInsertSchema(contractors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertContractor = z.infer<typeof insertContractorSchema>;
+export type Contractor = typeof contractors.$inferSelect;
+
+// Application collaborator status enum
+export const applicationCollaboratorStatusSchema = z.enum([
+  'pending',    // Invitation sent, not yet accepted
+  'active',     // Collaborator is actively working on application
+  'removed',    // Removed by homeowner
+  'completed'   // Application completed, collaboration ended
+]);
+export type ApplicationCollaboratorStatus = z.infer<typeof applicationCollaboratorStatusSchema>;
+
+// Application Collaborators - Links contractors to specific applications
+export const applicationCollaborators = pgTable("application_collaborators", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  contractorId: varchar("contractor_id").notNull().references(() => contractors.id, { onDelete: "cascade" }),
+  invitedByUserId: varchar("invited_by_user_id").notNull().references(() => users.id),
+
+  // Status
+  status: text("status").notNull().default('pending'), // 'pending', 'active', 'removed', 'completed'
+  invitedAt: timestamp("invited_at").defaultNow().notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  removedAt: timestamp("removed_at"),
+
+  // Permissions
+  canEditForm: boolean("can_edit_form").default(true),
+  canUploadDocuments: boolean("can_upload_documents").default(true),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  applicationIdx: index("application_collaborators_app_idx").on(table.applicationId),
+  contractorIdx: index("application_collaborators_contractor_idx").on(table.contractorId),
+  statusIdx: index("application_collaborators_status_idx").on(table.status),
+  uniqueAppContractor: uniqueIndex("application_collaborators_unique_idx").on(table.applicationId, table.contractorId),
+}));
+
+export const insertApplicationCollaboratorSchema = createInsertSchema(applicationCollaborators).omit({
+  id: true,
+  createdAt: true,
+  invitedAt: true,
+});
+export type InsertApplicationCollaborator = z.infer<typeof insertApplicationCollaboratorSchema>;
+export type ApplicationCollaborator = typeof applicationCollaborators.$inferSelect;
+
+// Invitation type enum
+export const invitationTypeSchema = z.enum([
+  'household_member',        // Invite to join household
+  'contractor_application'   // Invite contractor to collaborate on application
+]);
+export type InvitationType = z.infer<typeof invitationTypeSchema>;
+
+// Invitation status enum
+export const invitationStatusSchema = z.enum([
+  'pending',   // Sent, awaiting response
+  'accepted',  // Accepted by invitee
+  'declined',  // Declined by invitee
+  'expired',   // Past expiration date
+  'revoked'    // Cancelled by inviter
+]);
+export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
+
+// Invitations - Universal invitation tracking for both household members and contractors
+export const invitations = pgTable("invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Token for secure URL
+  token: text("token").notNull().unique(),
+
+  // Type and context
+  type: text("type").notNull(), // 'household_member', 'contractor_application'
+
+  // Who is inviting
+  invitedByUserId: varchar("invited_by_user_id").notNull().references(() => users.id),
+
+  // Recipient info (before user exists)
+  inviteeEmail: text("invitee_email").notNull(),
+  inviteeName: text("invitee_name"), // Optional display name
+
+  // Context references (depending on type)
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }), // For household invitations
+  applicationId: varchar("application_id").references(() => applications.id, { onDelete: "cascade" }), // For contractor app invitations
+  householdMemberId: varchar("household_member_id").references(() => householdMembers.id, { onDelete: "cascade" }), // Link back
+  applicationCollaboratorId: varchar("application_collaborator_id").references(() => applicationCollaborators.id, { onDelete: "cascade" }), // Link back
+
+  // Status
+  status: text("status").notNull().default('pending'), // 'pending', 'accepted', 'declined', 'expired', 'revoked'
+
+  // Timing
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+
+  // Email tracking
+  emailSentAt: timestamp("email_sent_at"),
+  emailResendCount: integer("email_resend_count").default(0),
+  lastResendAt: timestamp("last_resend_at"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("invitations_token_idx").on(table.token),
+  emailIdx: index("invitations_email_idx").on(table.inviteeEmail),
+  statusIdx: index("invitations_status_idx").on(table.status),
+  expiresIdx: index("invitations_expires_idx").on(table.expiresAt),
+  typeIdx: index("invitations_type_idx").on(table.type),
+}));
+
+export const insertInvitationSchema = createInsertSchema(invitations).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
+export type Invitation = typeof invitations.$inferSelect;
+
+// Contractor referral status enum
+export const contractorReferralStatusSchema = z.enum([
+  'pending',    // POA signed up but not yet qualified
+  'qualified',  // POA became a paying customer
+  'paid',       // Contractor received payout
+  'invalid'     // Referral invalidated (e.g., POA cancelled quickly)
+]);
+export type ContractorReferralStatus = z.infer<typeof contractorReferralStatusSchema>;
+
+// Contractor Referrals - Track POA signups via contractor referral codes
+export const contractorReferrals = pgTable("contractor_referrals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => contractors.id, { onDelete: "cascade" }),
+
+  // What was referred
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }), // The POA that signed up
+
+  // Tracking
+  referralCode: text("referral_code").notNull(), // Snapshot of code used
+  signedUpAt: timestamp("signed_up_at").defaultNow().notNull(),
+
+  // Status for payouts
+  status: text("status").notNull().default('pending'), // 'pending', 'qualified', 'paid', 'invalid'
+  qualifiedAt: timestamp("qualified_at"), // When they became a paying customer
+  paidAt: timestamp("paid_at"),
+  payoutAmount: text("payout_amount"), // Amount paid to contractor (string for precision)
+  payoutNotes: text("payout_notes"),
+
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  contractorIdx: index("contractor_referrals_contractor_idx").on(table.contractorId),
+  tenantIdx: index("contractor_referrals_tenant_idx").on(table.tenantId),
+  statusIdx: index("contractor_referrals_status_idx").on(table.status),
+  referralCodeIdx: index("contractor_referrals_code_idx").on(table.referralCode),
+}));
+
+export const insertContractorReferralSchema = createInsertSchema(contractorReferrals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  signedUpAt: true,
+});
+export type InsertContractorReferral = z.infer<typeof insertContractorReferralSchema>;
+export type ContractorReferral = typeof contractorReferrals.$inferSelect;
+
+// ============================================
+// User Tour Progress
+// ============================================
+
+// Tracks which page tours a user has completed, per role
+// Allows showing different tours when user's role changes
+export const userTourProgress = pgTable("user_tour_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  pageKey: text("page_key").notNull(), // e.g., "dashboard", "applications", "calendar"
+  role: text("role").notNull(), // The role context when tour was completed
+  completedAt: timestamp("completed_at").defaultNow().notNull(),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userPageRoleIdx: uniqueIndex("user_tour_progress_user_page_role_idx").on(table.userId, table.pageKey, table.role),
+  userIdx: index("user_tour_progress_user_idx").on(table.userId),
+  pageKeyIdx: index("user_tour_progress_page_idx").on(table.pageKey),
+}));
+
+export const insertUserTourProgressSchema = createInsertSchema(userTourProgress).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+export type InsertUserTourProgress = z.infer<typeof insertUserTourProgressSchema>;
+export type UserTourProgress = typeof userTourProgress.$inferSelect;
+
+// ============================================
+// Tour Content Overrides (Admin Customization)
+// ============================================
+
+// Stores admin customizations to tour content
+// TypeScript defaults in /client/src/lib/tour/content/*.ts remain as fallbacks
+export const tourContentOverrides = pgTable("tour_content_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pageKey: text("page_key").notNull(), // 'dashboard', 'applications', etc.
+  role: text("role").notNull(), // 'homeowner', 'poa_board_member', etc.
+  pageTitle: text("page_title").notNull(), // Display title for the tour
+  isEnabled: boolean("is_enabled").notNull().default(true), // Enable/disable this tour
+  steps: jsonb("steps").notNull(), // Array of {title, description, iconName}
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  pageRoleIdx: uniqueIndex("tour_content_overrides_page_role_idx").on(table.pageKey, table.role),
+}));
+
+// Type for steps JSONB
+export interface TourStepOverride {
+  title: string;
+  description: string;
+  iconName: string; // "FileText", "Bell", etc. - mapped to Lucide icon at runtime
+}
+
+export const insertTourContentOverrideSchema = createInsertSchema(tourContentOverrides).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTourContentOverride = z.infer<typeof insertTourContentOverrideSchema>;
+export type TourContentOverride = typeof tourContentOverrides.$inferSelect;

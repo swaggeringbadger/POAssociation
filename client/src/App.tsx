@@ -1,6 +1,8 @@
-import { Switch, Route, Redirect, useParams } from "wouter";
+import { Switch, Route, Redirect, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { PENDING_INVITATION_KEY } from "@/pages/InvitationAccept";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -35,12 +37,20 @@ import DemoCodeStats from "@/pages/admin/DemoCodeStats";
 import ManagementCompanies from "@/pages/admin/ManagementCompanies";
 import Communities from "@/pages/admin/Communities";
 import AIActivity from "@/pages/admin/AIActivity";
+import EmailTemplates from "@/pages/admin/EmailTemplates";
+import TourContent from "@/pages/admin/TourContent";
 import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
 import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import PricingPage from "@/pages/PricingPage";
 import LegalPage from "@/pages/LegalPage";
 import JoinCommunity from "@/pages/JoinCommunity";
+import InvitationAccept from "@/pages/InvitationAccept";
+import ReferralLanding from "@/pages/ReferralLanding";
+import HouseholdSettings from "@/pages/HouseholdSettings";
+import ContractorProfile from "@/pages/ContractorProfile";
+import ContractorDashboard from "@/pages/ContractorDashboard";
+import ContractorReferrals from "@/pages/ContractorReferrals";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -62,6 +72,21 @@ function ManagementLandingByPath() {
 function Router() {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   const { isAuthenticated, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Check for pending invitation after authentication (fallback if session-based returnTo fails)
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      const pendingInvitation = localStorage.getItem(PENDING_INVITATION_KEY);
+      // Only redirect if we're not already on an invite page and have a pending invitation
+      if (pendingInvitation && !location.startsWith('/invite/')) {
+        console.log('[App] Found pending invitation in localStorage, redirecting:', pendingInvitation);
+        // Clear it before redirecting to avoid loops
+        localStorage.removeItem(PENDING_INVITATION_KEY);
+        setLocation(`/invite/${pendingInvitation}`);
+      }
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
 
   // Check for subdomain context
   const { data: subdomainData } = useQuery<{ subdomain: string | null; hostname: string }>({
@@ -103,6 +128,12 @@ function Router() {
 
       {/* Mobile document upload - accessible without auth */}
       <Route path="/upload/:token" component={MobileDocumentUpload} />
+
+      {/* Invitation accept page - public but requires auth to accept */}
+      <Route path="/invite/:token" component={InvitationAccept} />
+
+      {/* Referral landing page - public */}
+      <Route path="/r/:code" component={ReferralLanding} />
 
       {/* Public pricing page - accessible without auth */}
       <Route path="/pricing" component={PricingPage} />
@@ -293,6 +324,48 @@ function Router() {
             </ProtectedRoute>
           </Route>
 
+          {/* Household Settings */}
+          <Route path="/settings/household">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <HouseholdSettings />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          {/* Contractor Routes */}
+          <Route path="/contractor">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <ContractorDashboard />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/contractor/profile">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <ContractorProfile />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/contractor/referrals">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <ContractorReferrals />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
           <Route path="/properties/:propertyId/subscription">
             <ProtectedRoute>
               <DashboardLayout>
@@ -340,6 +413,22 @@ function Router() {
             <ProtectedRoute>
               <DashboardLayout>
                 <AIActivity />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/admin/email-templates">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <EmailTemplates />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/admin/tours">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <TourContent />
               </DashboardLayout>
             </ProtectedRoute>
           </Route>

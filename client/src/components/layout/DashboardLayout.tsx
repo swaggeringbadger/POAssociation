@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { TourProvider, TourModal, FloatingHelpButton } from "@/components/tour";
 import {
   Sidebar,
   SidebarContent,
@@ -31,7 +32,7 @@ import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
 import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { api, queryClient } from "@/lib/api";
-import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings } from "lucide-react";
+import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings, Users, Wrench } from "lucide-react";
 import logoImage from "@assets/generated_images/POAssociationLogo.png";
 import ManagementSettingsModal from "@/components/ManagementSettingsModal";
 import type { User } from "@shared/schema";
@@ -86,6 +87,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isSuperAdmin = superAdminData?.isSuperAdmin ?? false;
 
+  // Check if user has a contractor profile (contractors don't need tenant assignments)
+  const { data: contractorProfile, isLoading: contractorLoading } = useQuery({
+    queryKey: ['myContractorProfile'],
+    queryFn: () => api.getMyContractorProfile(),
+    enabled: !!user,
+  });
+
+  const isContractor = !!contractorProfile;
+
   // Get initials for avatar fallback
   const getInitials = () => {
     if (!user) return "U";
@@ -130,8 +140,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return icons[role] || '👤';
   };
 
-  // Show loading state while tenants are loading
-  if (tenantsLoading) {
+  // Show loading state while tenants or contractor profile are loading
+  if (tenantsLoading || contractorLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -142,8 +152,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  // Show message if no tenants available (but allow super admins through)
-  if (!currentTenant && !isSuperAdmin) {
+  // Show message if no tenants available (but allow super admins and contractors through)
+  if (!currentTenant && !isSuperAdmin && !isContractor) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center max-w-md p-8">
@@ -164,9 +174,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  // Contractors without community assignments should be redirected to contractor dashboard
+  // But don't redirect if already on a contractor route (prevents loop)
+  const isOnContractorRoute = location.startsWith('/contractor');
+  if (!currentTenant && isContractor && !isOnContractorRoute) {
+    // Auto-redirect to contractor dashboard
+    window.location.href = '/contractor';
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Redirecting to contractor dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <SidebarProvider defaultOpen>
-      <div className="flex min-h-screen w-full bg-background text-foreground">
+    <TourProvider>
+      <SidebarProvider defaultOpen>
+        <div className="flex min-h-screen w-full bg-background text-foreground">
         {/* Sidebar */}
         <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
           <SidebarHeader className="flex-col gap-2 p-2 border-b border-sidebar-border">
@@ -415,6 +442,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <UserIcon className="mr-2 h-4 w-4" />
                   Profile Settings
                 </DropdownMenuItem>
+                {currentUserRole === 'homeowner' && (
+                  <DropdownMenuItem
+                    onClick={() => window.location.href = "/settings/household"}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Household Members
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={() => window.location.href = "/contractor/profile"}
+                >
+                  <Wrench className="mr-2 h-4 w-4" />
+                  {isContractor ? 'Contractor Profile' : 'Become a Contractor'}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -473,6 +514,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           managementCompanyId={managementCompanyId}
         />
       )}
-    </SidebarProvider>
+      </SidebarProvider>
+
+      {/* Tour System */}
+      <TourModal />
+      <FloatingHelpButton />
+    </TourProvider>
   );
 }
