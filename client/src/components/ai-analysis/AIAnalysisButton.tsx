@@ -29,6 +29,7 @@ import {
   type AiCreditCheck,
   type TriggerAnalysisResponse,
 } from '@/lib/api';
+import { CREDIT_COSTS } from '@shared/subscriptionTypes';
 
 interface AIAnalysisButtonProps {
   applicationId: string;
@@ -57,6 +58,10 @@ export function AIAnalysisButton({
 
   // Check if user has permission
   const canTriggerAnalysis = userRole && ALLOWED_ROLES.includes(userRole);
+
+  // Calculate credit cost based on selected options
+  const isFullAnalysis = includeMockups || includeBreakdownReport;
+  const creditCost = isFullAnalysis ? CREDIT_COSTS.FULL_ANALYSIS : CREDIT_COSTS.STANDARD_ANALYSIS;
 
   // Check credit availability
   const { data: creditCheck, isLoading: checkingCredits } = useQuery<AiCreditCheck>({
@@ -174,22 +179,33 @@ export function AIAnalysisButton({
                 </Badge>
               </div>
 
-              {!creditCheck.hasCredits && (
+              {/* Credit cost for this analysis */}
+              <div className="flex items-center justify-between p-3 bg-violet-50 dark:bg-violet-950/30 rounded-lg border border-violet-200 dark:border-violet-800">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-violet-500" />
+                  <span className="text-sm font-medium">This analysis costs</span>
+                </div>
+                <Badge variant="secondary" className="bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300">
+                  {creditCost} credits
+                </Badge>
+              </div>
+
+              {creditCheck.creditsRemaining < creditCost && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    No credits remaining. This analysis will incur an overage charge of{' '}
-                    <strong>${creditCheck.overageCost}</strong>.
+                    Not enough credits remaining. This analysis will incur an overage charge of{' '}
+                    <strong>${(creditCost * parseFloat(creditCheck.overageCost || '0')).toFixed(2)}</strong>.
                   </AlertDescription>
                 </Alert>
               )}
 
-              {creditCheck.isOverage && creditCheck.hasCredits && (
+              {creditCheck.isOverage && creditCheck.creditsRemaining >= creditCost && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
                     You're in overage mode. This analysis will cost{' '}
-                    <strong>${creditCheck.overageCost}</strong>.
+                    <strong>${(creditCost * parseFloat(creditCheck.overageCost || '0')).toFixed(2)}</strong>.
                   </AlertDescription>
                 </Alert>
               )}

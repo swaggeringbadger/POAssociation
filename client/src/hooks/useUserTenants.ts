@@ -162,7 +162,8 @@ export function useUserTenants() {
       setAvailableRolesForCurrentTenant(rolesForTenant);
 
       // If current role is not available for this tenant, pick the highest privilege role
-      if (!rolesForTenant.includes(currentUserRole)) {
+      // Exception: 'contractor' is a cross-tenant role, don't reset it
+      if (!rolesForTenant.includes(currentUserRole) && currentUserRole !== 'contractor') {
         const defaultRole = getHighestPrivilegeRole(rolesForTenant);
         setCurrentUserRole(defaultRole);
         // Sync new role with backend when tenant changes and role needs adjustment

@@ -4,14 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import {
@@ -26,6 +21,7 @@ interface ContractorProfile {
   userId: string;
   companyName: string | null;
   businessType: string | null;
+  areasOfExpertise: string[] | null;
   licenseNumber: string | null;
   businessPhone: string | null;
   businessEmail: string | null;
@@ -37,9 +33,10 @@ interface ContractorProfile {
   successfulReferrals: number;
 }
 
-const BUSINESS_TYPES = [
+// Areas of expertise that contractors can select (multi-select)
+const AREAS_OF_EXPERTISE = [
   { value: 'general_contractor', label: 'General Contractor' },
-  { value: 'landscaper', label: 'Landscaper' },
+  { value: 'landscaping', label: 'Landscaping' },
   { value: 'fencing', label: 'Fencing' },
   { value: 'roofing', label: 'Roofing' },
   { value: 'pool', label: 'Pool/Spa' },
@@ -47,7 +44,11 @@ const BUSINESS_TYPES = [
   { value: 'hvac', label: 'HVAC' },
   { value: 'electrical', label: 'Electrical' },
   { value: 'plumbing', label: 'Plumbing' },
-  { value: 'architect', label: 'Architect' },
+  { value: 'architect', label: 'Architect/Design' },
+  { value: 'exterior_modifications', label: 'Exterior Modifications' },
+  { value: 'structural_changes', label: 'Structural Changes' },
+  { value: 'outdoor_structures', label: 'Outdoor Structures' },
+  { value: 'signage', label: 'Signage' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -61,7 +62,7 @@ export default function ContractorProfile() {
   // Form state
   const [formData, setFormData] = useState({
     companyName: '',
-    businessType: '',
+    areasOfExpertise: [] as string[],
     licenseNumber: '',
     businessPhone: '',
     businessEmail: '',
@@ -138,7 +139,7 @@ export default function ContractorProfile() {
     if (profile) {
       setFormData({
         companyName: profile.companyName || '',
-        businessType: profile.businessType || '',
+        areasOfExpertise: profile.areasOfExpertise || [],
         licenseNumber: profile.licenseNumber || '',
         businessPhone: profile.businessPhone || '',
         businessEmail: profile.businessEmail || '',
@@ -147,6 +148,16 @@ export default function ContractorProfile() {
       });
     }
     setIsEditing(true);
+  };
+
+  // Toggle expertise area selection
+  const toggleExpertise = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      areasOfExpertise: prev.areasOfExpertise.includes(value)
+        ? prev.areasOfExpertise.filter((v) => v !== value)
+        : [...prev.areasOfExpertise, value],
+    }));
   };
 
   const handleSave = () => {
@@ -212,24 +223,6 @@ export default function ContractorProfile() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessType">Business Type</Label>
-                  <Select
-                    value={formData.businessType}
-                    onValueChange={(value) => setFormData({ ...formData, businessType: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BUSINESS_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="licenseNumber">License Number</Label>
                   <Input
                     id="licenseNumber"
@@ -258,7 +251,7 @@ export default function ContractorProfile() {
                     placeholder="contact@abccontractors.com"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="website">Website</Label>
                   <Input
                     id="website"
@@ -266,6 +259,33 @@ export default function ContractorProfile() {
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                     placeholder="https://abccontractors.com"
                   />
+                </div>
+              </div>
+
+              {/* Areas of Expertise - Multi-select */}
+              <div className="space-y-3 pt-4 border-t">
+                <div>
+                  <Label>Areas of Expertise</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Select all the types of work you specialize in
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {AREAS_OF_EXPERTISE.map((area) => (
+                    <div key={area.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`create-${area.value}`}
+                        checked={formData.areasOfExpertise.includes(area.value)}
+                        onCheckedChange={() => toggleExpertise(area.value)}
+                      />
+                      <label
+                        htmlFor={`create-${area.value}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {area.label}
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -439,24 +459,6 @@ export default function ContractorProfile() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessType">Business Type</Label>
-                  <Select
-                    value={formData.businessType}
-                    onValueChange={(value) => setFormData({ ...formData, businessType: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BUSINESS_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="licenseNumber">License Number</Label>
                   <Input
                     id="licenseNumber"
@@ -485,7 +487,7 @@ export default function ContractorProfile() {
                     placeholder="contact@abccontractors.com"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="website">Website</Label>
                   <Input
                     id="website"
@@ -493,6 +495,33 @@ export default function ContractorProfile() {
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                     placeholder="https://abccontractors.com"
                   />
+                </div>
+              </div>
+
+              {/* Areas of Expertise - Multi-select */}
+              <div className="space-y-3 pt-4 border-t">
+                <div>
+                  <Label>Areas of Expertise</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Select all the types of work you specialize in
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {AREAS_OF_EXPERTISE.map((area) => (
+                    <div key={area.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`edit-${area.value}`}
+                        checked={formData.areasOfExpertise.includes(area.value)}
+                        onCheckedChange={() => toggleExpertise(area.value)}
+                      />
+                      <label
+                        htmlFor={`edit-${area.value}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {area.label}
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -526,12 +555,6 @@ export default function ContractorProfile() {
                 <p className="font-medium">{profile.companyName || '-'}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Business Type</p>
-                <p className="font-medium">
-                  {BUSINESS_TYPES.find((t) => t.value === profile.businessType)?.label || profile.businessType || '-'}
-                </p>
-              </div>
-              <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">License Number</p>
                 <p className="font-medium">{profile.licenseNumber || '-'}</p>
               </div>
@@ -554,6 +577,23 @@ export default function ContractorProfile() {
                     '-'
                   )}
                 </p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <p className="text-sm text-muted-foreground">Areas of Expertise</p>
+                <div className="flex flex-wrap gap-2">
+                  {profile.areasOfExpertise && profile.areasOfExpertise.length > 0 ? (
+                    profile.areasOfExpertise.map((area) => {
+                      const areaInfo = AREAS_OF_EXPERTISE.find((a) => a.value === area);
+                      return (
+                        <Badge key={area} variant="secondary">
+                          {areaInfo?.label || area}
+                        </Badge>
+                      );
+                    })
+                  ) : (
+                    <span className="text-muted-foreground">No areas selected</span>
+                  )}
+                </div>
               </div>
               <div className="space-y-1 md:col-span-2">
                 <p className="text-sm text-muted-foreground">Publicly Searchable</p>

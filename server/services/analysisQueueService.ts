@@ -203,10 +203,16 @@ export class AnalysisQueueService {
     // Deduct credit and log usage (consolidated to new community subscription system)
     try {
       const usageTrackingService = await getUsageTrackingService();
+      // Determine analysis type based on job options
+      // "Full" analysis includes mockups, breakdown report, or property research
+      const jobOpts = (analysis.jobOptions || {}) as { includeMockups?: boolean; includeBreakdownReport?: boolean; includePropertyResearch?: boolean };
+      const isFullAnalysis = jobOpts.includeMockups || jobOpts.includeBreakdownReport || jobOpts.includePropertyResearch;
+
       await usageTrackingService.logAiAnalysis(
         analysis.tenantId,
         analysis.requestedByUserId,
-        analysis.id
+        analysis.id,
+        isFullAnalysis ? 'full' : 'standard'
       );
     } catch (e) {
       console.error('[AnalysisQueue] Failed to track usage:', e);

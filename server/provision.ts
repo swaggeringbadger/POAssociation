@@ -210,6 +210,27 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
     });
     console.log('✅ Created property rep assignments');
 
+    // 4c. Create Contractor Profile for Alex
+    // Alex runs a landscaping business across multiple communities
+    console.log('Creating contractor profile for Alex...');
+    const alexContractor = await storage.createContractor({
+      userId: demoUsers[3].id,  // Alex
+      companyName: "Rivera Landscaping & Design",
+      businessType: "landscaper",
+      areasOfExpertise: ["landscaping", "fencing", "outdoor_structures"],
+      licenseNumber: `LC-${suffix.toUpperCase()}-2024`,
+      isLicenseVerified: true,
+      businessPhone: "(555) 234-5678",
+      businessEmail: `alex.contractor-${suffix}@poassociation.com`,
+      website: "https://riveralandscaping.example.com",
+      serviceArea: "Greater Metro Area - Markland, Whispering Pines, and surrounding communities",
+      isPubliclySearchable: true,
+      referralCode: `RIVERA${suffix.slice(-4).toUpperCase()}`,
+      referralCodeCreatedAt: new Date(),
+      demoCodeId,
+    });
+    console.log('✅ Created contractor profile for Alex');
+
     // 5. Create Form Templates
     console.log('Creating form templates...');
     const formTemplates = await Promise.all([
@@ -264,6 +285,30 @@ export async function provisionDemoEcosystem(demoCodeId: string): Promise<DemoEc
       formTemplates,
     });
     console.log(`✅ Created ${applications.length} sample applications`);
+
+    // 6b. Add Alex as contractor collaborator on landscaping applications
+    // This demonstrates cross-community contractor work
+    console.log('Adding contractor collaborations for Alex...');
+    const landscapingApps = applications.filter(app =>
+      app.title?.toLowerCase().includes('landscaping') ||
+      app.title?.toLowerCase().includes('tree') ||
+      app.title?.toLowerCase().includes('planting') ||
+      app.projectType === 'landscaping'
+    ).slice(0, 3);  // Get up to 3 landscaping-related apps
+
+    for (const app of landscapingApps) {
+      await storage.createApplicationCollaborator({
+        applicationId: app.id,
+        contractorId: alexContractor.id,
+        invitedByUserId: demoUsers[1].id,  // Sarah invited
+        status: 'active',
+        acceptedAt: new Date(),
+        canEditForm: true,
+        canUploadDocuments: true,
+        demoCodeId,
+      });
+    }
+    console.log(`✅ Added Alex as contractor on ${landscapingApps.length} applications`);
 
     // 7. Create AI Analysis credits for demo tenants
     // Give demo tenants generous credits to showcase AI analysis feature

@@ -380,22 +380,27 @@ class CommunitySubscriptionService {
   }
 
   /**
-   * Deduct a credit (called after successful AI analysis)
+   * Deduct credits (called after successful AI analysis)
+   * @param communityId - The community to deduct credits from
+   * @param count - Number of credits to deduct (default: 1)
    */
-  async deductCredit(communityId: string): Promise<{
+  async deductCredit(communityId: string, count: number = 1): Promise<{
     newCreditsUsed: number;
     wasOverage: boolean;
     overageCost: number | null;
+    creditsDeducted: number;
   }> {
     const subscription = await this.getSubscription(communityId);
     if (!subscription) {
       throw new Error(`No subscription found for community ${communityId}`);
     }
 
-    const newCreditsUsed = subscription.aiCreditsUsed + 1;
+    const newCreditsUsed = subscription.aiCreditsUsed + count;
     const effectiveCredits = subscription.effectiveCredits || 0;
     const wasOverage = newCreditsUsed > effectiveCredits;
-    const overageCost = wasOverage ? subscription.effectiveOverageCost || 4.99 : null;
+    // Calculate overage cost for all credits that exceed the limit
+    const overageCredits = wasOverage ? Math.min(count, newCreditsUsed - effectiveCredits) : 0;
+    const overageCost = overageCredits > 0 ? (subscription.effectiveOverageCost || 4.99) * overageCredits : null;
 
     await db
       .update(schema.communitySubscriptions)
@@ -405,7 +410,7 @@ class CommunitySubscriptionService {
       })
       .where(eq(schema.communitySubscriptions.communityId, communityId));
 
-    return { newCreditsUsed, wasOverage, overageCost };
+    return { newCreditsUsed, wasOverage, overageCost, creditsDeducted: count };
   }
 
   /**

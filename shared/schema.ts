@@ -1499,7 +1499,8 @@ export const contractors = pgTable("contractors", {
 
   // Business info
   companyName: text("company_name"),
-  businessType: text("business_type"), // See contractorBusinessTypeSchema
+  businessType: text("business_type"), // Primary business type (legacy, prefer areasOfExpertise)
+  areasOfExpertise: jsonb("areas_of_expertise").$type<string[]>().default([]), // Array of expertise areas
   licenseNumber: text("license_number"),
   isLicenseVerified: boolean("is_license_verified").default(false),
 

@@ -1,11 +1,39 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-18
-**Current Session:** Memory Refresh & Documentation Update
+**Last Updated:** 2025-12-21
+**Current Session:** Alex Rivera Contractor Persona
 
 ---
 
 ## CURRENT STATE SUMMARY
+
+### Just Completed: Alex Rivera Contractor Persona
+
+Added a contractor profile to Alex Rivera's demo persona. Alex now has dual roles:
+1. **Board Contributor** at Markland POA (existing)
+2. **Contractor** running "Rivera Landscaping & Design" (NEW)
+
+**Changes Made:**
+- `server/provision.ts` - Creates contractor profile for Alex with landscaping business
+- `client/src/pages/DemoPersonaSelect.tsx` - Updated Alex's card to show "Board Contributor & Contractor"
+- `scripts/add-alex-contractor-to-existing-demos.ts` - Migration script (already run)
+
+**Existing Demos Updated:**
+All 5 existing demo codes were updated with Alex's contractor profile:
+- MARKLAND, DEMO-KM5UYH, TEST2024, DEMO2024, MARKLAND2
+
+**Alex's Contractor Details:**
+- Company: "Rivera Landscaping & Design"
+- Business Type: landscaper
+- Service Area: Greater Metro Area
+- Referral Code: RIVERA{suffix}
+
+**User Experience:**
+- Log in as Alex via demo persona selection
+- Navigate to `/contractor` for contractor dashboard
+- See landscaping applications across multiple communities
+
+---
 
 ### Work In Progress (Uncommitted Changes)
 
@@ -225,7 +253,9 @@ server/emailTemplateRegistry.ts
 | **Emily** | Emily Foster | management_manager, account_admin | Full access to all |
 | **Sarah** | Sarah Chen | poa_board_member, homeowner | Board + homeowner at Markland |
 | **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
-| **Alex** | Alex Rivera | poa_board_contributor | Contributor at Markland |
+| **Alex** | Alex Rivera | poa_board_contributor, **contractor** | Contributor at Markland + Landscaping business |
+
+**Note:** Alex has a dual role - he's on the Markland board AND runs "Rivera Landscaping & Design" serving multiple communities.
 
 ---
 

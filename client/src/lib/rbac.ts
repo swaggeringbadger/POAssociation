@@ -198,6 +198,44 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
+  // Contractor Routes - all authenticated users including contractors
+  '/contractor': [
+    'contractor',
+    'homeowner',
+    'poa_board_contributor',
+    'poa_board_member',
+    'delegated_rep',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+  '/contractor/profile': [
+    'contractor',
+    'homeowner',
+    'poa_board_contributor',
+    'poa_board_member',
+    'delegated_rep',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+  '/contractor/referrals': [
+    'contractor',
+    'homeowner',
+    'poa_board_contributor',
+    'poa_board_member',
+    'delegated_rep',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+
   // Admin Routes - super admin only
   '/admin/management-companies': ['super_admin'],
   '/admin/communities': ['super_admin'],

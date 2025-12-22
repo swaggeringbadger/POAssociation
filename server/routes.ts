@@ -6772,9 +6772,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create contractor profile if not exists
         let contractor = await storage.getContractorByUserId(userId);
         if (!contractor) {
+          // Get the application to determine initial expertise area
+          let initialExpertise: string[] = [];
+          if (invitation.applicationId) {
+            const app = await storage.getApplication(invitation.applicationId);
+            if (app?.projectType) {
+              // Map application project type to contractor expertise areas
+              const projectTypeToExpertise: Record<string, string> = {
+                'exterior-modifications': 'exterior_modifications',
+                'structural-changes': 'structural_changes',
+                'landscaping': 'landscaping',
+                'fencing': 'fencing',
+                'outdoor-structures': 'outdoor_structures',
+                'signage': 'signage',
+              };
+              const expertise = projectTypeToExpertise[app.projectType];
+              if (expertise) {
+                initialExpertise = [expertise];
+              }
+            }
+          }
+
           contractor = await storage.createContractor({
             userId,
             isPubliclySearchable: true,
+            areasOfExpertise: initialExpertise,
           });
         }
 
@@ -7105,6 +7127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         companyName,
         businessType,
+        areasOfExpertise,
         licenseNumber,
         businessPhone,
         businessEmail,
@@ -7117,6 +7140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         companyName,
         businessType,
+        areasOfExpertise: areasOfExpertise || [],
         licenseNumber,
         businessPhone,
         businessEmail,
@@ -7152,6 +7176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         companyName,
         businessType,
+        areasOfExpertise,
         licenseNumber,
         businessPhone,
         businessEmail,
@@ -7163,6 +7188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateContractor(id, {
         companyName,
         businessType,
+        areasOfExpertise,
         licenseNumber,
         businessPhone,
         businessEmail,

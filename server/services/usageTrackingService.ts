@@ -9,6 +9,7 @@ import { db } from '../storage';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 import { communitySubscriptionService } from './communitySubscriptionService';
+import { CREDIT_COSTS } from '@shared/subscriptionTypes';
 
 export type UsageEventType =
   | 'ai_analysis'
@@ -100,18 +101,25 @@ class UsageTrackingService {
   }
 
   /**
-   * Log an AI analysis event and deduct credit
+   * Log an AI analysis event and deduct credits
+   * @param analysisType - 'standard' or 'full' to determine credit cost
    */
   async logAiAnalysis(
     communityId: string,
     userId: string,
-    analysisId: string
+    analysisId: string,
+    analysisType: 'standard' | 'full' = 'standard'
   ): Promise<CreditDeductionResult> {
+    // Determine credit cost based on analysis type
+    const creditsToDeduct = analysisType === 'full'
+      ? CREDIT_COSTS.FULL_ANALYSIS
+      : CREDIT_COSTS.STANDARD_ANALYSIS;
+
     // Check current credit status
     const creditStatus = await communitySubscriptionService.checkCredits(communityId);
 
-    // Deduct credit
-    const deduction = await communitySubscriptionService.deductCredit(communityId);
+    // Deduct credits
+    const deduction = await communitySubscriptionService.deductCredit(communityId, creditsToDeduct);
 
     // Log the event
     const event = await this.logEvent({
@@ -119,11 +127,12 @@ class UsageTrackingService {
       eventType: 'ai_analysis',
       entityType: 'ai_analysis',
       entityId: analysisId,
-      creditsUsed: 1,
+      creditsUsed: creditsToDeduct,
       isOverage: deduction.wasOverage,
       costAtTime: deduction.overageCost || undefined,
       metadata: {
-        creditsBefore: deduction.newCreditsUsed - 1,
+        analysisType,
+        creditsBefore: deduction.newCreditsUsed - creditsToDeduct,
         creditsAfter: deduction.newCreditsUsed,
         wasOverage: deduction.wasOverage,
       },

@@ -344,12 +344,25 @@ export interface CustomPricingInput {
 export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
 
 /**
+ * Credit costs per feature - CENTRALIZED CONSTANTS
+ * Update these values to change credit costs across the entire system.
+ */
+export const CREDIT_COSTS = {
+  /** Standard AI Analysis: compliance review + satellite imagery */
+  STANDARD_ANALYSIS: 2,
+  /** Full AI Analysis: Standard + mockup + property research + breakdown */
+  FULL_ANALYSIS: 4,
+  /** AI Form Generation: generate custom application forms */
+  AI_FORM_GENERATION: 2,
+} as const;
+
+/**
  * Default tier definitions (for reference, actual values from DB)
  *
  * Pricing model: Everyone gets ALL features. Premium operations cost Credits.
- * - Standard Analysis: 1 credit (compliance review + satellite)
- * - Full Analysis: 2 credits (+ mockup + property research + breakdown)
- * - AI Form Generation: 1 credit
+ * - Standard Analysis: 2 credits (compliance review + satellite)
+ * - Full Analysis: 4 credits (+ mockup + property research + breakdown)
+ * - AI Form Generation: 2 credits
  *
  * Overage costs are tiered by community size (volume discount).
  */

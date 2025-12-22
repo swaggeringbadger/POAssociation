@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { NAV_ITEMS, SUPER_ADMIN_NAV_ITEMS } from "@/lib/mock-data";
+import { NAV_ITEMS, SUPER_ADMIN_NAV_ITEMS, CONTRACTOR_NAV_ITEMS } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
@@ -136,6 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       'account_admin': '⚙️',
       'delegated_rep': '📝',
       'super_admin': '👑',
+      'contractor': '🔧',
     };
     return icons[role] || '👤';
   };
@@ -283,7 +284,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Navigation */}
             <SidebarMenu>
-              {NAV_ITEMS.filter(item =>
+              {(currentUserRole === 'contractor' ? CONTRACTOR_NAV_ITEMS : NAV_ITEMS).filter(item =>
                 // Filter menu items based on user's role
                 currentUserRole && item.roles?.includes(currentUserRole)
               ).map((item) => {
@@ -356,8 +357,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarContent>
 
           <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
-            {/* Role Switcher - Only show if user has multiple roles on current tenant */}
-            {availableRolesForCurrentTenant.length > 1 && (
+            {/* Role Switcher - Show if user has multiple roles OR has contractor profile */}
+            {(availableRolesForCurrentTenant.length > 1 || isContractor) && (
               <div className="space-y-2">
                 <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider px-2">
                   Active Role
@@ -366,8 +367,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" className="w-full justify-between bg-sidebar-accent/50 border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-auto py-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-base">{getRoleIcon(currentUserRole)}</span>
-                        <span className="text-sm font-medium">{formatRole(currentUserRole)}</span>
+                        <span className="text-base">{currentUserRole === 'contractor' ? '🔧' : getRoleIcon(currentUserRole)}</span>
+                        <span className="text-sm font-medium">{currentUserRole === 'contractor' ? 'Contractor' : formatRole(currentUserRole)}</span>
                       </div>
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
@@ -404,6 +405,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         )}
                       </DropdownMenuItem>
                     ))}
+                    {/* Contractor option - only show if user has contractor profile */}
+                    {isContractor && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            // Update session on backend
+                            try {
+                              await fetch('/api/auth/switch-role', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({ role: 'contractor' }),
+                              });
+                            } catch (error) {
+                              console.error('Failed to switch role on backend:', error);
+                            }
+
+                            // Update client-side store
+                            setCurrentUserRole('contractor');
+                            window.location.href = '/contractor';
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <span className="mr-2 text-base">🔧</span>
+                          <span>Contractor ({contractorProfile?.companyName || 'My Business'})</span>
+                          {currentUserRole === 'contractor' && (
+                            <Badge variant="secondary" className="ml-auto text-[10px]">Active</Badge>
+                          )}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -422,8 +455,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="flex flex-col overflow-hidden text-left flex-1">
                     <span className="text-sm font-medium truncate">{displayName}</span>
                     <span className="text-xs text-sidebar-foreground/60 truncate">
-                      {availableRolesForCurrentTenant.length > 1 ? (
-                        `${availableRolesForCurrentTenant.length} roles`
+                      {currentUserRole === 'contractor' ? (
+                        contractorProfile?.companyName || 'Contractor'
+                      ) : (availableRolesForCurrentTenant.length + (isContractor ? 1 : 0)) > 1 ? (
+                        `${availableRolesForCurrentTenant.length + (isContractor ? 1 : 0)} roles`
                       ) : (
                         currentUserRole ? formatRole(currentUserRole) : 'Loading...'
                       )}

@@ -892,6 +892,7 @@ class ApiClient {
   async createContractorProfile(data: {
     companyName?: string;
     businessType?: string;
+    areasOfExpertise?: string[];
     licenseNumber?: string;
     businessPhone?: string;
     businessEmail?: string;

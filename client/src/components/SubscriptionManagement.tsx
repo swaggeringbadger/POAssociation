@@ -11,6 +11,7 @@ import { Loader2, Zap, Building2, Calendar, TrendingUp, AlertCircle } from "luci
 import { toast } from "sonner";
 import {
   getTierCodeByDoorCount,
+  CREDIT_COSTS,
   type CommunityTierCode,
   type CommunitySubscriptionWithTier,
   type CommunityTierDef,
@@ -372,17 +373,17 @@ export default function SubscriptionManagement() {
           <div className="space-y-3">
             <CreditItem
               name="Standard AI Analysis"
-              credits={1}
+              credits={CREDIT_COSTS.STANDARD_ANALYSIS}
               description="AI compliance review with satellite imagery"
             />
             <CreditItem
               name="Full AI Analysis"
-              credits={2}
+              credits={CREDIT_COSTS.FULL_ANALYSIS}
               description="Everything in Standard + AI mockup, property research, detailed breakdown"
             />
             <CreditItem
               name="AI Form Generation"
-              credits={1}
+              credits={CREDIT_COSTS.AI_FORM_GENERATION}
               description="Generate custom application forms from your guidelines"
             />
           </div>

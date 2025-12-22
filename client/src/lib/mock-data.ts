@@ -11,7 +11,8 @@ export type Role =
   | 'poa_board_member'
   | 'poa_board_contributor'
   | 'homeowner'
-  | 'delegated_rep';
+  | 'delegated_rep'
+  | 'contractor';
 
 export interface User {
   id: string;
@@ -114,6 +115,28 @@ export const NAV_ITEMS = [
     icon: Settings,
     href: '/settings',
     roles: ['poa_board_member', 'management_manager', 'account_admin', 'super_admin']
+  },
+];
+
+// Contractor-specific navigation items
+export const CONTRACTOR_NAV_ITEMS = [
+  {
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    href: '/contractor',
+    roles: ['contractor']
+  },
+  {
+    label: 'My Profile',
+    icon: Building2,
+    href: '/contractor/profile',
+    roles: ['contractor']
+  },
+  {
+    label: 'Referrals',
+    icon: Users,
+    href: '/contractor/referrals',
+    roles: ['contractor']
   },
 ];
 
