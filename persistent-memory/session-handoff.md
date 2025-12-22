@@ -1,202 +1,127 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-21
-**Current Session:** Alex Rivera Contractor Persona
+**Last Updated:** 2025-12-22
+**Current Session:** Contractor Enhancements & AI Credit Changes
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed: Alex Rivera Contractor Persona
+### Just Completed (2025-12-22)
 
-Added a contractor profile to Alex Rivera's demo persona. Alex now has dual roles:
-1. **Board Contributor** at Markland POA (existing)
-2. **Contractor** running "Rivera Landscaping & Design" (NEW)
+#### 1. Contractor Role Switching Fix
+Fixed contractor role not persisting in sidebar when switching contexts.
 
 **Changes Made:**
-- `server/provision.ts` - Creates contractor profile for Alex with landscaping business
-- `client/src/pages/DemoPersonaSelect.tsx` - Updated Alex's card to show "Board Contributor & Contractor"
-- `scripts/add-alex-contractor-to-existing-demos.ts` - Migration script (already run)
+- `client/src/lib/rbac.ts` - Added 'contractor' to route permissions for /contractor routes
+- `client/src/lib/mock-data.ts` - Added 'contractor' to Role type, added CONTRACTOR_NAV_ITEMS
+- `client/src/components/layout/DashboardLayout.tsx` - Shows contractor nav when role is 'contractor', persists role to backend
+- `client/src/hooks/useUserTenants.ts` - Exception to prevent 'contractor' role from being reset by tenant logic
 
-**Existing Demos Updated:**
-All 5 existing demo codes were updated with Alex's contractor profile:
-- MARKLAND, DEMO-KM5UYH, TEST2024, DEMO2024, MARKLAND2
+#### 2. Contractor Areas of Expertise (Multi-Select)
+Added ability for contractors to specify multiple areas of expertise.
 
-**Alex's Contractor Details:**
-- Company: "Rivera Landscaping & Design"
-- Business Type: landscaper
-- Service Area: Greater Metro Area
-- Referral Code: RIVERA{suffix}
+**Changes Made:**
+- `shared/schema.ts` - Added `areasOfExpertise` JSONB column to contractors table
+- `client/src/pages/ContractorProfile.tsx` - Multi-select checkboxes for 15 expertise areas
+- `server/routes.ts` - Updated POST/PATCH endpoints to handle areasOfExpertise
+- `client/src/lib/api.ts` - Updated API client types
+- `server/provision.ts` - Alex's profile includes landscaping, fencing, outdoor_structures
 
-**User Experience:**
-- Log in as Alex via demo persona selection
-- Navigate to `/contractor` for contractor dashboard
-- See landscaping applications across multiple communities
+**Available Expertise Areas:**
+- General Contractor, Landscaping, Fencing, Roofing, Pool/Spa
+- Painting, HVAC, Electrical, Plumbing, Architect/Design
+- Exterior Modifications, Structural Changes, Outdoor Structures, Signage, Other
+
+**Invitation Flow:**
+When a contractor accepts an invitation and doesn't have a profile, the system creates one with initial expertise based on the application's project type.
+
+#### 3. Doubled AI Credit Costs (Centralized)
+Created centralized credit cost constants and doubled all values.
+
+**New Constants** (`shared/subscriptionTypes.ts`):
+```typescript
+export const CREDIT_COSTS = {
+  STANDARD_ANALYSIS: 2,   // was 1
+  FULL_ANALYSIS: 4,       // was 2
+  AI_FORM_GENERATION: 2,  // was 1
+} as const;
+```
+
+**Changes Made:**
+- `shared/subscriptionTypes.ts` - Added CREDIT_COSTS constants
+- `client/src/components/SubscriptionManagement.tsx` - Uses CREDIT_COSTS in "What Uses Credits"
+- `server/services/communitySubscriptionService.ts` - deductCredit() accepts count parameter
+- `server/services/usageTrackingService.ts` - logAiAnalysis() accepts analysisType, uses CREDIT_COSTS
+- `server/services/analysisQueueService.ts` - Determines analysis type from job options
+- `client/src/components/ai-analysis/AIAnalysisButton.tsx` - Shows dynamic credit cost based on options
+
+**Credit Cost Logic:**
+- Standard (satellite only): 2 credits
+- Full (mockups OR breakdown report OR property research): 4 credits
 
 ---
 
-### Work In Progress (Uncommitted Changes)
+### Commit Made
+```
+665f62b Add contractor areas of expertise and double AI credit costs
+```
 
-Based on git status, the following features have been developed but not yet committed:
+18 files changed, 470 insertions, 99 deletions
 
-#### 1. Co-Applicant System (Major Feature)
-**Status:** Schema complete, backend routes added, frontend components created
+---
 
-**New Database Tables:**
-- `household_members` - Links household members to primary homeowners within a tenant
-- `contractors` - Contractor profiles (cross-tenant, linked to user)
-- `application_collaborators` - Links contractors to specific applications
-- `invitations` - Universal invitation tracking (household members + contractors)
-- `contractor_referrals` - Track POA signups via contractor referral codes
+## WORK IN PROGRESS (From Previous Sessions)
 
-**New Frontend Pages:**
-- `ContractorDashboard.tsx` - Contractor's main dashboard
-- `ContractorProfile.tsx` - Contractor profile management
-- `ContractorReferrals.tsx` - Contractor referral tracking
-- `HouseholdSettings.tsx` - Manage household members
-- `InvitationAccept.tsx` - Accept invitation flow
-- `ReferralLanding.tsx` - Landing page for referral links
+The following features were developed in earlier sessions and are now committed:
 
-**New Components:**
-- `InviteContractorDialog.tsx` - Dialog to invite contractor to application
-- `InviteHouseholdMemberDialog.tsx` - Dialog to invite household member
-- `ProcessingOverlay.tsx` - Full-screen processing indicator
-- `QRCodeDisplay.tsx` - QR code display component
-
-**Migration:** `migrations/0002_co_applicant_system.sql` - Full migration ready
+#### 1. Co-Applicant System
+- Household members linked to primary homeowners
+- Contractor profiles (cross-tenant)
+- Application collaborators
+- Invitation system
 
 #### 2. Tour/Onboarding System
-**Status:** Components created, admin customization ready
-
-**New Database Tables:**
-- `user_tour_progress` - Tracks which page tours a user has completed per role
-- `tour_content_overrides` - Admin customizations to tour content
-
-**New Files:**
-- `client/src/components/tour/` - Tour UI components
-- `client/src/lib/tour/` - Tour logic and content
-- `client/src/pages/admin/TourContent.tsx` - Admin tour management
+- Role-based guided tours
+- Admin tour customization
+- User progress tracking
 
 #### 3. Email Template System
-**Status:** Backend complete, admin UI created
-
-**New Files:**
-- `server/emailTemplateRegistry.ts` - Centralized email template registry
-- `client/src/pages/admin/EmailTemplates.tsx` - Admin email template management
-
-**Enhanced:**
-- `server/emailService.ts` - Extended email service
-- `server/emailTemplates.ts` - Additional email templates
+- Centralized email template registry
+- Admin email template management
 
 #### 4. Inter-App Sync with HomeHub
-**Status:** Functional, dev instructions system added
-
-**New Database Tables:**
-- `sync_events` - Track sync events for debugging/audit
-- `dev_instructions` - Claude-to-Claude developer instructions across apps
-
-**New Files:**
-- `scripts/send-homehub-instruction.ts` - Script to send instructions to HomeHub
-
-**Enhanced:**
-- `server/sync/client.ts` - Sync client improvements
-
-#### 5. Other Enhancements
-- `ApplicationWizard.tsx` - Enhanced with co-applicant support
-- `ApplicationDetail.tsx` - Enhanced with collaborator display
-- `DashboardLayout.tsx` - New navigation items
-- `App.tsx` - New routes for contractor/household pages
-- `rbac.ts` - Added contractor role support
-- `api.ts` - ~370 new lines for new endpoints
-- `routes.ts` - ~1180 new lines for new API endpoints
-- `storage.ts` - ~618 new lines for new storage methods
+- Sync events tracking
+- Developer instructions across apps
 
 ---
 
-## MIGRATION STATUS
+## DATABASE STATUS
 
-**Pending Migration:** `migrations/0002_co_applicant_system.sql`
-
-This migration adds:
-- 12 new tables (contractors, household_members, invitations, etc.)
-- New columns on existing tables (ai_analyses, applications, events, tenants, user_tenant_roles, workflow_templates)
-- All required indexes and foreign keys
-
-**To apply:**
-```bash
-npm run db:push
+The `areasOfExpertise` column was added directly to the contractors table:
+```sql
+ALTER TABLE contractors ADD COLUMN areas_of_expertise JSONB DEFAULT '[]'::jsonb;
 ```
 
----
-
-## FILES MODIFIED (Not Committed)
-
-### Major Changes:
-| File | Lines Changed | Description |
-|------|---------------|-------------|
-| `server/routes.ts` | +1181 | Co-applicant, contractor, invitation endpoints |
-| `server/storage.ts` | +618 | Storage methods for new tables |
-| `shared/schema.ts` | +342 | New tables and types |
-| `client/src/lib/api.ts` | +371 | API client for new endpoints |
-| `client/src/components/ApplicationWizard.tsx` | +272 | Co-applicant integration |
-| `server/emailTemplates.ts` | +279 | New email templates |
-| `server/emailService.ts` | +193 | Enhanced email service |
-
-### New Files (Untracked):
-```
-client/src/components/InviteContractorDialog.tsx
-client/src/components/InviteHouseholdMemberDialog.tsx
-client/src/components/ProcessingOverlay.tsx
-client/src/components/QRCodeDisplay.tsx
-client/src/components/admin/
-client/src/components/tour/
-client/src/lib/tour/
-client/src/pages/ContractorDashboard.tsx
-client/src/pages/ContractorProfile.tsx
-client/src/pages/ContractorReferrals.tsx
-client/src/pages/HouseholdSettings.tsx
-client/src/pages/InvitationAccept.tsx
-client/src/pages/ReferralLanding.tsx
-client/src/pages/admin/EmailTemplates.tsx
-client/src/pages/admin/TourContent.tsx
-migrations/0002_co_applicant_system.sql
-scripts/send-homehub-instruction.ts
-server/emailTemplateRegistry.ts
+All existing Alex contractor profiles were updated:
+```sql
+UPDATE contractors SET areas_of_expertise = '["landscaping", "fencing", "outdoor_structures"]'::jsonb
+WHERE company_name = 'Rivera Landscaping & Design';
 ```
 
 ---
 
 ## NEXT STEPS
 
-### Immediate Priorities
-
-1. **Apply Database Migration**
-   ```bash
-   npm run db:push
-   ```
-
-2. **Test Co-Applicant Flow**
-   - Login as homeowner
-   - Go to Household Settings
-   - Invite a household member
-   - Test invitation acceptance flow
-
-3. **Test Contractor Flow**
-   - Create contractor profile
-   - Invite contractor to application
-   - Test contractor dashboard
-
-4. **Test Tour System**
-   - Login as different roles
-   - Verify tours appear on first visit
-   - Test admin tour customization
+### Testing Priorities
+1. **Contractor Role Switching** - Switch to contractor role in sidebar, verify it persists
+2. **Areas of Expertise** - Edit contractor profile, select multiple expertise areas
+3. **AI Credit Costs** - Check "What Uses Credits" shows 2/4/2, run analysis to verify deduction
 
 ### Future Enhancements
-
-- Contractor license verification integration
-- Contractor search/directory for homeowners
-- Tour analytics (completion rates, drop-off points)
-- Email delivery tracking
+- Contractor search by expertise area
+- Contractor license verification
+- AI analysis cost estimation before running
 
 ---
 
@@ -213,9 +138,9 @@ server/emailTemplateRegistry.ts
 - Property-rep assignment system
 - Community custom landing pages
 - Recurring events support
-- **Co-applicant system** (NEW - household members + contractors)
-- **Onboarding tours** (NEW - role-based guided tours)
-- **Inter-app sync** (NEW - HomeHub integration)
+- Co-applicant system (household members + contractors)
+- Onboarding tours (role-based guided tours)
+- Inter-app sync (HomeHub integration)
 
 ### Tech Stack
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 + shadcn/ui
@@ -242,7 +167,7 @@ server/emailTemplateRegistry.ts
 | `poa_board_contributor` | Board member with limited access |
 | `homeowner` | Property owner |
 | `household_member` | Member of homeowner's household |
-| `contractor` | External contractor (NEW) |
+| `contractor` | External contractor |
 
 ---
 
@@ -255,7 +180,7 @@ server/emailTemplateRegistry.ts
 | **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
 | **Alex** | Alex Rivera | poa_board_contributor, **contractor** | Contributor at Markland + Landscaping business |
 
-**Note:** Alex has a dual role - he's on the Markland board AND runs "Rivera Landscaping & Design" serving multiple communities.
+**Note:** Alex has a dual role - he's on the Markland board AND runs "Rivera Landscaping & Design" serving multiple communities. His expertise: landscaping, fencing, outdoor structures.
 
 ---
 
@@ -277,54 +202,20 @@ Managed in `shared/featureDefinitions.ts` - see `/home/runner/workspace/global-m
 
 ---
 
-## KNOWN ISSUES
+## KEY FILES MODIFIED TODAY
 
-### Pre-existing TypeScript Errors (Low Priority)
-- Some TypeScript errors exist in provision.ts and other files
-- These are pre-existing and don't affect runtime
-- New components compile cleanly
-
----
-
-## API ENDPOINTS REFERENCE
-
-### Co-Applicant System
-```
-# Household Members
-GET    /api/household/members                    # Get household members
-POST   /api/household/members                    # Invite household member
-DELETE /api/household/members/:id                # Remove household member
-
-# Contractors
-GET    /api/contractors/profile                  # Get contractor profile
-POST   /api/contractors/profile                  # Create/update profile
-GET    /api/contractors/referrals                # Get referral stats
-
-# Application Collaborators
-GET    /api/applications/:id/collaborators       # Get collaborators
-POST   /api/applications/:id/collaborators       # Invite contractor
-DELETE /api/applications/:id/collaborators/:id   # Remove collaborator
-
-# Invitations
-GET    /api/invitations/:token                   # Get invitation details
-POST   /api/invitations/:token/accept            # Accept invitation
-POST   /api/invitations/:token/decline           # Decline invitation
-```
-
-### Recurring Events
-```
-POST   /api/events/:id/occurrence    # Edit occurrence
-DELETE /api/events/:id/occurrence    # Delete occurrence
-```
-
-### Public Community Info
-```
-GET    /api/public/:subdomain/info   # Get community info without auth
-```
-
-### Property Rep Assignment
-```
-GET    /api/properties/:propertyId/reps           # Get rep assignments
-POST   /api/properties/:propertyId/reps           # Assign rep
-DELETE /api/property-rep-assignments/:id          # Remove assignment
-```
+| File | Changes |
+|------|---------|
+| `shared/subscriptionTypes.ts` | Added CREDIT_COSTS constants |
+| `shared/schema.ts` | Added areasOfExpertise to contractors |
+| `client/src/lib/rbac.ts` | Added contractor role permissions |
+| `client/src/lib/mock-data.ts` | Added contractor role, nav items |
+| `client/src/hooks/useUserTenants.ts` | Contractor role exception |
+| `client/src/components/layout/DashboardLayout.tsx` | Contractor navigation |
+| `client/src/pages/ContractorProfile.tsx` | Multi-select expertise UI |
+| `client/src/components/SubscriptionManagement.tsx` | Uses CREDIT_COSTS |
+| `client/src/components/ai-analysis/AIAnalysisButton.tsx` | Dynamic credit display |
+| `server/routes.ts` | areasOfExpertise in contractor endpoints |
+| `server/services/communitySubscriptionService.ts` | deductCredit count param |
+| `server/services/usageTrackingService.ts` | Analysis type tracking |
+| `server/services/analysisQueueService.ts` | Determines analysis type |
