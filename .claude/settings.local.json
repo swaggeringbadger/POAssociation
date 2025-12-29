@@ -59,7 +59,16 @@
       "WebFetch(domain:ai.google.dev)",
       "WebFetch(domain:support.relayfi.com)",
       "WebFetch(domain:apitracker.io)",
-      "WebFetch(domain:hazelhippo.com)"
+      "WebFetch(domain:hazelhippo.com)",
+      "Bash(for i in 1 2 3 4 5)",
+      "Bash(do)",
+      "Bash(if curl -s http://localhost:5000/api/health)",
+      "Bash(then)",
+      "Bash(break)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(ps:*)",
+      "Bash(time psql:*)"
     ],
     "deny": [],
     "ask": []

@@ -3777,6 +3777,414 @@ export class DbStorage implements IStorage {
         )
       );
   }
+
+  // ============================================
+  // INTELLIGENT AGENDA SYSTEM
+  // ============================================
+
+  // Agenda Sections
+  async listAgendaSections(): Promise<schema.AgendaSection[]> {
+    return db.select()
+      .from(schema.agendaSections)
+      .orderBy(schema.agendaSections.sortOrder);
+  }
+
+  async getAgendaSection(id: string): Promise<schema.AgendaSection | undefined> {
+    const [section] = await db.select()
+      .from(schema.agendaSections)
+      .where(eq(schema.agendaSections.id, id));
+    return section;
+  }
+
+  async getAgendaSectionBySlug(slug: string): Promise<schema.AgendaSection | undefined> {
+    const [section] = await db.select()
+      .from(schema.agendaSections)
+      .where(eq(schema.agendaSections.slug, slug));
+    return section;
+  }
+
+  // Meeting Templates
+  async listMeetingTemplates(tenantId?: string): Promise<schema.MeetingTemplate[]> {
+    // Get system templates (null tenantId) and optionally tenant-specific ones
+    const conditions = [eq(schema.meetingTemplates.isActive, true)];
+
+    if (tenantId) {
+      // Include both system templates and tenant-specific ones
+      return db.select()
+        .from(schema.meetingTemplates)
+        .where(
+          and(
+            eq(schema.meetingTemplates.isActive, true),
+            or(
+              isNull(schema.meetingTemplates.tenantId),
+              eq(schema.meetingTemplates.tenantId, tenantId)
+            )
+          )
+        )
+        .orderBy(schema.meetingTemplates.name);
+    }
+
+    // Just system templates
+    return db.select()
+      .from(schema.meetingTemplates)
+      .where(
+        and(
+          eq(schema.meetingTemplates.isActive, true),
+          isNull(schema.meetingTemplates.tenantId)
+        )
+      )
+      .orderBy(schema.meetingTemplates.name);
+  }
+
+  async getMeetingTemplate(id: string): Promise<schema.MeetingTemplate | undefined> {
+    const [template] = await db.select()
+      .from(schema.meetingTemplates)
+      .where(eq(schema.meetingTemplates.id, id));
+    return template;
+  }
+
+  async getDefaultMeetingTemplate(eventTypeSlug: string): Promise<schema.MeetingTemplate | undefined> {
+    const [template] = await db.select()
+      .from(schema.meetingTemplates)
+      .where(
+        and(
+          eq(schema.meetingTemplates.eventTypeSlug, eventTypeSlug),
+          eq(schema.meetingTemplates.isDefault, true),
+          eq(schema.meetingTemplates.isActive, true)
+        )
+      );
+    return template;
+  }
+
+  async createMeetingTemplate(data: schema.InsertMeetingTemplate): Promise<schema.MeetingTemplate> {
+    const [template] = await db.insert(schema.meetingTemplates)
+      .values(data)
+      .returning();
+    return template;
+  }
+
+  async updateMeetingTemplate(id: string, data: Partial<schema.InsertMeetingTemplate>): Promise<schema.MeetingTemplate> {
+    const [template] = await db.update(schema.meetingTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.meetingTemplates.id, id))
+      .returning();
+    return template;
+  }
+
+  // Event Agenda Items
+  async getEventAgenda(eventId: string): Promise<{
+    sections: schema.AgendaSection[];
+    items: (schema.EventAgendaItem & { application?: schema.Application; presenter?: schema.User })[];
+  }> {
+    // Get all agenda sections
+    const sections = await this.listAgendaSections();
+
+    // Get all agenda items for this event with related data
+    const items = await db.select({
+      item: schema.eventAgendaItems,
+      application: schema.applications,
+      presenter: schema.users,
+    })
+      .from(schema.eventAgendaItems)
+      .leftJoin(schema.applications, eq(schema.eventAgendaItems.applicationId, schema.applications.id))
+      .leftJoin(schema.users, eq(schema.eventAgendaItems.presenterId, schema.users.id))
+      .where(eq(schema.eventAgendaItems.eventId, eventId))
+      .orderBy(schema.eventAgendaItems.sectionId, schema.eventAgendaItems.orderIndex);
+
+    return {
+      sections,
+      items: items.map(row => ({
+        ...row.item,
+        application: row.application || undefined,
+        presenter: row.presenter || undefined,
+      })),
+    };
+  }
+
+  async addAgendaItem(data: schema.InsertEventAgendaItem): Promise<schema.EventAgendaItem> {
+    const [item] = await db.insert(schema.eventAgendaItems)
+      .values(data)
+      .returning();
+    if (!item) {
+      throw new Error('Failed to create agenda item');
+    }
+    return item;
+  }
+
+  async updateAgendaItem(id: string, data: Partial<schema.InsertEventAgendaItem>): Promise<schema.EventAgendaItem> {
+    const [item] = await db.update(schema.eventAgendaItems)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.eventAgendaItems.id, id))
+      .returning();
+    return item;
+  }
+
+  async deleteAgendaItem(id: string): Promise<void> {
+    await db.delete(schema.eventAgendaItems)
+      .where(eq(schema.eventAgendaItems.id, id));
+  }
+
+  async reorderAgendaItems(eventId: string, sectionId: string, itemIds: string[]): Promise<void> {
+    // Update order indexes for all items in the section
+    for (let i = 0; i < itemIds.length; i++) {
+      await db.update(schema.eventAgendaItems)
+        .set({ orderIndex: i, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.eventAgendaItems.id, itemIds[i]),
+            eq(schema.eventAgendaItems.eventId, eventId),
+            eq(schema.eventAgendaItems.sectionId, sectionId)
+          )
+        );
+    }
+  }
+
+  // Application Journey - get all meetings an application has been part of
+  async getApplicationJourney(applicationId: string): Promise<{
+    meetings: Array<{
+      event: schema.Event;
+      agendaItem: schema.EventAgendaItem;
+      section: schema.AgendaSection;
+    }>;
+  }> {
+    const rows = await db.select({
+      event: schema.events,
+      agendaItem: schema.eventAgendaItems,
+      section: schema.agendaSections,
+    })
+      .from(schema.eventAgendaItems)
+      .innerJoin(schema.events, eq(schema.eventAgendaItems.eventId, schema.events.id))
+      .innerJoin(schema.agendaSections, eq(schema.eventAgendaItems.sectionId, schema.agendaSections.id))
+      .where(eq(schema.eventAgendaItems.applicationId, applicationId))
+      .orderBy(schema.events.startDatetime);
+
+    return {
+      meetings: rows.map(row => ({
+        event: row.event,
+        agendaItem: row.agendaItem,
+        section: row.section,
+      })),
+    };
+  }
+
+  // Smart Suggestions - get applications that need review
+  async getAgendaSuggestions(tenantId: string): Promise<{
+    newBusiness: schema.Application[];
+    oldBusiness: schema.Application[];
+    finalApproval: schema.Application[];
+  }> {
+    // Get all pending/under_review applications for this tenant
+    const applications = await db.select()
+      .from(schema.applications)
+      .where(
+        and(
+          eq(schema.applications.tenantId, tenantId),
+          or(
+            eq(schema.applications.status, 'pending'),
+            eq(schema.applications.status, 'under_review')
+          )
+        )
+      )
+      .orderBy(schema.applications.submittedAt);
+
+    // For each application, get its meeting history to determine review stage
+    const categorized: {
+      newBusiness: schema.Application[];
+      oldBusiness: schema.Application[];
+      finalApproval: schema.Application[];
+    } = {
+      newBusiness: [],
+      oldBusiness: [],
+      finalApproval: [],
+    };
+
+    for (const app of applications) {
+      // Get meeting history
+      const history = await db.select({
+        decision: schema.eventAgendaItems.decision,
+        addedAt: schema.eventAgendaItems.addedAt,
+      })
+        .from(schema.eventAgendaItems)
+        .where(eq(schema.eventAgendaItems.applicationId, app.id))
+        .orderBy(schema.eventAgendaItems.addedAt);
+
+      // Determine review stage
+      if (history.length === 0) {
+        categorized.newBusiness.push(app);
+      } else {
+        const lastDecision = history[history.length - 1].decision;
+        if (['tabled', 'needs_info', 'deferred'].includes(lastDecision || '')) {
+          categorized.oldBusiness.push(app);
+        } else if (lastDecision === 'conditional' || lastDecision === 'recommended') {
+          categorized.finalApproval.push(app);
+        } else {
+          // Default to old business if seen before
+          categorized.oldBusiness.push(app);
+        }
+      }
+    }
+
+    return categorized;
+  }
+
+  // Finalize agenda
+  async finalizeEventAgenda(eventId: string, userId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        agendaFinalized: true,
+        agendaFinalizedAt: new Date(),
+        agendaFinalizedByUserId: userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  async unfinalizeEventAgenda(eventId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        agendaFinalized: false,
+        agendaFinalizedAt: null,
+        agendaFinalizedByUserId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  // ==================== Document OCR Methods ====================
+
+  async updateDocumentOcr(documentId: string, data: {
+    ocrText?: string;
+    ocrConfidence?: number;
+    ocrProcessedAt?: Date;
+    ocrStatus?: string;
+    ocrError?: string;
+    enhancedBlobPath?: string;
+    enhancementConfidence?: number;
+    isHandwritten?: boolean;
+  }): Promise<schema.Document> {
+    const [updated] = await db.update(schema.documents)
+      .set(data)
+      .where(eq(schema.documents.id, documentId))
+      .returning();
+    return updated;
+  }
+
+  async getDocumentsNeedingOcr(applicationId: string): Promise<schema.Document[]> {
+    // Get documents that haven't been processed or failed
+    return await db.select()
+      .from(schema.documents)
+      .where(
+        and(
+          eq(schema.documents.applicationId, applicationId),
+          or(
+            isNull(schema.documents.ocrStatus),
+            eq(schema.documents.ocrStatus, 'pending'),
+            eq(schema.documents.ocrStatus, 'failed')
+          )
+        )
+      )
+      .orderBy(schema.documents.uploadedAt);
+  }
+
+  async getDocumentsWithOcr(applicationId: string): Promise<schema.Document[]> {
+    return await db.select()
+      .from(schema.documents)
+      .where(eq(schema.documents.applicationId, applicationId))
+      .orderBy(schema.documents.uploadedAt);
+  }
+
+  // Document OCR Jobs
+  async createDocumentOcrJob(data: {
+    applicationId: string;
+    requestedByUserId: string | null;
+    status: string;
+    totalDocuments: number;
+    processedDocuments?: number;
+    includeImageEnhancement?: boolean;
+  }): Promise<schema.DocumentOcrJob> {
+    const [job] = await db.insert(schema.documentOcrJobs)
+      .values({
+        applicationId: data.applicationId,
+        requestedByUserId: data.requestedByUserId,
+        status: data.status,
+        totalDocuments: data.totalDocuments,
+        processedDocuments: data.processedDocuments ?? 0,
+        includeImageEnhancement: data.includeImageEnhancement ?? true,
+      })
+      .returning();
+    return job;
+  }
+
+  async getDocumentOcrJob(jobId: string): Promise<schema.DocumentOcrJob | undefined> {
+    const [job] = await db.select()
+      .from(schema.documentOcrJobs)
+      .where(eq(schema.documentOcrJobs.id, jobId))
+      .limit(1);
+    return job;
+  }
+
+  async updateDocumentOcrJob(jobId: string, data: {
+    status?: string;
+    processedDocuments?: number;
+    totalCostUsd?: string;
+    startedAt?: Date;
+    completedAt?: Date;
+    errorMessage?: string;
+  }): Promise<schema.DocumentOcrJob> {
+    const [updated] = await db.update(schema.documentOcrJobs)
+      .set(data)
+      .where(eq(schema.documentOcrJobs.id, jobId))
+      .returning();
+    return updated;
+  }
+
+  async getNextQueuedOcrJob(): Promise<schema.DocumentOcrJob | undefined> {
+    const [job] = await db.select()
+      .from(schema.documentOcrJobs)
+      .where(eq(schema.documentOcrJobs.status, 'queued'))
+      .orderBy(schema.documentOcrJobs.createdAt)
+      .limit(1);
+    return job;
+  }
+
+  async getPendingOcrJob(applicationId: string): Promise<schema.DocumentOcrJob | undefined> {
+    const [job] = await db.select()
+      .from(schema.documentOcrJobs)
+      .where(
+        and(
+          eq(schema.documentOcrJobs.applicationId, applicationId),
+          or(
+            eq(schema.documentOcrJobs.status, 'queued'),
+            eq(schema.documentOcrJobs.status, 'processing')
+          )
+        )
+      )
+      .limit(1);
+    return job;
+  }
+
+  async getStaleOcrJobs(maxProcessingTimeMs: number): Promise<schema.DocumentOcrJob[]> {
+    const cutoffTime = new Date(Date.now() - maxProcessingTimeMs);
+    return await db.select()
+      .from(schema.documentOcrJobs)
+      .where(
+        and(
+          eq(schema.documentOcrJobs.status, 'processing'),
+          lt(schema.documentOcrJobs.startedAt, cutoffTime)
+        )
+      );
+  }
+
+  async getOcrJobsForApplication(applicationId: string): Promise<schema.DocumentOcrJob[]> {
+    return await db.select()
+      .from(schema.documentOcrJobs)
+      .where(eq(schema.documentOcrJobs.applicationId, applicationId))
+      .orderBy(desc(schema.documentOcrJobs.createdAt));
+  }
 }
 
 export const storage = new DbStorage();

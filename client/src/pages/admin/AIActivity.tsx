@@ -28,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle, FileSearch, XCircle, Loader2 } from "lucide-react";
+import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle, FileSearch, XCircle, Loader2, Satellite, Image, ScanText, BarChart3 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
 import { formatDistanceToNow } from "date-fns";
@@ -61,6 +62,12 @@ export default function AIActivity() {
   const { data: tenants = [] } = useQuery({
     queryKey: ["allTenants"],
     queryFn: () => api.getAllTenants(),
+  });
+
+  // Fetch option popularity stats
+  const { data: optionStats } = useQuery({
+    queryKey: ["aiOptionStats"],
+    queryFn: () => api.getAiAnalysisOptionStats(),
   });
 
   const handleViewGeneration = (generation: any) => {
@@ -236,6 +243,79 @@ export default function AIActivity() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Option Popularity Stats */}
+      {optionStats && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-violet-500" />
+              Analysis Option Popularity
+            </CardTitle>
+            <CardDescription>
+              Which options users are selecting for AI analyses ({optionStats.totalAnalyses} total)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <Satellite className="h-4 w-4 text-blue-500" />
+                    Satellite Imagery
+                  </span>
+                  <span className="font-medium">{optionStats.satellitePercentage}%</span>
+                </div>
+                <Progress value={optionStats.satellitePercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">{optionStats.satelliteCount} analyses</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <Image className="h-4 w-4 text-green-500" />
+                    AI Mockups
+                  </span>
+                  <span className="font-medium">{optionStats.mockupsPercentage}%</span>
+                </div>
+                <Progress value={optionStats.mockupsPercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">{optionStats.mockupsCount} analyses</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <FileSearch className="h-4 w-4 text-amber-500" />
+                    Breakdown Report
+                  </span>
+                  <span className="font-medium">{optionStats.breakdownPercentage}%</span>
+                </div>
+                <Progress value={optionStats.breakdownPercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">{optionStats.breakdownCount} analyses</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <ScanText className="h-4 w-4 text-cyan-500" />
+                    OCR Extraction
+                  </span>
+                  <span className="font-medium">{optionStats.ocrPercentage}%</span>
+                </div>
+                <Progress value={optionStats.ocrPercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">{optionStats.ocrCount} analyses</p>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Average Credits per Analysis</span>
+              <Badge variant="secondary" className="text-sm">
+                {optionStats.averageCreditsPerAnalysis} credits
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

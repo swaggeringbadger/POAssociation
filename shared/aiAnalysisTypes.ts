@@ -601,6 +601,9 @@ export interface BreakdownAnalysisContext extends AnalysisContext {
     name: string;
     type: string;
     size?: number;
+    ocrText?: string;
+    ocrConfidence?: number;
+    isHandwritten?: boolean;
   }>;
 }
 

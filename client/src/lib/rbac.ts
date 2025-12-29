@@ -149,6 +149,16 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
+  // Meeting Agenda - board members and management
+  '/calendar/events/:eventId/agenda': [
+    'poa_board_contributor',
+    'poa_board_member',
+    'management_rep',
+    'management_manager',
+    'account_admin',
+    'super_admin'
+  ],
+
   // Form Wizard - board members and management
   '/form-wizard': [
     'poa_board_member',
@@ -235,6 +245,10 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'account_admin',
     'super_admin'
   ],
+
+  // Account Admin Billing Routes
+  '/account-admin/billing': ['account_admin', 'super_admin'],
+  '/account-admin/billing/:communityId': ['account_admin', 'super_admin'],
 
   // Admin Routes - super admin only
   '/admin/management-companies': ['super_admin'],

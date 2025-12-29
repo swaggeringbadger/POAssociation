@@ -727,8 +727,8 @@ export class AiAnalysisService {
     // Get application for additional fields
     const application = await storage.getApplication(applicationId);
 
-    // Get uploaded documents for this application
-    const documents = await storage.listDocumentsByApplication(applicationId);
+    // Get uploaded documents for this application (including OCR text if available)
+    const documents = await storage.getDocumentsWithOcr(applicationId);
 
     // Get applicant user info if available
     let applicantName = '';
@@ -752,10 +752,13 @@ export class AiAnalysisService {
       countyJurisdiction,
       lotType,
       applicantName,
-      uploadedDocuments: documents?.map((doc: { fileName: string; mimeType?: string | null; fileSize?: number | null }) => ({
+      uploadedDocuments: documents?.map((doc) => ({
         name: doc.fileName,
         type: doc.mimeType || 'unknown',
         size: doc.fileSize || undefined,
+        ocrText: doc.ocrText || undefined,
+        ocrConfidence: doc.ocrConfidence || undefined,
+        isHandwritten: doc.isHandwritten || false,
       })) || [],
     };
   }
@@ -775,9 +778,15 @@ export class AiAnalysisService {
     // Extract relevant bylaws from form schema
     const relevantBylaws = this.extractRelevantBylaws(context.formTemplate.schema);
 
-    // Format uploaded documents
+    // Format uploaded documents including OCR text where available
     const uploadedDocsFormatted = context.uploadedDocuments && context.uploadedDocuments.length > 0
-      ? context.uploadedDocuments.map(doc => `- ${doc.name} (${doc.type})`).join('\n')
+      ? context.uploadedDocuments.map(doc => {
+          let docInfo = `- ${doc.name} (${doc.type})`;
+          if (doc.ocrText && doc.ocrConfidence && doc.ocrConfidence >= 70) {
+            docInfo += `\n  ${doc.isHandwritten ? '[Handwritten document]' : ''} OCR Confidence: ${doc.ocrConfidence}%\n  Extracted Text:\n  ${doc.ocrText.substring(0, 2000)}${doc.ocrText.length > 2000 ? '...[truncated]' : ''}`;
+          }
+          return docInfo;
+        }).join('\n\n')
       : '(No documents uploaded)';
 
     return template

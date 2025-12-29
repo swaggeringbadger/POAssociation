@@ -9,7 +9,12 @@ import { db } from '../storage';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 import { communitySubscriptionService } from './communitySubscriptionService';
-import { CREDIT_COSTS } from '@shared/subscriptionTypes';
+import {
+  CREDIT_COSTS,
+  calculateAnalysisCreditCost,
+  getAnalysisOptionBreakdown,
+  type AnalysisCreditOptions,
+} from '@shared/subscriptionTypes';
 
 export type UsageEventType =
   | 'ai_analysis'
@@ -102,26 +107,25 @@ class UsageTrackingService {
 
   /**
    * Log an AI analysis event and deduct credits
-   * @param analysisType - 'standard' or 'full' to determine credit cost
+   * @param options - Selected analysis options to determine credit cost
    */
   async logAiAnalysis(
     communityId: string,
     userId: string,
     analysisId: string,
-    analysisType: 'standard' | 'full' = 'standard'
+    options: AnalysisCreditOptions = {}
   ): Promise<CreditDeductionResult> {
-    // Determine credit cost based on analysis type
-    const creditsToDeduct = analysisType === 'full'
-      ? CREDIT_COSTS.FULL_ANALYSIS
-      : CREDIT_COSTS.STANDARD_ANALYSIS;
-
-    // Check current credit status
-    const creditStatus = await communitySubscriptionService.checkCredits(communityId);
+    // Calculate per-option credit breakdown
+    const optionBreakdown = getAnalysisOptionBreakdown(options);
+    const creditsToDeduct = optionBreakdown.total;
 
     // Deduct credits
     const deduction = await communitySubscriptionService.deductCredit(communityId, creditsToDeduct);
 
-    // Log the event
+    // Determine legacy analysisType for backwards compatibility
+    const legacyAnalysisType = creditsToDeduct > 2 ? 'full' : 'standard';
+
+    // Log the event with detailed tracking in metadata
     const event = await this.logEvent({
       communityId,
       eventType: 'ai_analysis',
@@ -131,7 +135,11 @@ class UsageTrackingService {
       isOverage: deduction.wasOverage,
       costAtTime: deduction.overageCost || undefined,
       metadata: {
-        analysisType,
+        // Legacy field for backwards compatibility
+        analysisType: legacyAnalysisType,
+        // New granular tracking
+        selectedOptions: options,
+        optionBreakdown,
         creditsBefore: deduction.newCreditsUsed - creditsToDeduct,
         creditsAfter: deduction.newCreditsUsed,
         wasOverage: deduction.wasOverage,

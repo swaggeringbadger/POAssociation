@@ -3,19 +3,19 @@ import { signPayload, SyncPayload } from "./protocol";
 
 /**
  * Get HomeHub URL based on environment
- * Production: APP_URL contains 'poassociation.com' → use https://hazelhippo.com
- * Development: Otherwise → use dev URL
+ * Production: APP_URL contains 'poassociation.com' → use HOMEHUB_APP_URL_PROD
+ * Development: Otherwise → use HOMEHUB_APP_URL_DEV
  */
 export function getHomeHubUrl(): string {
   const appUrl = process.env.APP_URL || "";
   const isProduction = appUrl.includes("poassociation.com");
 
   if (isProduction) {
-    return "https://hazelhippo.com";
+    return process.env.HOMEHUB_APP_URL_PROD || "https://hazelhippo.com";
   }
 
-  // Development fallback
-  return process.env.HOMEHUB_APP_URL || "https://homehub.replit.app";
+  // Development
+  return process.env.HOMEHUB_APP_URL_DEV || "https://hazelhippo.com";
 }
 
 const PARTNER_APPS: Record<string, { url: string; secret: string | undefined }> = {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   type AgendaSuggestions as AgendaSuggestionsType,
@@ -95,12 +95,19 @@ function ApplicationSuggestionCard({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedSectionId, setSelectedSectionId] = useState<string>(() => {
-    // Find the appropriate section based on review stage
-    const defaultSlug = stageToSectionSlug[stage];
-    const section = sections.find(s => s.slug === defaultSlug && s.allowsApplications);
-    return section?.id || sections.find(s => s.allowsApplications)?.id || "";
-  });
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+
+  // Initialize and update selectedSectionId when sections change
+  useEffect(() => {
+    if (sections.length > 0 && !selectedSectionId) {
+      const defaultSlug = stageToSectionSlug[stage];
+      const section = sections.find(s => s.slug === defaultSlug && s.allowsApplications);
+      const newSectionId = section?.id || sections.find(s => s.allowsApplications)?.id || "";
+      if (newSectionId) {
+        setSelectedSectionId(newSectionId);
+      }
+    }
+  }, [sections, stage, selectedSectionId]);
 
   const addMutation = useMutation({
     mutationFn: () => addAgendaItem(eventId, {

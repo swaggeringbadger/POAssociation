@@ -51,6 +51,7 @@ export class AnalysisQueueService {
     includeSatellite?: boolean;
     includeMockups?: boolean;
     includeBreakdownReport?: boolean;
+    includeOcr?: boolean;
     mockupQuality?: 'standard' | 'high';
     demoCodeId?: string;
     priority?: number;
@@ -62,6 +63,7 @@ export class AnalysisQueueService {
       includeSatellite = true,
       includeMockups = true,
       includeBreakdownReport = false,
+      includeOcr = false,
       mockupQuality = 'standard',
       demoCodeId,
       priority = 0,
@@ -98,6 +100,7 @@ export class AnalysisQueueService {
         includeSatellite,
         includeMockups,
         includeBreakdownReport,
+        includeOcr,
         mockupQuality,
       },
     };
@@ -203,16 +206,24 @@ export class AnalysisQueueService {
     // Deduct credit and log usage (consolidated to new community subscription system)
     try {
       const usageTrackingService = await getUsageTrackingService();
-      // Determine analysis type based on job options
-      // "Full" analysis includes mockups, breakdown report, or property research
-      const jobOpts = (analysis.jobOptions || {}) as { includeMockups?: boolean; includeBreakdownReport?: boolean; includePropertyResearch?: boolean };
-      const isFullAnalysis = jobOpts.includeMockups || jobOpts.includeBreakdownReport || jobOpts.includePropertyResearch;
+      // Extract individual options for granular credit tracking
+      const jobOpts = (analysis.jobOptions || {}) as {
+        includeSatellite?: boolean;
+        includeMockups?: boolean;
+        includeBreakdownReport?: boolean;
+        includeOcr?: boolean;
+      };
 
       await usageTrackingService.logAiAnalysis(
         analysis.tenantId,
         analysis.requestedByUserId,
         analysis.id,
-        isFullAnalysis ? 'full' : 'standard'
+        {
+          includeSatellite: jobOpts.includeSatellite ?? true,
+          includeMockups: jobOpts.includeMockups ?? false,
+          includeBreakdownReport: jobOpts.includeBreakdownReport ?? false,
+          includeOcr: jobOpts.includeOcr ?? false,
+        }
       );
     } catch (e) {
       console.error('[AnalysisQueue] Failed to track usage:', e);

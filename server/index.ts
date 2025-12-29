@@ -2,8 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { analysisWorker } from "./services/analysisWorker";
+import { ocrWorker } from "./services/ocrWorker";
 import { billingScheduler } from "./services/billingScheduler";
 import { seedCommunityTiers } from "./seed-tiers";
+import { seedAgendaSystem } from "./seed-agenda";
 
 const app = express();
 
@@ -53,6 +55,9 @@ app.use((req, res, next) => {
   // Ensure community tiers are seeded with correct values
   await seedCommunityTiers();
 
+  // Seed agenda sections and meeting templates
+  await seedAgendaSystem();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -92,6 +97,14 @@ app.use((req, res, next) => {
       log('AI Analysis worker not started (ANTHROPIC_API_KEY not set)');
     }
 
+    // Start the OCR background worker
+    if (process.env.GEMINI_API_KEY) {
+      ocrWorker.start();
+      log('OCR worker started');
+    } else {
+      log('OCR worker not started (GEMINI_API_KEY not set)');
+    }
+
     // Start the billing scheduler
     billingScheduler.initialize();
     log('Billing scheduler started');
@@ -101,6 +114,7 @@ app.use((req, res, next) => {
   process.on('SIGTERM', () => {
     log('SIGTERM received, shutting down gracefully...');
     analysisWorker.stop();
+    ocrWorker.stop();
     billingScheduler.shutdown();
     server.close(() => {
       log('Server closed');
@@ -111,6 +125,7 @@ app.use((req, res, next) => {
   process.on('SIGINT', () => {
     log('SIGINT received, shutting down gracefully...');
     analysisWorker.stop();
+    ocrWorker.stop();
     billingScheduler.shutdown();
     server.close(() => {
       log('Server closed');

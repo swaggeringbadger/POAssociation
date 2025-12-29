@@ -161,6 +161,20 @@ export interface EmailTemplate {
   sampleData: Record<string, string>;
 }
 
+// AI Analysis Option Statistics (Super Admin)
+export interface AiOptionStats {
+  totalAnalyses: number;
+  satelliteCount: number;
+  satellitePercentage: number;
+  mockupsCount: number;
+  mockupsPercentage: number;
+  breakdownCount: number;
+  breakdownPercentage: number;
+  ocrCount: number;
+  ocrPercentage: number;
+  averageCreditsPerAnalysis: number;
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -1028,6 +1042,16 @@ class ApiClient {
       const error = await response.json();
       throw new Error(error.error || 'Failed to revoke invitation');
     }
+  }
+
+  // AI Analysis Option Stats (Super Admin)
+  async getAiAnalysisOptionStats(): Promise<AiOptionStats> {
+    const response = await fetch('/api/admin/ai/option-stats');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get AI option stats');
+    }
+    return response.json();
   }
 }
 
@@ -2026,6 +2050,7 @@ export async function triggerAiAnalysis(
     includeSatellite?: boolean;
     includeMockups?: boolean;
     includeBreakdownReport?: boolean;
+    includeOcr?: boolean;
     mockupQuality?: 'standard' | 'high';
   }
 ): Promise<TriggerAnalysisResponse> {
@@ -2059,6 +2084,11 @@ export async function submitAnalysisFeedback(
 // Cancel a queued analysis
 export async function cancelAiAnalysis(analysisId: string): Promise<{ success: boolean }> {
   return apiRequest('POST', `/api/ai/analysis/${analysisId}/cancel`);
+}
+
+// Get AI analysis option popularity stats (Super Admin) - standalone function version
+export async function getAiAnalysisOptionStats(): Promise<AiOptionStats> {
+  return apiRequest('GET', '/api/admin/ai/option-stats');
 }
 
 // Application event for timeline
@@ -2782,4 +2812,66 @@ export async function unfinalizeAgenda(eventId: string): Promise<CalendarEvent> 
 // Get application journey (meeting history)
 export async function getApplicationJourney(applicationId: string): Promise<ApplicationJourney> {
   return apiRequest('GET', `/api/applications/${applicationId}/journey`);
+}
+
+// ============================================
+// OCR & Document Processing
+// ============================================
+
+export interface OcrJobStatus {
+  status: string;
+  progress: number;
+  processedDocuments: number;
+  totalDocuments: number;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface OcrDocumentResult {
+  documentId: string;
+  fileName: string;
+  ocrText: string | null;
+  ocrConfidence: number | null;
+  ocrStatus: string | null;
+  isHandwritten: boolean;
+  ocrError: string | null;
+}
+
+export interface OcrResults {
+  documents: OcrDocumentResult[];
+  activeJob: {
+    jobId: string;
+    status: string;
+    processedDocuments: number;
+    totalDocuments: number;
+  } | null;
+}
+
+export interface OcrServiceStatus {
+  available: boolean;
+  workerRunning: boolean;
+}
+
+// Trigger OCR processing for an application's documents
+export async function triggerOcrProcessing(
+  applicationId: string,
+  options?: { includeImageEnhancement?: boolean }
+): Promise<{ jobId: string; status: string; totalDocuments: number; message: string }> {
+  return apiRequest('POST', `/api/ai/ocr/${applicationId}/process`, options || {});
+}
+
+// Get OCR job status
+export async function getOcrJobStatus(jobId: string): Promise<OcrJobStatus> {
+  return apiRequest('GET', `/api/ai/ocr/jobs/${jobId}/status`);
+}
+
+// Get OCR results for an application
+export async function getOcrResults(applicationId: string): Promise<OcrResults> {
+  return apiRequest('GET', `/api/ai/ocr/${applicationId}/results`);
+}
+
+// Check OCR service availability
+export async function getOcrServiceStatus(): Promise<OcrServiceStatus> {
+  return apiRequest('GET', '/api/ai/ocr/status');
 }

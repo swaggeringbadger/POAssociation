@@ -137,19 +137,24 @@ All implemented features now have proper subscription tier checks:
 
 ### Server Restart After Code Changes
 
-**IMPORTANT:** After making server-side code changes, always restart the Replit server to ensure changes take effect. The tsx hot-reload doesn't always work reliably for service files.
+**CRITICAL FOR CLAUDE:** You MUST kill all server processes immediately after making ANY changes to server-side code. Do not wait for the user to restart manually.
 
 ```bash
 pkill -f "tsx server/index.ts"
 ```
 
-Then click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
+Then the user will click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
 
-**When to restart:**
+**When to kill processes (ALWAYS do this automatically):**
 - After modifying any file in `/server/` directory
 - After modifying `/shared/` files that are used server-side
-- When debugging unexpected behavior that doesn't match code changes
 - After changing environment variables or configuration
+- When debugging unexpected behavior that doesn't match code changes
+
+**Claude workflow:**
+1. Make server code changes
+2. Immediately run `pkill -f "tsx server/index.ts"`
+3. Inform user to click Run in Replit
 
 ### Helper Functions Available
 

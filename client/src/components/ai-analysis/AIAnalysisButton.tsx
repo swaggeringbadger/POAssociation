@@ -21,15 +21,17 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, Image, FileSearch, Wand2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, Image, FileSearch, Wand2, ScanText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   checkAiCredits,
   triggerAiAnalysis,
+  triggerOcrProcessing,
+  getOcrServiceStatus,
   type AiCreditCheck,
   type TriggerAnalysisResponse,
 } from '@/lib/api';
-import { CREDIT_COSTS } from '@shared/subscriptionTypes';
+import { CREDIT_COSTS, calculateAnalysisCreditCost } from '@shared/subscriptionTypes';
 
 interface AIAnalysisButtonProps {
   applicationId: string;
@@ -53,6 +55,7 @@ export function AIAnalysisButton({
   const [includeSatellite, setIncludeSatellite] = useState(true);
   const [includeMockups, setIncludeMockups] = useState(true);
   const [includeBreakdownReport, setIncludeBreakdownReport] = useState(false);
+  const [includeOcr, setIncludeOcr] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -60,8 +63,12 @@ export function AIAnalysisButton({
   const canTriggerAnalysis = userRole && ALLOWED_ROLES.includes(userRole);
 
   // Calculate credit cost based on selected options
-  const isFullAnalysis = includeMockups || includeBreakdownReport;
-  const creditCost = isFullAnalysis ? CREDIT_COSTS.FULL_ANALYSIS : CREDIT_COSTS.STANDARD_ANALYSIS;
+  const creditCost = calculateAnalysisCreditCost({
+    includeSatellite,
+    includeMockups,
+    includeBreakdownReport,
+    includeOcr,
+  });
 
   // Check credit availability
   const { data: creditCheck, isLoading: checkingCredits } = useQuery<AiCreditCheck>({
@@ -71,15 +78,41 @@ export function AIAnalysisButton({
     staleTime: 30000, // 30 seconds
   });
 
+  // Check if OCR service is available
+  const { data: ocrStatus } = useQuery({
+    queryKey: ['ocr-service-status'],
+    queryFn: getOcrServiceStatus,
+    enabled: !!(canTriggerAnalysis && open),
+    staleTime: 60000, // 1 minute
+  });
+
   // Mutation to trigger analysis
   const triggerMutation = useMutation({
-    mutationFn: () =>
-      triggerAiAnalysis(applicationId, {
+    mutationFn: async () => {
+      // If OCR is selected, trigger it first
+      if (includeOcr) {
+        try {
+          const ocrResult = await triggerOcrProcessing(applicationId, {
+            includeImageEnhancement: true,
+          });
+          toast({
+            title: 'OCR Processing Started',
+            description: `Processing ${ocrResult.totalDocuments} document(s). Analysis will use extracted text.`,
+          });
+        } catch (ocrError) {
+          // Log but don't fail the analysis
+          console.error('OCR trigger failed:', ocrError);
+        }
+      }
+
+      return triggerAiAnalysis(applicationId, {
         includeSatellite,
         includeMockups,
         includeBreakdownReport,
+        includeOcr,
         mockupQuality: 'standard',
-      }),
+      });
+    },
     onSuccess: (data: TriggerAnalysisResponse) => {
       toast({
         title: 'AI Analysis Started',
@@ -148,8 +181,8 @@ export function AIAnalysisButton({
           AI Analysis
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-violet-500" />
             AI-Powered Application Analysis
@@ -160,7 +193,7 @@ export function AIAnalysisButton({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-2">
           {/* Credit Status */}
           {checkingCredits ? (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -222,7 +255,7 @@ export function AIAnalysisButton({
                 checked={includeSatellite}
                 onCheckedChange={(checked) => setIncludeSatellite(checked as boolean)}
               />
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1">
                 <Label htmlFor="satellite" className="flex items-center gap-2 cursor-pointer">
                   <Satellite className="h-4 w-4 text-blue-500" />
                   Include Satellite Imagery
@@ -231,6 +264,9 @@ export function AIAnalysisButton({
                   Fetch satellite view of the property address for context
                 </p>
               </div>
+              <Badge variant="outline" className="text-xs shrink-0">
+                +{CREDIT_COSTS.OPTION_SATELLITE_IMAGERY} credit
+              </Badge>
             </div>
 
             <div className="flex items-start space-x-3 p-3 border rounded-lg">
@@ -239,7 +275,7 @@ export function AIAnalysisButton({
                 checked={includeMockups}
                 onCheckedChange={(checked) => setIncludeMockups(checked as boolean)}
               />
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1">
                 <Label htmlFor="mockups" className="flex items-center gap-2 cursor-pointer">
                   <Image className="h-4 w-4 text-green-500" />
                   Generate AI Mockups
@@ -248,6 +284,9 @@ export function AIAnalysisButton({
                   Create visual mockups of the proposed project
                 </p>
               </div>
+              <Badge variant="outline" className="text-xs shrink-0">
+                +{CREDIT_COSTS.OPTION_AI_MOCKUPS} credits
+              </Badge>
             </div>
 
             <div className="flex items-start space-x-3 p-3 border rounded-lg border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30">
@@ -256,7 +295,7 @@ export function AIAnalysisButton({
                 checked={includeBreakdownReport}
                 onCheckedChange={(checked) => setIncludeBreakdownReport(checked as boolean)}
               />
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1">
                 <Label htmlFor="breakdown" className="flex items-center gap-2 cursor-pointer">
                   <FileSearch className="h-4 w-4 text-amber-600" />
                   Comprehensive Breakdown Report
@@ -266,6 +305,68 @@ export function AIAnalysisButton({
                   categorized issues, and questions for homeowner. Analyzes all community documents including PDFs.
                 </p>
               </div>
+              <Badge variant="outline" className="text-xs shrink-0 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400">
+                +{CREDIT_COSTS.OPTION_BREAKDOWN_REPORT} credit
+              </Badge>
+            </div>
+
+            {ocrStatus?.available && (
+              <div className="flex items-start space-x-3 p-3 border rounded-lg border-cyan-200 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/30">
+                <Checkbox
+                  id="ocr"
+                  checked={includeOcr}
+                  onCheckedChange={(checked) => setIncludeOcr(checked as boolean)}
+                />
+                <div className="space-y-1 flex-1">
+                  <Label htmlFor="ocr" className="flex items-center gap-2 cursor-pointer">
+                    <ScanText className="h-4 w-4 text-cyan-600" />
+                    OCR & Document Text Extraction
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Extract text from scanned documents, photos, and handwritten notes.
+                    Improves analysis accuracy for uploaded images and PDFs.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs shrink-0 border-cyan-300 text-cyan-700 dark:border-cyan-700 dark:text-cyan-400">
+                  +{CREDIT_COSTS.OPTION_OCR_EXTRACTION} credits
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Itemized Cost Breakdown */}
+          <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Base Analysis</span>
+              <span>{CREDIT_COSTS.BASE_ANALYSIS} credit</span>
+            </div>
+            {includeSatellite && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>+ Satellite Imagery</span>
+                <span>{CREDIT_COSTS.OPTION_SATELLITE_IMAGERY} credit</span>
+              </div>
+            )}
+            {includeMockups && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>+ AI Mockups</span>
+                <span>{CREDIT_COSTS.OPTION_AI_MOCKUPS} credits</span>
+              </div>
+            )}
+            {includeBreakdownReport && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>+ Breakdown Report</span>
+                <span>{CREDIT_COSTS.OPTION_BREAKDOWN_REPORT} credit</span>
+              </div>
+            )}
+            {includeOcr && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>+ OCR Extraction</span>
+                <span>{CREDIT_COSTS.OPTION_OCR_EXTRACTION} credits</span>
+              </div>
+            )}
+            <div className="border-t pt-2 mt-2 flex justify-between font-medium">
+              <span>Total</span>
+              <span className="text-violet-600 dark:text-violet-400">{creditCost} credits</span>
             </div>
           </div>
 
@@ -299,7 +400,7 @@ export function AIAnalysisButton({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>

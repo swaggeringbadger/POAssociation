@@ -107,7 +107,7 @@ export const NAV_ITEMS = [
   {
     label: 'Billing',
     icon: Receipt,
-    href: '/billing',
+    href: '/account-admin/billing',
     roles: ['account_admin', 'super_admin']
   },
   {

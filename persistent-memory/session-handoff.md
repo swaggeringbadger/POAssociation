@@ -1,127 +1,205 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-22
-**Current Session:** Contractor Enhancements & AI Credit Changes
+**Last Updated:** 2025-12-26
+**Current Session:** Intelligent Agenda System (UI Complete)
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed (2025-12-22)
+### Just Completed (2025-12-26)
+
+#### Intelligent Agenda System - UI Phase 1 Complete
+
+Built the complete UI for the intelligent meeting agenda system with React components and a full-featured page.
+
+**New Components (in `client/src/components/agenda/`):**
+- `AgendaItem.tsx` - Individual agenda item card with decision recording, edit, and delete capabilities
+- `AgendaSection.tsx` - Collapsible section displaying grouped agenda items with time estimates
+- `AgendaSuggestions.tsx` - Smart suggestions panel with three tabs (New Business, Old Business, Final Approval)
+- `index.ts` - Barrel export file
+
+**New Page:**
+- `client/src/pages/MeetingAgenda.tsx` - Full agenda management page at `/calendar/events/:eventId/agenda`
+
+**Features Implemented:**
+- View and manage agenda sections with collapsible UI
+- Add discussion items, announcements, and motions to sections
+- Record decisions (approved, rejected, tabled, needs info, conditional, deferred, withdrawn, recommended)
+- Apply meeting templates to set up agenda structure
+- Smart suggestions auto-categorized by review stage
+- Finalize/unfinalize agenda (lock/unlock editing)
+- Print-friendly styling
+- Integration with Calendar page via dropdown menu
+
+**Route Added (in `client/src/App.tsx`):**
+- `/calendar/events/:eventId/agenda` - Meeting agenda page
+
+**Calendar Integration (in `client/src/pages/Calendar.tsx`):**
+- Added "Agenda" option to event dropdown menus (sidebar and list view)
+- New icon: `ClipboardList` for agenda navigation
+
+---
+
+### Previous Session (2025-12-24)
+
+#### Intelligent Agenda System - Backend Foundation
+
+Built the complete backend for an intelligent meeting agenda system that auto-categorizes applications by review stage and provides structured meeting templates.
+
+**New Database Tables (in `shared/schema.ts`):**
+- `agenda_sections` - 9 predefined sections (Call to Order, Roll Call, Old Business, New Business, Final Approvals, etc.)
+- `meeting_templates` - Reusable meeting structures (ARC Review Meeting, Board Meeting, Quick Review)
+- `event_agenda_items` - Structured agenda items linked to sections with application/discussion support
+
+**Modified Tables:**
+- `events` - Added: `meetingTemplateId`, `agendaFinalized`, `agendaFinalizedAt`, `agendaFinalizedByUserId`
+
+**New Files:**
+- `server/seed-agenda.ts` - Seeds default agenda sections and 3 meeting templates
+
+**Storage Layer Methods (in `server/storage.ts`):**
+- `listAgendaSections()`, `getAgendaSectionBySlug()`
+- `listMeetingTemplates()`, `getMeetingTemplate()`, `getDefaultMeetingTemplate()`, `createMeetingTemplate()`
+- `getEventAgenda()`, `addAgendaItem()`, `updateAgendaItem()`, `deleteAgendaItem()`, `reorderAgendaItems()`
+- `getApplicationJourney()` - Get meeting history for an application
+- `getAgendaSuggestions()` - Smart suggestions categorized by review stage
+- `finalizeEventAgenda()`, `unfinalizeEventAgenda()`
+
+**API Endpoints (in `server/routes.ts`):**
+```
+GET  /api/agenda-sections                         # List all sections
+GET  /api/meeting-templates                       # List templates
+GET  /api/meeting-templates/:id                   # Get template
+POST /api/meeting-templates                       # Create template
+PATCH /api/meeting-templates/:id                  # Update template
+GET  /api/events/:eventId/agenda                  # Full agenda with sections/items
+GET  /api/events/:eventId/agenda/suggestions      # Smart suggestions
+POST /api/events/:eventId/agenda/apply-template   # Apply template to event
+POST /api/events/:eventId/agenda/items            # Add agenda item
+PATCH /api/events/:eventId/agenda/items/:id       # Update item
+DELETE /api/events/:eventId/agenda/items/:id      # Delete item
+POST /api/events/:eventId/agenda/reorder          # Reorder items
+POST /api/events/:eventId/agenda/finalize         # Lock agenda
+POST /api/events/:eventId/agenda/unfinalize       # Unlock agenda
+GET  /api/applications/:id/journey                # Application meeting history
+```
+
+**API Client Functions (in `client/src/lib/api.ts`):**
+- Types: `AgendaSection`, `MeetingTemplate`, `EventAgendaItem`, `EventAgenda`, `AgendaSuggestions`, `ApplicationJourney`
+- Functions: `listAgendaSections()`, `listMeetingTemplates()`, `getEventAgenda()`, `getAgendaSuggestions()`, `addAgendaItem()`, `updateAgendaItem()`, `finalizeAgenda()`, `getApplicationJourney()`, etc.
+
+**Review Stage Categorization Logic:**
+- `new_business` - First time at a meeting
+- `old_business` - Previously tabled, needs info, or deferred
+- `final_approval` - Previously given conditional/recommended status
+
+---
+
+### Previous Session (2025-12-22)
+
+#### 1. Account Admin Billing Dashboard
+Built a comprehensive billing page for Account Admins with full audit trail.
+
+**New Pages:**
+- `client/src/pages/AccountAdminBilling.tsx` - Billing landing page
+- `client/src/pages/AccountAdminBillingDetail.tsx` - Property detail with activity log
+
+**Landing Page Features:**
+- Summary cards: Total Credits Used, Total Overage Cost, Applications, AI Analyses
+- Properties table with tier, credit usage progress, overage costs
+- "View Details" links to property drill-down
+
+**Detail Page Features:**
+- Credit usage progress bar with overage indicators
+- Period filter: This Month, Last Month, Quarter, Year
+- Activity tab: Full audit trail of billable events (AI analyses, forms, applications)
+- Invoices tab: Invoice management with generate, send, download actions
+
+**Backend Endpoints (in `server/routes.ts`):**
+```
+GET  /api/account-admin/billing/summary
+GET  /api/account-admin/billing/:communityId/detail
+POST /api/account-admin/billing/:communityId/invoices/generate
+POST /api/account-admin/billing/:communityId/invoices/:invoiceId/send
+```
+
+**API Client Functions (in `client/src/lib/api.ts`):**
+- `getAccountAdminBillingSummary()` - Get all properties with billing summary
+- `getAccountAdminBillingDetail()` - Get property detail with activities/invoices
+- `generateCommunityInvoice()` - Generate invoice for a property
+- `sendCommunityInvoice()` - Send invoice email to property
+
+**Route Changes:**
+- `client/src/lib/mock-data.ts` - Updated Billing nav href to `/account-admin/billing`
+- `client/src/lib/rbac.ts` - Added billing route permissions
+- `client/src/App.tsx` - Registered new billing routes
+
+---
+
+### Previous Session Work (Committed)
 
 #### 1. Contractor Role Switching Fix
 Fixed contractor role not persisting in sidebar when switching contexts.
 
-**Changes Made:**
-- `client/src/lib/rbac.ts` - Added 'contractor' to route permissions for /contractor routes
-- `client/src/lib/mock-data.ts` - Added 'contractor' to Role type, added CONTRACTOR_NAV_ITEMS
-- `client/src/components/layout/DashboardLayout.tsx` - Shows contractor nav when role is 'contractor', persists role to backend
-- `client/src/hooks/useUserTenants.ts` - Exception to prevent 'contractor' role from being reset by tenant logic
-
 #### 2. Contractor Areas of Expertise (Multi-Select)
 Added ability for contractors to specify multiple areas of expertise.
 
-**Changes Made:**
-- `shared/schema.ts` - Added `areasOfExpertise` JSONB column to contractors table
-- `client/src/pages/ContractorProfile.tsx` - Multi-select checkboxes for 15 expertise areas
-- `server/routes.ts` - Updated POST/PATCH endpoints to handle areasOfExpertise
-- `client/src/lib/api.ts` - Updated API client types
-- `server/provision.ts` - Alex's profile includes landscaping, fencing, outdoor_structures
-
-**Available Expertise Areas:**
-- General Contractor, Landscaping, Fencing, Roofing, Pool/Spa
-- Painting, HVAC, Electrical, Plumbing, Architect/Design
-- Exterior Modifications, Structural Changes, Outdoor Structures, Signage, Other
-
-**Invitation Flow:**
-When a contractor accepts an invitation and doesn't have a profile, the system creates one with initial expertise based on the application's project type.
-
 #### 3. Doubled AI Credit Costs (Centralized)
-Created centralized credit cost constants and doubled all values.
-
-**New Constants** (`shared/subscriptionTypes.ts`):
-```typescript
-export const CREDIT_COSTS = {
-  STANDARD_ANALYSIS: 2,   // was 1
-  FULL_ANALYSIS: 4,       // was 2
-  AI_FORM_GENERATION: 2,  // was 1
-} as const;
-```
-
-**Changes Made:**
-- `shared/subscriptionTypes.ts` - Added CREDIT_COSTS constants
-- `client/src/components/SubscriptionManagement.tsx` - Uses CREDIT_COSTS in "What Uses Credits"
-- `server/services/communitySubscriptionService.ts` - deductCredit() accepts count parameter
-- `server/services/usageTrackingService.ts` - logAiAnalysis() accepts analysisType, uses CREDIT_COSTS
-- `server/services/analysisQueueService.ts` - Determines analysis type from job options
-- `client/src/components/ai-analysis/AIAnalysisButton.tsx` - Shows dynamic credit cost based on options
-
-**Credit Cost Logic:**
-- Standard (satellite only): 2 credits
-- Full (mockups OR breakdown report OR property research): 4 credits
-
----
-
-### Commit Made
-```
-665f62b Add contractor areas of expertise and double AI credit costs
-```
-
-18 files changed, 470 insertions, 99 deletions
-
----
-
-## WORK IN PROGRESS (From Previous Sessions)
-
-The following features were developed in earlier sessions and are now committed:
-
-#### 1. Co-Applicant System
-- Household members linked to primary homeowners
-- Contractor profiles (cross-tenant)
-- Application collaborators
-- Invitation system
-
-#### 2. Tour/Onboarding System
-- Role-based guided tours
-- Admin tour customization
-- User progress tracking
-
-#### 3. Email Template System
-- Centralized email template registry
-- Admin email template management
-
-#### 4. Inter-App Sync with HomeHub
-- Sync events tracking
-- Developer instructions across apps
+Created centralized credit cost constants (CREDIT_COSTS in shared/subscriptionTypes.ts).
 
 ---
 
 ## DATABASE STATUS
 
-The `areasOfExpertise` column was added directly to the contractors table:
-```sql
-ALTER TABLE contractors ADD COLUMN areas_of_expertise JSONB DEFAULT '[]'::jsonb;
-```
+No database changes required for this feature - uses existing tables:
+- `community_subscriptions` - Subscription and credit data
+- `usage_events` - Audit trail of billable activities
+- `invoices` - Invoice records
 
-All existing Alex contractor profiles were updated:
-```sql
-UPDATE contractors SET areas_of_expertise = '["landscaping", "fencing", "outdoor_structures"]'::jsonb
-WHERE company_name = 'Rivera Landscaping & Design';
-```
+#### 2. Activity Log Credits Fix (2025-12-22)
+Fixed activity log not showing credits for historical events.
+
+**Problem:** Historical usage events had `creditsUsed: 0` because they were created before credit tracking was implemented.
+
+**Solution:** Calculate expected credits based on event type using centralized `CREDIT_COSTS`:
+- AI Analysis (Standard): 2 credits
+- AI Analysis (Full): 4 credits
+- AI Form Generated: 2 credits
+- Application Submitted: 0 credits
+- Document Uploaded: 0 credits
+
+**File Changed:** `server/routes.ts` (billing detail endpoint at ~line 6108)
 
 ---
 
 ## NEXT STEPS
 
-### Testing Priorities
-1. **Contractor Role Switching** - Switch to contractor role in sidebar, verify it persists
-2. **Areas of Expertise** - Edit contractor profile, select multiple expertise areas
-3. **AI Credit Costs** - Check "What Uses Credits" shows 2/4/2, run analysis to verify deduction
+### Intelligent Agenda System - Remaining Work
 
-### Future Enhancements
-- Contractor search by expertise area
-- Contractor license verification
-- AI analysis cost estimation before running
+**Phase 1: Core UI Components** - COMPLETE
+- `AgendaSection.tsx`, `AgendaItem.tsx`, `AgendaSuggestions.tsx`
+
+**Phase 2: Pages & Integration** - MOSTLY COMPLETE
+- `MeetingAgenda.tsx` page - DONE
+- Add "Agenda" tab to `EventModal.tsx` - Optional enhancement
+- Add template selector when creating events - Optional enhancement
+
+**Phase 3: Application Journey** (Next Priority)
+1. `ApplicationJourneyTimeline.tsx` component
+2. Add journey section to `ApplicationDetail.tsx`
+3. `ApplicationJourney.tsx` page at `/applications/:id/journey`
+
+**Phase 4: Polish**
+1. Drag-and-drop reordering within sections
+2. Data migration from `eventApplications` (if needed)
+
+### Testing Priorities (Agenda System)
+1. **Access Agenda** - Login, go to Calendar, click event dropdown → Agenda
+2. **Apply Template** - Click "Apply Template" and select a meeting template
+3. **Add Items** - Use suggestions panel to add applications, or manually add discussion items
+4. **Record Decision** - Click item dropdown → Record Decision
+5. **Finalize** - Lock the agenda and verify editing is disabled
 
 ---
 
@@ -141,6 +219,8 @@ WHERE company_name = 'Rivera Landscaping & Design';
 - Co-applicant system (household members + contractors)
 - Onboarding tours (role-based guided tours)
 - Inter-app sync (HomeHub integration)
+- Account Admin Billing Dashboard
+- **NEW: Intelligent Agenda System** (backend complete - auto-categorizes applications by review stage)
 
 ### Tech Stack
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 + shadcn/ui
@@ -206,16 +286,10 @@ Managed in `shared/featureDefinitions.ts` - see `/home/runner/workspace/global-m
 
 | File | Changes |
 |------|---------|
-| `shared/subscriptionTypes.ts` | Added CREDIT_COSTS constants |
-| `shared/schema.ts` | Added areasOfExpertise to contractors |
-| `client/src/lib/rbac.ts` | Added contractor role permissions |
-| `client/src/lib/mock-data.ts` | Added contractor role, nav items |
-| `client/src/hooks/useUserTenants.ts` | Contractor role exception |
-| `client/src/components/layout/DashboardLayout.tsx` | Contractor navigation |
-| `client/src/pages/ContractorProfile.tsx` | Multi-select expertise UI |
-| `client/src/components/SubscriptionManagement.tsx` | Uses CREDIT_COSTS |
-| `client/src/components/ai-analysis/AIAnalysisButton.tsx` | Dynamic credit display |
-| `server/routes.ts` | areasOfExpertise in contractor endpoints |
-| `server/services/communitySubscriptionService.ts` | deductCredit count param |
-| `server/services/usageTrackingService.ts` | Analysis type tracking |
-| `server/services/analysisQueueService.ts` | Determines analysis type |
+| `client/src/pages/AccountAdminBilling.tsx` | **NEW** - Billing landing page |
+| `client/src/pages/AccountAdminBillingDetail.tsx` | **NEW** - Property billing detail |
+| `client/src/lib/api.ts` | Added billing API functions and types |
+| `client/src/lib/mock-data.ts` | Updated billing nav href |
+| `client/src/lib/rbac.ts` | Added billing route permissions |
+| `client/src/App.tsx` | Registered billing routes |
+| `server/routes.ts` | Added account admin billing endpoints |

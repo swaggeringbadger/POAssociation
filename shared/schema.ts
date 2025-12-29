@@ -304,6 +304,15 @@ export const documents = pgTable("documents", {
   uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  // OCR fields
+  ocrText: text("ocr_text"), // Extracted text from OCR
+  ocrConfidence: integer("ocr_confidence"), // 0-100 confidence score
+  ocrProcessedAt: timestamp("ocr_processed_at"),
+  ocrStatus: text("ocr_status"), // 'pending', 'processing', 'completed', 'failed', 'skipped'
+  ocrError: text("ocr_error"), // Error message if OCR failed
+  enhancedBlobPath: text("enhanced_blob_path"), // Path to enhanced image in Azure
+  enhancementConfidence: integer("enhancement_confidence"), // Confidence that enhancement improved quality
+  isHandwritten: boolean("is_handwritten").default(false), // Whether document contains handwritten text
 });
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({
@@ -338,6 +347,31 @@ export const insertDocumentUploadTokenSchema = createInsertSchema(documentUpload
 
 export type InsertDocumentUploadToken = z.infer<typeof insertDocumentUploadTokenSchema>;
 export type DocumentUploadToken = typeof documentUploadTokens.$inferSelect;
+
+// Document OCR Jobs table - tracks batch OCR processing requests
+export const documentOcrJobs = pgTable("document_ocr_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  requestedByUserId: varchar("requested_by_user_id").references(() => users.id),
+  status: text("status").notNull().default("queued"), // 'queued', 'processing', 'completed', 'failed'
+  totalDocuments: integer("total_documents").notNull(),
+  processedDocuments: integer("processed_documents").default(0),
+  includeImageEnhancement: boolean("include_image_enhancement").default(true),
+  totalCostUsd: text("total_cost_usd"), // Cost as string to preserve precision
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertDocumentOcrJobSchema = createInsertSchema(documentOcrJobs).omit({
+  id: true,
+  createdAt: true,
+  processedDocuments: true,
+});
+
+export type InsertDocumentOcrJob = z.infer<typeof insertDocumentOcrJobSchema>;
+export type DocumentOcrJob = typeof documentOcrJobs.$inferSelect;
 
 // Demo Sessions table (for analytics and tracking)
 export const demoSessions = pgTable("demo_sessions", {
@@ -799,6 +833,12 @@ export const events = pgTable("events", {
   noticeRequiredDays: integer("notice_required_days"), // For compliance tracking (e.g., 14 days notice)
   noticeSentAt: timestamp("notice_sent_at"),
 
+  // Intelligent Agenda System
+  meetingTemplateId: varchar("meeting_template_id"), // Will reference meetingTemplates after it's created
+  agendaFinalized: boolean("agenda_finalized").default(false).notNull(),
+  agendaFinalizedAt: timestamp("agenda_finalized_at"),
+  agendaFinalizedByUserId: varchar("agenda_finalized_by_user_id").references(() => users.id),
+
   // Audit
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
@@ -810,6 +850,7 @@ export const events = pgTable("events", {
   startDatetimeIdx: index("events_start_datetime_idx").on(table.startDatetime),
   statusIdx: index("events_status_idx").on(table.status),
   parentEventIdx: index("events_parent_idx").on(table.parentEventId),
+  meetingTemplateIdx: index("events_meeting_template_idx").on(table.meetingTemplateId),
 }));
 
 export const insertEventSchema = createInsertSchema(events).omit({
@@ -953,6 +994,168 @@ export const insertCalendarFeedTokenSchema = createInsertSchema(calendarFeedToke
 });
 export type InsertCalendarFeedToken = z.infer<typeof insertCalendarFeedTokenSchema>;
 export type CalendarFeedToken = typeof calendarFeedTokens.$inferSelect;
+
+// ============================================
+// INTELLIGENT AGENDA SYSTEM TABLES
+// ============================================
+
+// Agenda Sections - predefined sections for meeting agendas
+export const agendaSections = pgTable("agenda_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Section identity
+  slug: text("slug").notNull().unique(), // 'call_to_order', 'old_business', 'new_business', etc.
+  name: text("name").notNull(),
+  description: text("description"),
+
+  // Display
+  icon: text("icon"), // Lucide icon name
+  color: text("color"), // Tailwind color class
+
+  // Ordering
+  sortOrder: integer("sort_order").default(0).notNull(),
+
+  // Behavior
+  allowsApplications: boolean("allows_applications").default(false).notNull(), // Can applications be added?
+  allowsDiscussionItems: boolean("allows_discussion_items").default(true).notNull(), // Can generic items be added?
+  isSystemDefined: boolean("is_system_defined").default(true).notNull(), // System sections cannot be deleted
+
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAgendaSectionSchema = createInsertSchema(agendaSections).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAgendaSection = z.infer<typeof insertAgendaSectionSchema>;
+export type AgendaSection = typeof agendaSections.$inferSelect;
+
+// Meeting Template Section Config (JSONB structure)
+export interface MeetingTemplateSectionConfig {
+  sectionId: string;
+  customName?: string; // Override the section name for this template
+  defaultDurationMinutes?: number;
+  isRequired: boolean;
+}
+
+// Meeting Templates - reusable meeting structures
+export const meetingTemplates = pgTable("meeting_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Tenant scope (null = system-wide template)
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Template details
+  name: text("name").notNull(), // "ARC Review Meeting", "Board Meeting", etc.
+  description: text("description"),
+  eventTypeSlug: text("event_type_slug"), // Links to event type by slug (arc_meeting, board_meeting)
+
+  // Template structure - ordered array of section configurations
+  sections: jsonb("sections").notNull().$type<MeetingTemplateSectionConfig[]>(),
+
+  // Template status
+  isDefault: boolean("is_default").default(false).notNull(), // Default for this event type
+  isActive: boolean("is_active").default(true).notNull(),
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+}, (table) => ({
+  tenantIdx: index("meeting_templates_tenant_idx").on(table.tenantId),
+  eventTypeIdx: index("meeting_templates_event_type_idx").on(table.eventTypeSlug),
+}));
+
+export const insertMeetingTemplateSchema = createInsertSchema(meetingTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertMeetingTemplate = z.infer<typeof insertMeetingTemplateSchema>;
+export type MeetingTemplate = typeof meetingTemplates.$inferSelect;
+
+// Review Stage enum for application categorization
+export const reviewStageSchema = z.enum([
+  'new_business',     // First time appearing at a meeting
+  'old_business',     // Returning (previously tabled, needs info, deferred)
+  'final_approval',   // Ready for final vote (previously discussed positively)
+]);
+export type ReviewStage = z.infer<typeof reviewStageSchema>;
+
+// Agenda Item Type enum
+export const agendaItemTypeSchema = z.enum([
+  'application',      // ARB/ARC application for review
+  'discussion',       // General discussion item
+  'announcement',     // Announcement or informational item
+  'motion',           // Formal motion for voting
+]);
+export type AgendaItemType = z.infer<typeof agendaItemTypeSchema>;
+
+// Agenda Decision enum
+export const agendaDecisionSchema = z.enum([
+  'approved',           // Approved as submitted
+  'rejected',           // Denied/rejected
+  'tabled',             // Deferred to future meeting (needs more discussion)
+  'needs_info',         // Returned to applicant for additional information
+  'conditional',        // Approved with conditions
+  'deferred',           // Pushed to next meeting due to time constraints
+  'withdrawn',          // Applicant withdrew
+  'recommended',        // Recommended for approval (to higher body)
+]);
+export type AgendaDecision = z.infer<typeof agendaDecisionSchema>;
+
+// Event Agenda Items - structured agenda items linked to sections
+export const eventAgendaItems = pgTable("event_agenda_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Event and section placement
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  sectionId: varchar("section_id").notNull().references(() => agendaSections.id),
+  orderIndex: integer("order_index").default(0).notNull(), // Order within section
+
+  // Item type
+  itemType: text("item_type").notNull(), // 'application', 'discussion', 'announcement', 'motion'
+
+  // For application items
+  applicationId: varchar("application_id").references(() => applications.id, { onDelete: "cascade" }),
+  reviewStage: text("review_stage"), // 'new_business', 'old_business', 'final_approval'
+
+  // For non-application items
+  title: text("title"),
+  description: text("description"),
+  presenterId: varchar("presenter_id").references(() => users.id),
+
+  // Meeting preparation
+  presenterNotes: text("presenter_notes"),
+  estimatedMinutes: integer("estimated_minutes"),
+
+  // Post-meeting outcomes
+  decision: text("decision"), // 'approved', 'rejected', 'tabled', 'needs_info', 'conditional', 'deferred', 'withdrawn', 'recommended'
+  decisionNotes: text("decision_notes"),
+
+  // Audit
+  addedByUserId: varchar("added_by_user_id").references(() => users.id),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+}, (table) => ({
+  eventIdx: index("event_agenda_items_event_idx").on(table.eventId),
+  sectionIdx: index("event_agenda_items_section_idx").on(table.sectionId),
+  applicationIdx: index("event_agenda_items_application_idx").on(table.applicationId),
+  orderIdx: index("event_agenda_items_order_idx").on(table.eventId, table.sectionId, table.orderIndex),
+}));
+
+export const insertEventAgendaItemSchema = createInsertSchema(eventAgendaItems).omit({
+  id: true,
+  addedAt: true,
+  updatedAt: true,
+});
+export type InsertEventAgendaItem = z.infer<typeof insertEventAgendaItemSchema>;
+export type EventAgendaItem = typeof eventAgendaItems.$inferSelect;
 
 // ============================================
 // SUBSCRIPTION & BILLING MODULE TABLES

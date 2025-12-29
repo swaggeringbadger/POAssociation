@@ -346,22 +346,92 @@ export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
 /**
  * Credit costs per feature - CENTRALIZED CONSTANTS
  * Update these values to change credit costs across the entire system.
+ *
+ * New granular per-option pricing model:
+ * - Base Analysis: 1 credit (compliance review)
+ * - Satellite Imagery: +1 credit
+ * - AI Mockups: +2 credits
+ * - Breakdown Report: +1 credit
+ * - OCR Extraction: +2 credits
  */
 export const CREDIT_COSTS = {
-  /** Standard AI Analysis: compliance review + satellite imagery */
+  /** Base AI Analysis: compliance review */
+  BASE_ANALYSIS: 1,
+
+  /** Per-option add-ons */
+  OPTION_SATELLITE_IMAGERY: 1,
+  OPTION_AI_MOCKUPS: 2,
+  OPTION_BREAKDOWN_REPORT: 1,
+  OPTION_OCR_EXTRACTION: 2,
+
+  /** @deprecated Use BASE_ANALYSIS + options instead */
   STANDARD_ANALYSIS: 2,
-  /** Full AI Analysis: Standard + mockup + property research + breakdown */
+  /** @deprecated Use BASE_ANALYSIS + options instead */
   FULL_ANALYSIS: 4,
+
   /** AI Form Generation: generate custom application forms */
   AI_FORM_GENERATION: 2,
 } as const;
 
 /**
+ * Options for AI analysis credit calculation
+ */
+export interface AnalysisCreditOptions {
+  includeSatellite?: boolean;
+  includeMockups?: boolean;
+  includeBreakdownReport?: boolean;
+  includeOcr?: boolean;
+}
+
+/**
+ * Breakdown of credits by option for tracking/reporting
+ */
+export interface AnalysisOptionBreakdown {
+  base: number;
+  satellite: number;
+  mockups: number;
+  breakdown: number;
+  ocr: number;
+  total: number;
+}
+
+/**
+ * Calculate total credit cost for an AI analysis based on selected options
+ */
+export function calculateAnalysisCreditCost(options: AnalysisCreditOptions): number {
+  let total = CREDIT_COSTS.BASE_ANALYSIS;
+  if (options.includeSatellite) total += CREDIT_COSTS.OPTION_SATELLITE_IMAGERY;
+  if (options.includeMockups) total += CREDIT_COSTS.OPTION_AI_MOCKUPS;
+  if (options.includeBreakdownReport) total += CREDIT_COSTS.OPTION_BREAKDOWN_REPORT;
+  if (options.includeOcr) total += CREDIT_COSTS.OPTION_OCR_EXTRACTION;
+  return total;
+}
+
+/**
+ * Get detailed breakdown of credits by option for tracking/reporting
+ */
+export function getAnalysisOptionBreakdown(options: AnalysisCreditOptions): AnalysisOptionBreakdown {
+  const breakdown: AnalysisOptionBreakdown = {
+    base: CREDIT_COSTS.BASE_ANALYSIS,
+    satellite: options.includeSatellite ? CREDIT_COSTS.OPTION_SATELLITE_IMAGERY : 0,
+    mockups: options.includeMockups ? CREDIT_COSTS.OPTION_AI_MOCKUPS : 0,
+    breakdown: options.includeBreakdownReport ? CREDIT_COSTS.OPTION_BREAKDOWN_REPORT : 0,
+    ocr: options.includeOcr ? CREDIT_COSTS.OPTION_OCR_EXTRACTION : 0,
+    total: 0,
+  };
+  breakdown.total = breakdown.base + breakdown.satellite + breakdown.mockups + breakdown.breakdown + breakdown.ocr;
+  return breakdown;
+}
+
+/**
  * Default tier definitions (for reference, actual values from DB)
  *
  * Pricing model: Everyone gets ALL features. Premium operations cost Credits.
- * - Standard Analysis: 2 credits (compliance review + satellite)
- * - Full Analysis: 4 credits (+ mockup + property research + breakdown)
+ * - Base Analysis: 1 credit (compliance review)
+ * - + Satellite Imagery: 1 credit
+ * - + AI Mockups: 2 credits
+ * - + Breakdown Report: 1 credit
+ * - + OCR Extraction: 2 credits
  * - AI Form Generation: 2 credits
  *
  * Overage costs are tiered by community size (volume discount).

@@ -51,6 +51,9 @@ import HouseholdSettings from "@/pages/HouseholdSettings";
 import ContractorProfile from "@/pages/ContractorProfile";
 import ContractorDashboard from "@/pages/ContractorDashboard";
 import ContractorReferrals from "@/pages/ContractorReferrals";
+import AccountAdminBilling from "@/pages/AccountAdminBilling";
+import AccountAdminBillingDetail from "@/pages/AccountAdminBillingDetail";
+import MeetingAgenda from "@/pages/MeetingAgenda";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -280,6 +283,16 @@ function Router() {
             </ProtectedRoute>
           </Route>
 
+          <Route path="/calendar/events/:eventId/agenda">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <div className="p-8">
+                  <MeetingAgenda />
+                </div>
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
           <Route path="/form-wizard">
             <ProtectedRoute>
               <DashboardLayout>
@@ -388,6 +401,23 @@ function Router() {
             <ProtectedRoute>
               <DashboardLayout>
                 <PaymentMethodsPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          {/* Account Admin Billing Routes */}
+          <Route path="/account-admin/billing">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <AccountAdminBilling />
+              </DashboardLayout>
+            </ProtectedRoute>
+          </Route>
+
+          <Route path="/account-admin/billing/:communityId">
+            <ProtectedRoute>
+              <DashboardLayout>
+                <AccountAdminBillingDetail />
               </DashboardLayout>
             </ProtectedRoute>
           </Route>

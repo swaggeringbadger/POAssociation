@@ -3972,11 +3972,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Events access middleware - more permissive than compliance
   // Board members, managers, and reps can all access calendar
   const requireEventsAccess = async (req: any, res: any, next: any) => {
-    console.log('requireEventsAccess - session:', req.session);
-    console.log('requireEventsAccess - user:', req.user);
+    console.log('[requireEventsAccess] START - path:', req.path, 'method:', req.method);
     const userId = req.session?.userId || req.user?.claims?.sub;
-    console.log('requireEventsAccess - userId:', userId);
+    console.log('[requireEventsAccess] userId:', userId);
     if (!userId) {
+      console.log('[requireEventsAccess] DENIED: No userId');
       return res.status(401).json({ error: 'Authentication required' });
     }
     req.userId = userId; // Set for downstream handlers
@@ -3984,15 +3984,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Get user's roles across all tenants
     const userTenants = await storage.getUserTenants(userId);
     const userRoles = userTenants.map(ut => ut.role);
+    console.log('[requireEventsAccess] userTenants:', userTenants.length, 'roles:', userRoles);
 
     // Full access roles can create/edit/delete events AND see all events (public + non-public)
     const fullAccessRoles = ['management_manager', 'super_admin', 'poa_board_member', 'account_admin'];
     // Staff roles can view all events (public + non-public) but not create/edit
     const staffRoles = ['management_rep', 'poa_board_contributor'];
     // Member roles can only view public events
-    const memberRoles = ['homeowner'];
+    const memberRoles = ['homeowner', 'household_member', 'contractor'];
 
     if (fullAccessRoles.some(r => userRoles.includes(r))) {
+      console.log('[requireEventsAccess] GRANTED: full access role');
       req.eventsAccess = 'full';
       req.canSeeNonPublic = true; // Can see board-only events
       req.userTenants = userTenants;
@@ -4000,6 +4002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     if (req.method === 'GET' && staffRoles.some(r => userRoles.includes(r))) {
+      console.log('[requireEventsAccess] GRANTED: staff read access');
       req.eventsAccess = 'read';
       req.canSeeNonPublic = true; // Staff can see board-only events
       req.userTenants = userTenants;
@@ -4007,6 +4010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     if (req.method === 'GET' && memberRoles.some(r => userRoles.includes(r))) {
+      console.log('[requireEventsAccess] GRANTED: member read access');
       req.eventsAccess = 'read';
       req.canSeeNonPublic = false; // Members can only see public events
       req.userTenants = userTenants;
@@ -4015,12 +4019,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // If user has any tenant access, allow read-only for public events only
     if (req.method === 'GET' && userTenants.length > 0) {
+      console.log('[requireEventsAccess] GRANTED: tenant member fallback');
       req.eventsAccess = 'read';
       req.canSeeNonPublic = false;
       req.userTenants = userTenants;
       return next();
     }
 
+    console.log('[requireEventsAccess] DENIED: No matching access rule');
     return res.status(403).json({ error: 'Insufficient permissions for calendar' });
   };
 
@@ -4144,12 +4150,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check access
       const tenantIds = req.userTenants.map((ut: any) => ut.tenantId);
+      console.log('[Event Access Debug]', {
+        eventId: req.params.id,
+        eventTenantId: event.tenantId,
+        userTenantIds: tenantIds,
+        isPublic: event.isPublic,
+        canSeeNonPublic: req.canSeeNonPublic,
+        eventsAccess: req.eventsAccess,
+        userRoles: req.userTenants.map((ut: any) => ut.role),
+      });
+
       if (!tenantIds.includes(event.tenantId)) {
+        console.log('[Event Access Debug] DENIED: User not in event tenant');
         return res.status(403).json({ error: 'Access denied to this event' });
       }
 
       // Check visibility - non-public events require staff/board access
       if (!event.isPublic && !req.canSeeNonPublic) {
+        console.log('[Event Access Debug] DENIED: Non-public event and user cannot see non-public');
         return res.status(403).json({ error: 'Access denied to this event' });
       }
 
@@ -4590,6 +4608,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // INTELLIGENT AGENDA SYSTEM ROUTES
+  // ============================================
+
+  // List all agenda sections
+  app.get('/api/agenda-sections', isAuthenticated, async (req: any, res) => {
+    try {
+      const sections = await storage.listAgendaSections();
+      res.json(sections);
+    } catch (error: any) {
+      console.error('Error fetching agenda sections:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List meeting templates
+  app.get('/api/meeting-templates', isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = req.query.tenantId as string | undefined;
+      const templates = await storage.listMeetingTemplates(tenantId);
+      res.json(templates);
+    } catch (error: any) {
+      console.error('Error fetching meeting templates:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single meeting template
+  app.get('/api/meeting-templates/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.getMeetingTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: 'Meeting template not found' });
+      }
+      res.json(template);
+    } catch (error: any) {
+      console.error('Error fetching meeting template:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create meeting template
+  app.post('/api/meeting-templates', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const template = await storage.createMeetingTemplate({
+        ...req.body,
+        createdByUserId: userId,
+      });
+      res.status(201).json(template);
+    } catch (error: any) {
+      console.error('Error creating meeting template:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update meeting template
+  app.patch('/api/meeting-templates/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.updateMeetingTemplate(req.params.id, req.body);
+      res.json(template);
+    } catch (error: any) {
+      console.error('Error updating meeting template:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get event agenda (full agenda with sections and items)
+  app.get('/api/events/:eventId/agenda', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      const agenda = await storage.getEventAgenda(req.params.eventId);
+      res.json(agenda);
+    } catch (error: any) {
+      console.error('Error fetching event agenda:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get smart suggestions for an event's agenda
+  app.get('/api/events/:eventId/agenda/suggestions', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      // Get the event to find its tenant
+      const event = await storage.getEvent(req.params.eventId);
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+
+      console.log('[agenda-suggestions] eventId:', req.params.eventId, 'tenantId:', event.tenantId);
+      const suggestions = await storage.getAgendaSuggestions(event.tenantId);
+      console.log('[agenda-suggestions] results:', {
+        newBusiness: suggestions.newBusiness.length,
+        oldBusiness: suggestions.oldBusiness.length,
+        finalApproval: suggestions.finalApproval.length,
+        newBusinessIds: suggestions.newBusiness.map((a: any) => a.applicationNumber),
+      });
+      res.json(suggestions);
+    } catch (error: any) {
+      console.error('Error fetching agenda suggestions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Apply meeting template to event
+  app.post('/api/events/:eventId/agenda/apply-template', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const { templateId } = req.body;
+      const template = await storage.getMeetingTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+
+      // Update event with template reference
+      const event = await storage.updateEvent(req.params.eventId, {
+        meetingTemplateId: templateId,
+      });
+
+      res.json({ event, template });
+    } catch (error: any) {
+      console.error('Error applying template to event:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Add agenda item
+  app.post('/api/events/:eventId/agenda/items', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      // Validate required fields
+      if (!req.body.sectionId) {
+        return res.status(400).json({ error: 'Section is required' });
+      }
+      if (!req.body.itemType) {
+        return res.status(400).json({ error: 'Item type is required' });
+      }
+
+      const item = await storage.addAgendaItem({
+        ...req.body,
+        eventId: req.params.eventId,
+        addedByUserId: req.userId,
+      });
+      res.status(201).json(item);
+    } catch (error: any) {
+      console.error('Error adding agenda item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update agenda item
+  app.patch('/api/events/:eventId/agenda/items/:itemId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const item = await storage.updateAgendaItem(req.params.itemId, req.body);
+      res.json(item);
+    } catch (error: any) {
+      console.error('Error updating agenda item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete agenda item
+  app.delete('/api/events/:eventId/agenda/items/:itemId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      await storage.deleteAgendaItem(req.params.itemId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting agenda item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reorder agenda items in a section
+  app.post('/api/events/:eventId/agenda/reorder', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const { sectionId, itemIds } = req.body;
+      await storage.reorderAgendaItems(req.params.eventId, sectionId, itemIds);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error reordering agenda items:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Finalize agenda
+  app.post('/api/events/:eventId/agenda/finalize', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const event = await storage.finalizeEventAgenda(req.params.eventId, req.userId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error finalizing agenda:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unfinalize agenda
+  app.post('/api/events/:eventId/agenda/unfinalize', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Write access required' });
+      }
+
+      const event = await storage.unfinalizeEventAgenda(req.params.eventId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error unfinalizing agenda:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get application journey (meeting history for an application)
+  app.get('/api/applications/:applicationId/journey', isAuthenticated, async (req: any, res) => {
+    try {
+      const journey = await storage.getApplicationJourney(req.params.applicationId);
+      res.json(journey);
+    } catch (error: any) {
+      console.error('Error fetching application journey:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // CALENDAR FEED (iCal) ROUTES
   // ============================================
 
@@ -4932,7 +5191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/applications/:applicationId/analyze', isAuthenticated, async (req: any, res) => {
     try {
       const { applicationId } = req.params;
-      const { includeSatellite = true, includeMockups = true, includeBreakdownReport = false, mockupQuality = 'standard' } = req.body;
+      const { includeSatellite = true, includeMockups = true, includeBreakdownReport = false, includeOcr = false, mockupQuality = 'standard' } = req.body;
 
       // Get application to verify tenant
       const application = await storage.getApplication(applicationId);
@@ -4996,6 +5255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         includeSatellite,
         includeMockups,
         includeBreakdownReport,
+        includeOcr,
         mockupQuality,
         demoCodeId: application.demoCodeId ?? undefined,
       });
@@ -5485,6 +5745,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Super admin: Get AI analysis option popularity stats
+  app.get('/api/admin/ai/option-stats', isAuthenticated, requireSuperAdmin, async (req: any, res) => {
+    try {
+      // Query usage_events for ai_analysis events and aggregate selectedOptions
+      const events = await db
+        .select()
+        .from(schema.usageEvents)
+        .where(eq(schema.usageEvents.eventType, 'ai_analysis'))
+        .orderBy(desc(schema.usageEvents.createdAt))
+        .limit(1000); // Last 1000 analyses
+
+      let totalAnalyses = 0;
+      let satelliteCount = 0;
+      let mockupsCount = 0;
+      let breakdownCount = 0;
+      let ocrCount = 0;
+      let totalCredits = 0;
+
+      for (const event of events) {
+        totalAnalyses++;
+        totalCredits += event.creditsUsed || 0;
+
+        // Parse metadata for selected options
+        const metadata = event.metadata as { selectedOptions?: { includeSatellite?: boolean; includeMockups?: boolean; includeBreakdownReport?: boolean; includeOcr?: boolean } } | null;
+        if (metadata?.selectedOptions) {
+          if (metadata.selectedOptions.includeSatellite) satelliteCount++;
+          if (metadata.selectedOptions.includeMockups) mockupsCount++;
+          if (metadata.selectedOptions.includeBreakdownReport) breakdownCount++;
+          if (metadata.selectedOptions.includeOcr) ocrCount++;
+        } else {
+          // Legacy events without selectedOptions - estimate from credit count
+          // Old system: 2 credits = standard, 4 credits = full
+          if (event.creditsUsed === 4) {
+            mockupsCount++;
+          }
+          satelliteCount++; // Satellite was always included by default
+        }
+      }
+
+      const stats = {
+        totalAnalyses,
+        satelliteCount,
+        satellitePercentage: totalAnalyses > 0 ? Math.round((satelliteCount / totalAnalyses) * 100) : 0,
+        mockupsCount,
+        mockupsPercentage: totalAnalyses > 0 ? Math.round((mockupsCount / totalAnalyses) * 100) : 0,
+        breakdownCount,
+        breakdownPercentage: totalAnalyses > 0 ? Math.round((breakdownCount / totalAnalyses) * 100) : 0,
+        ocrCount,
+        ocrPercentage: totalAnalyses > 0 ? Math.round((ocrCount / totalAnalyses) * 100) : 0,
+        averageCreditsPerAnalysis: totalAnalyses > 0 ? Math.round((totalCredits / totalAnalyses) * 10) / 10 : 0,
+      };
+
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error getting AI option stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // OCR & DOCUMENT PROCESSING ENDPOINTS
+  // ============================================
+
+  // Trigger OCR processing for an application's documents
+  app.post('/api/ai/ocr/:applicationId/process', isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { includeImageEnhancement = true } = req.body;
+
+      // Get application to verify access
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userTenants = await storage.getUserTenants(userId);
+      const hasAccess = userTenants.some(ut => ut.tenantId === application.tenantId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Import and use OCR worker
+      const { ocrWorker } = await import('./services/ocrWorker');
+
+      // Queue the OCR job
+      const job = await ocrWorker.queueOcrJob({
+        applicationId,
+        requestedByUserId: userId,
+        includeImageEnhancement,
+      });
+
+      // Return job info
+      res.json({
+        jobId: job.id,
+        status: job.status,
+        totalDocuments: job.totalDocuments,
+        message: 'OCR processing queued',
+      });
+    } catch (error: any) {
+      console.error('Error triggering OCR processing:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get OCR job status
+  app.get('/api/ai/ocr/jobs/:jobId/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { jobId } = req.params;
+
+      const { ocrWorker } = await import('./services/ocrWorker');
+      const status = await ocrWorker.getJobStatus(jobId);
+
+      res.json(status);
+    } catch (error: any) {
+      console.error('Error getting OCR job status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get OCR results for an application
+  app.get('/api/ai/ocr/:applicationId/results', isAuthenticated, async (req: any, res) => {
+    try {
+      const { applicationId } = req.params;
+
+      // Get application to verify access
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+
+      // Verify user has access
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userTenants = await storage.getUserTenants(userId);
+      const hasAccess = userTenants.some(ut => ut.tenantId === application.tenantId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { ocrWorker } = await import('./services/ocrWorker');
+      const results = await ocrWorker.getOcrResults(applicationId);
+
+      // Also get any pending/processing jobs
+      const jobs = await storage.getOcrJobsForApplication(applicationId);
+      const activeJob = jobs.find(j => j.status === 'queued' || j.status === 'processing');
+
+      res.json({
+        documents: results,
+        activeJob: activeJob ? {
+          jobId: activeJob.id,
+          status: activeJob.status,
+          processedDocuments: activeJob.processedDocuments,
+          totalDocuments: activeJob.totalDocuments,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error('Error getting OCR results:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check OCR service availability
+  app.get('/api/ai/ocr/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { ocrService } = await import('./services/ocrService');
+      const { ocrWorker } = await import('./services/ocrWorker');
+
+      res.json({
+        available: ocrService.isConfigured(),
+        workerRunning: ocrWorker.isRunning(),
+      });
+    } catch (error: any) {
+      console.error('Error checking OCR status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============================================
   // SUBSCRIPTION & BILLING ENDPOINTS
   // ============================================
@@ -5944,6 +6390,383 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(pdfBuffer);
     } catch (error: any) {
       console.error('Error downloading invoice PDF:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ACCOUNT ADMIN BILLING ENDPOINTS
+  // ============================================
+
+  // Get billing summary for all properties managed by account admin
+  app.get('/api/account-admin/billing/summary', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Check if user has account_admin role
+      const userRoles = await storage.getUserTenants(userId);
+      const isAccountAdmin = userRoles.some(
+        r => r.role === 'account_admin' || r.role === 'super_admin'
+      );
+      if (!isAccountAdmin) {
+        return res.status(403).json({ error: 'Access denied. Account admin role required.' });
+      }
+
+      // Get all managed communities (not management companies)
+      const managedProperties = await storage.getManagedProperties(userId);
+      const communities = managedProperties.filter(t => t.type === 'community');
+
+      // Get subscription and usage data for each community
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const { usageTrackingService } = await import('./services/usageTrackingService');
+
+      const propertyData = await Promise.all(
+        communities.map(async (community) => {
+          const subscription = await communitySubscriptionService.getSubscriptionWithTier(community.id);
+
+          // Get current period dates
+          const periodStart = subscription?.currentPeriodStart
+            ? new Date(subscription.currentPeriodStart)
+            : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+          const periodEnd = subscription?.currentPeriodEnd
+            ? new Date(subscription.currentPeriodEnd)
+            : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+
+          // Get usage summary for current period
+          const usageSummary = await usageTrackingService.getUsageSummary(
+            community.id,
+            periodStart,
+            periodEnd
+          );
+
+          const creditsIncluded = subscription?.effectiveCredits || 0;
+          const creditsUsed = subscription?.creditsUsed || 0;
+          const creditsRemaining = Math.max(0, creditsIncluded - creditsUsed);
+          const isOverage = creditsUsed > creditsIncluded;
+
+          return {
+            communityId: community.id,
+            communityName: community.name,
+            subscriptionTier: subscription?.tier?.name || 'None',
+            tierCode: subscription?.tier?.tierCode || null,
+            currentPeriod: {
+              start: periodStart.toISOString(),
+              end: periodEnd.toISOString(),
+            },
+            creditsIncluded,
+            creditsUsed,
+            creditsRemaining,
+            isOverage,
+            overageCost: isOverage ? (creditsUsed - creditsIncluded) * (subscription?.effectiveOverageCost || 2) : 0,
+            applicationCount: usageSummary.totalApplications,
+            aiAnalysisCount: usageSummary.totalAiAnalyses,
+          };
+        })
+      );
+
+      // Calculate totals
+      const totals = {
+        totalCreditsUsed: propertyData.reduce((sum, p) => sum + p.creditsUsed, 0),
+        totalOverageCost: propertyData.reduce((sum, p) => sum + p.overageCost, 0),
+        totalApplications: propertyData.reduce((sum, p) => sum + p.applicationCount, 0),
+        totalAiAnalyses: propertyData.reduce((sum, p) => sum + p.aiAnalysisCount, 0),
+      };
+
+      res.json({
+        properties: propertyData,
+        totals,
+      });
+    } catch (error: any) {
+      console.error('Error getting account admin billing summary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get detailed billing activity for a specific community
+  app.get('/api/account-admin/billing/:communityId/detail', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      const { communityId } = req.params;
+      const { period = 'month', startDate, endDate } = req.query;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Check if user has access to this community
+      const managedProperties = await storage.getManagedProperties(userId);
+      const hasAccess = managedProperties.some(p => p.id === communityId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied to this community.' });
+      }
+
+      // Get community info
+      const community = await storage.getTenant(communityId);
+      if (!community) {
+        return res.status(404).json({ error: 'Community not found' });
+      }
+
+      // Calculate date range based on period
+      let periodStartDate: Date;
+      let periodEndDate: Date;
+
+      if (startDate && endDate) {
+        periodStartDate = new Date(startDate as string);
+        periodEndDate = new Date(endDate as string);
+      } else {
+        const now = new Date();
+        switch (period) {
+          case 'quarter':
+            const quarter = Math.floor(now.getMonth() / 3);
+            periodStartDate = new Date(now.getFullYear(), quarter * 3, 1);
+            periodEndDate = new Date(now.getFullYear(), quarter * 3 + 3, 0, 23, 59, 59);
+            break;
+          case 'year':
+            periodStartDate = new Date(now.getFullYear(), 0, 1);
+            periodEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+            break;
+          case 'lastMonth':
+            periodStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            periodEndDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+            break;
+          case 'month':
+          default:
+            periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            periodEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        }
+      }
+
+      // Get subscription info
+      const { communitySubscriptionService } = await import('./services/communitySubscriptionService');
+      const subscription = await communitySubscriptionService.getSubscriptionWithTier(communityId);
+
+      // Get usage events for the period
+      const { usageTrackingService } = await import('./services/usageTrackingService');
+      const events = await usageTrackingService.getEventsForPeriod(
+        communityId,
+        periodStartDate,
+        periodEndDate
+      );
+
+      // Import credit costs for historical event calculation
+      const { CREDIT_COSTS } = await import('../shared/subscriptionTypes');
+
+      // Enrich events with additional info (user names, entity names)
+      const enrichedActivities = await Promise.all(
+        events.map(async (event) => {
+          let userName = 'System';
+          let entityName = '';
+
+          // Get user name if available
+          if (event.userId) {
+            const user = await storage.getUser(event.userId);
+            userName = user?.firstName && user?.lastName
+              ? `${user.firstName} ${user.lastName}`
+              : user?.email || 'Unknown User';
+          }
+
+          // Get entity name based on type
+          if (event.entityType === 'application' && event.entityId) {
+            const app = await storage.getApplication(event.entityId);
+            entityName = app?.applicationNumber || event.entityId;
+          } else if (event.entityType === 'ai_analysis' && event.entityId) {
+            const analysis = await storage.getAiAnalysis(event.entityId);
+            if (analysis) {
+              const app = await storage.getApplication(analysis.applicationId);
+              entityName = `Analysis for ${app?.applicationNumber || analysis.applicationId}`;
+            }
+          } else if (event.entityType === 'form_template' && event.entityId) {
+            const form = await storage.getFormTemplate(event.entityId);
+            entityName = form?.name || event.entityId;
+          }
+
+          // Determine description and expected credits based on event type
+          let description = '';
+          let expectedCredits = 0;
+          const metadata = event.metadata as Record<string, any> || {};
+          switch (event.eventType) {
+            case 'ai_analysis':
+              const analysisType = metadata.analysisType === 'full' ? 'Full' : 'Standard';
+              description = `AI Analysis (${analysisType})`;
+              expectedCredits = analysisType === 'Full' ? CREDIT_COSTS.FULL_ANALYSIS : CREDIT_COSTS.STANDARD_ANALYSIS;
+              break;
+            case 'application_submitted':
+              description = 'Application Submitted';
+              expectedCredits = 0; // Applications don't cost credits
+              break;
+            case 'form_created':
+              description = 'AI Form Generated';
+              expectedCredits = CREDIT_COSTS.AI_FORM_GENERATION;
+              break;
+            case 'document_uploaded':
+              description = 'Document Uploaded';
+              expectedCredits = 0; // Document uploads don't cost credits
+              break;
+            case 'user_added':
+              description = 'User Added';
+              expectedCredits = 0; // User additions don't cost credits
+              break;
+            default:
+              description = event.eventType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              expectedCredits = 0;
+          }
+
+          // Use actual creditsUsed if recorded, otherwise use expected credits
+          const creditsUsed = event.creditsUsed || expectedCredits;
+
+          return {
+            id: event.id,
+            type: event.eventType,
+            description,
+            creditsUsed,
+            isOverage: event.isOverage,
+            cost: event.costAtTime,
+            entityId: event.entityId,
+            entityName,
+            userId: event.userId,
+            userName,
+            createdAt: event.createdAt,
+          };
+        })
+      );
+
+      // Get invoices for this community
+      const { invoiceService } = await import('./services/invoiceService');
+      const invoices = await invoiceService.listInvoices(communityId, 12);
+
+      const creditsIncluded = subscription?.effectiveCredits || 0;
+      const creditsUsed = subscription?.creditsUsed || 0;
+      const creditsRemaining = Math.max(0, creditsIncluded - creditsUsed);
+      const isOverage = creditsUsed > creditsIncluded;
+      const overageCost = isOverage ? (creditsUsed - creditsIncluded) * (subscription?.effectiveOverageCost || 2) : 0;
+
+      res.json({
+        community: {
+          id: community.id,
+          name: community.name,
+          subscriptionTier: subscription?.tier?.name || 'None',
+        },
+        period: {
+          start: periodStartDate.toISOString(),
+          end: periodEndDate.toISOString(),
+          type: period,
+        },
+        subscription: {
+          creditsIncluded,
+          creditsUsed,
+          creditsRemaining,
+          overageCost,
+          effectivePrice: subscription?.effectivePrice || 0,
+        },
+        activities: enrichedActivities,
+        invoices: invoices.map(inv => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status,
+          amount: inv.totalAmount,
+          dueDate: inv.dueDate,
+          createdAt: inv.createdAt,
+        })),
+      });
+    } catch (error: any) {
+      console.error('Error getting billing detail:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate invoice for a specific community
+  app.post('/api/account-admin/billing/:communityId/invoices/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      const { communityId } = req.params;
+      const { periodStart, periodEnd } = req.body;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Check if user has access to this community
+      const managedProperties = await storage.getManagedProperties(userId);
+      const hasAccess = managedProperties.some(p => p.id === communityId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied to this community.' });
+      }
+
+      const { invoiceService } = await import('./services/invoiceService');
+
+      const invoice = await invoiceService.generateMonthlyInvoice({
+        billingEntityId: communityId,
+        periodStart: periodStart ? new Date(periodStart) : new Date(new Date().setMonth(new Date().getMonth() - 1)),
+        periodEnd: periodEnd ? new Date(periodEnd) : new Date(),
+      });
+
+      res.json(invoice);
+    } catch (error: any) {
+      console.error('Error generating invoice:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send invoice to community
+  app.post('/api/account-admin/billing/:communityId/invoices/:invoiceId/send', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      const { communityId, invoiceId } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Check if user has access to this community
+      const managedProperties = await storage.getManagedProperties(userId);
+      const hasAccess = managedProperties.some(p => p.id === communityId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Access denied to this community.' });
+      }
+
+      const { invoiceService } = await import('./services/invoiceService');
+      const { emailService } = await import('./emailService');
+
+      // Get invoice
+      const invoice = await invoiceService.getInvoice(invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Get community info
+      const community = await storage.getTenant(communityId);
+      if (!community?.contactEmail) {
+        return res.status(400).json({ error: 'Community has no contact email' });
+      }
+
+      // Send email (simplified - use existing send logic)
+      const periodStart = new Date(invoice.billingPeriodStart).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      });
+      const periodEnd = new Date(invoice.billingPeriodEnd).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      });
+
+      await emailService.send({
+        to: community.contactEmail,
+        subject: `Invoice ${invoice.invoiceNumber} - ${community.name}`,
+        html: `
+          <h2>Invoice ${invoice.invoiceNumber}</h2>
+          <p>Billing Period: ${periodStart} - ${periodEnd}</p>
+          <p>Amount Due: $${invoice.totalAmount.toFixed(2)}</p>
+          <p>Please contact your management company for payment details.</p>
+        `,
+      });
+
+      // Mark invoice as sent
+      const updatedInvoice = await invoiceService.markAsSent(invoiceId);
+
+      res.json({ success: true, invoice: updatedInvoice });
+    } catch (error: any) {
+      console.error('Error sending invoice:', error);
       res.status(500).json({ error: error.message });
     }
   });
