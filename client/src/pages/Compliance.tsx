@@ -266,14 +266,14 @@ export default function Compliance() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Compliance</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Compliance</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Track regulatory requirements, filings, and deadlines
           </p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
@@ -324,15 +324,15 @@ export default function Compliance() {
       {/* Filters and List */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Compliance Items</CardTitle>
-              <CardDescription>
-                {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="relative w-64">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle>Compliance Items</CardTitle>
+                <CardDescription>
+                  {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
+                </CardDescription>
+              </div>
+              <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search items..."
@@ -341,8 +341,10 @@ export default function Compliance() {
                   className="pl-8"
                 />
               </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full sm:w-40">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -355,7 +357,7 @@ export default function Compliance() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-32">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -368,7 +370,7 @@ export default function Compliance() {
                 </SelectContent>
               </Select>
               <Select value={scopeFilter} onValueChange={setScopeFilter}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-40">
                   <SelectValue placeholder="Scope" />
                 </SelectTrigger>
                 <SelectContent>
@@ -381,7 +383,122 @@ export default function Compliance() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {isLoading ? (
+              <p className="text-center text-muted-foreground py-8">Loading...</p>
+            ) : filteredItems.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                {searchQuery || categoryFilter !== "all" || statusFilter !== "all" || scopeFilter !== "all"
+                  ? "No items found matching your filters"
+                  : "No compliance items yet. Click 'Add Item' to create one."}
+              </p>
+            ) : (
+              filteredItems.map((item: ComplianceItem) => {
+                const status = statusConfig[item.status] || statusConfig.pending;
+                const priority = priorityConfig[item.priority] || priorityConfig.normal;
+                const StatusIcon = status.icon;
+                const dueDate = new Date(item.dueDate);
+                const isOverdue = isPast(dueDate) && item.status !== 'completed' && item.status !== 'na';
+
+                return (
+                  <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{item.title}</p>
+                          {item.externalReference && (
+                            <p className="text-xs text-muted-foreground">Ref: {item.externalReference}</p>
+                          )}
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="shrink-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleEdit(item)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          {item.status !== 'completed' && item.status !== 'na' && (
+                            <DropdownMenuItem onClick={() => completeMutation.mutate(item.id)}>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Mark Complete
+                            </DropdownMenuItem>
+                          )}
+                          {item.status === 'completed' && (
+                            <DropdownMenuItem onClick={() => reopenMutation.mutate(item.id)}>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Reopen
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(item)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Category</p>
+                        <Badge variant="outline" className="text-xs">{getCategoryName(item.categoryId)}</Badge>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Scope</p>
+                        <div className="flex items-center gap-1">
+                          {item.scope === 'property' ? (
+                            <>
+                              <TreePine className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs truncate">{getPropertyName(item.propertyId) || 'Property'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Building className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs truncate">{getManagementCompanyName(item.managementCompanyId) || 'Mgmt Co.'}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className={isOverdue ? "text-destructive" : ""}>
+                        <p className="text-sm font-medium">{format(dueDate, 'MMM d, yyyy')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(dueDate, { addSuffix: true })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className={`${priority.className} text-xs`}>
+                          {priority.label}
+                        </Badge>
+                        <Badge variant={status.variant} className="gap-1 text-xs">
+                          <StatusIcon className="h-3 w-3" />
+                          {status.label}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
@@ -510,7 +627,8 @@ export default function Compliance() {
                 })
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

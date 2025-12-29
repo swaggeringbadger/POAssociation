@@ -52,9 +52,12 @@ export interface FormTemplate {
 
 export interface Application {
   id: string;
+  applicationNumber?: string;
   tenantId: string;
   formTemplateId: string;
   submittedByUserId: string;
+  title?: string;
+  propertyAddress?: string;
   formData: any;
   status: string;
   submittedAt: string;
@@ -2472,4 +2475,311 @@ export async function updateAdminTour(
 // Reset tour to default (delete override)
 export async function resetAdminTour(pageKey: string, role: string): Promise<{ success: boolean }> {
   return apiRequest('DELETE', `/api/admin/tours/${encodeURIComponent(pageKey)}/${encodeURIComponent(role)}`);
+}
+
+// ============================================
+// ACCOUNT ADMIN BILLING API
+// ============================================
+
+// Property billing summary for the landing page
+export interface PropertyBillingSummary {
+  communityId: string;
+  communityName: string;
+  subscriptionTier: string;
+  tierCode: string | null;
+  currentPeriod: {
+    start: string;
+    end: string;
+  };
+  creditsIncluded: number;
+  creditsUsed: number;
+  creditsRemaining: number;
+  isOverage: boolean;
+  overageCost: number;
+  applicationCount: number;
+  aiAnalysisCount: number;
+}
+
+// Account admin billing summary response
+export interface AccountAdminBillingSummary {
+  properties: PropertyBillingSummary[];
+  totals: {
+    totalCreditsUsed: number;
+    totalOverageCost: number;
+    totalApplications: number;
+    totalAiAnalyses: number;
+  };
+}
+
+// Activity item in billing detail
+export interface BillingActivity {
+  id: string;
+  type: string;
+  description: string;
+  creditsUsed: number;
+  isOverage: boolean;
+  cost: number | null;
+  entityId: string | null;
+  entityName: string;
+  userId: string | null;
+  userName: string;
+  createdAt: string;
+}
+
+// Invoice summary for billing detail
+export interface BillingInvoiceSummary {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  amount: number;
+  dueDate: string | null;
+  createdAt: string;
+}
+
+// Billing detail response
+export interface AccountAdminBillingDetail {
+  community: {
+    id: string;
+    name: string;
+    subscriptionTier: string;
+  };
+  period: {
+    start: string;
+    end: string;
+    type: string;
+  };
+  subscription: {
+    creditsIncluded: number;
+    creditsUsed: number;
+    creditsRemaining: number;
+    overageCost: number;
+    effectivePrice: number;
+  };
+  activities: BillingActivity[];
+  invoices: BillingInvoiceSummary[];
+}
+
+// Get billing summary for all managed properties
+export async function getAccountAdminBillingSummary(): Promise<AccountAdminBillingSummary> {
+  return apiRequest('GET', '/api/account-admin/billing/summary');
+}
+
+// Get billing detail for a specific community
+export async function getAccountAdminBillingDetail(
+  communityId: string,
+  period: 'month' | 'lastMonth' | 'quarter' | 'year' = 'month'
+): Promise<AccountAdminBillingDetail> {
+  return apiRequest('GET', `/api/account-admin/billing/${communityId}/detail?period=${period}`);
+}
+
+// Generate invoice for a community
+export async function generateCommunityInvoice(
+  communityId: string,
+  options?: { periodStart?: string; periodEnd?: string }
+): Promise<InvoiceWithLineItems> {
+  return apiRequest('POST', `/api/account-admin/billing/${communityId}/invoices/generate`, options || {});
+}
+
+// Send invoice to community
+export async function sendCommunityInvoice(
+  communityId: string,
+  invoiceId: string
+): Promise<{ success: boolean; invoice: InvoiceWithLineItems }> {
+  return apiRequest('POST', `/api/account-admin/billing/${communityId}/invoices/${invoiceId}/send`);
+}
+
+// ============================================
+// INTELLIGENT AGENDA SYSTEM API
+// ============================================
+
+// Agenda Section type
+export interface AgendaSection {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  sortOrder: number;
+  allowsApplications: boolean;
+  allowsDiscussionItems: boolean;
+  isSystemDefined: boolean;
+  createdAt: string;
+}
+
+// Meeting Template Section Config
+export interface MeetingTemplateSectionConfig {
+  sectionId: string;
+  customName?: string;
+  defaultDurationMinutes?: number;
+  isRequired: boolean;
+}
+
+// Meeting Template type
+export interface MeetingTemplate {
+  id: string;
+  tenantId: string | null;
+  name: string;
+  description: string | null;
+  eventTypeSlug: string | null;
+  sections: MeetingTemplateSectionConfig[];
+  isDefault: boolean;
+  isActive: boolean;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Agenda Item Type
+export type AgendaItemType = 'application' | 'discussion' | 'announcement' | 'motion';
+
+// Review Stage Type
+export type ReviewStage = 'new_business' | 'old_business' | 'final_approval';
+
+// Agenda Decision Type
+export type AgendaDecision = 'approved' | 'rejected' | 'tabled' | 'needs_info' | 'conditional' | 'deferred' | 'withdrawn' | 'recommended';
+
+// Event Agenda Item type
+export interface EventAgendaItem {
+  id: string;
+  eventId: string;
+  sectionId: string;
+  orderIndex: number;
+  itemType: AgendaItemType;
+  applicationId: string | null;
+  reviewStage: ReviewStage | null;
+  title: string | null;
+  description: string | null;
+  presenterId: string | null;
+  presenterNotes: string | null;
+  estimatedMinutes: number | null;
+  decision: AgendaDecision | null;
+  decisionNotes: string | null;
+  addedByUserId: string | null;
+  addedAt: string;
+  updatedAt: string;
+  // Joined data
+  application?: Application;
+  presenter?: { id: string; name: string; email: string };
+}
+
+// Event Agenda (full structure)
+export interface EventAgenda {
+  sections: AgendaSection[];
+  items: EventAgendaItem[];
+}
+
+// Agenda Suggestions response
+export interface AgendaSuggestions {
+  newBusiness: Application[];
+  oldBusiness: Application[];
+  finalApproval: Application[];
+}
+
+// Application Journey entry
+export interface ApplicationJourneyEntry {
+  event: CalendarEvent;
+  agendaItem: EventAgendaItem;
+  section: AgendaSection;
+}
+
+// Application Journey response
+export interface ApplicationJourney {
+  meetings: ApplicationJourneyEntry[];
+}
+
+// List all agenda sections
+export async function listAgendaSections(): Promise<AgendaSection[]> {
+  return apiRequest('GET', '/api/agenda-sections');
+}
+
+// List meeting templates
+export async function listMeetingTemplates(tenantId?: string): Promise<MeetingTemplate[]> {
+  const params = tenantId ? `?tenantId=${tenantId}` : '';
+  return apiRequest('GET', `/api/meeting-templates${params}`);
+}
+
+// Get a meeting template
+export async function getMeetingTemplate(id: string): Promise<MeetingTemplate> {
+  return apiRequest('GET', `/api/meeting-templates/${id}`);
+}
+
+// Create a meeting template
+export async function createMeetingTemplate(data: Partial<MeetingTemplate>): Promise<MeetingTemplate> {
+  return apiRequest('POST', '/api/meeting-templates', data);
+}
+
+// Update a meeting template
+export async function updateMeetingTemplate(id: string, data: Partial<MeetingTemplate>): Promise<MeetingTemplate> {
+  return apiRequest('PATCH', `/api/meeting-templates/${id}`, data);
+}
+
+// Get event agenda (full structure with sections and items)
+export async function getEventAgenda(eventId: string): Promise<EventAgenda> {
+  return apiRequest('GET', `/api/events/${eventId}/agenda`);
+}
+
+// Get smart suggestions for an event
+export async function getAgendaSuggestions(eventId: string): Promise<AgendaSuggestions> {
+  return apiRequest('GET', `/api/events/${eventId}/agenda/suggestions`);
+}
+
+// Apply meeting template to event
+export async function applyMeetingTemplate(eventId: string, templateId: string): Promise<{ event: CalendarEvent; template: MeetingTemplate }> {
+  return apiRequest('POST', `/api/events/${eventId}/agenda/apply-template`, { templateId });
+}
+
+// Add an agenda item
+export async function addAgendaItem(eventId: string, data: {
+  sectionId: string;
+  itemType: AgendaItemType;
+  applicationId?: string;
+  reviewStage?: ReviewStage;
+  title?: string;
+  description?: string;
+  presenterId?: string;
+  presenterNotes?: string;
+  estimatedMinutes?: number;
+  orderIndex?: number;
+}): Promise<EventAgendaItem> {
+  return apiRequest('POST', `/api/events/${eventId}/agenda/items`, data);
+}
+
+// Update an agenda item
+export async function updateAgendaItem(eventId: string, itemId: string, data: Partial<{
+  sectionId: string;
+  orderIndex: number;
+  title: string;
+  description: string;
+  presenterNotes: string;
+  estimatedMinutes: number;
+  decision: AgendaDecision;
+  decisionNotes: string;
+}>): Promise<EventAgendaItem> {
+  return apiRequest('PATCH', `/api/events/${eventId}/agenda/items/${itemId}`, data);
+}
+
+// Delete an agenda item
+export async function deleteAgendaItem(eventId: string, itemId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${eventId}/agenda/items/${itemId}`);
+}
+
+// Reorder agenda items in a section
+export async function reorderAgendaItems(eventId: string, sectionId: string, itemIds: string[]): Promise<{ success: boolean }> {
+  return apiRequest('POST', `/api/events/${eventId}/agenda/reorder`, { sectionId, itemIds });
+}
+
+// Finalize event agenda
+export async function finalizeAgenda(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/agenda/finalize`);
+}
+
+// Unfinalize event agenda
+export async function unfinalizeAgenda(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/agenda/unfinalize`);
+}
+
+// Get application journey (meeting history)
+export async function getApplicationJourney(applicationId: string): Promise<ApplicationJourney> {
+  return apiRequest('GET', `/api/applications/${applicationId}/journey`);
 }

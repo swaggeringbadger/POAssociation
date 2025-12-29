@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   listEventTypes,
   listEvents,
@@ -80,6 +81,7 @@ import {
   ListChecks,
   Grid3X3,
   Repeat,
+  ClipboardList,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import EventModal from "@/components/calendar/EventModal";
@@ -139,6 +141,7 @@ type ViewMode = "calendar" | "list";
 export default function Calendar() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
@@ -443,36 +446,36 @@ export default function Calendar() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Calendar</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Schedule and manage meetings, deadlines, and events
           </p>
         </div>
-        <Button onClick={() => handleCreate()}>
+        <Button onClick={() => handleCreate()} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           New Event
         </Button>
       </div>
 
       {/* View Toggle and Filters */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-          <TabsList>
-            <TabsTrigger value="calendar" className="flex items-center gap-2">
-              <Grid3X3 className="h-4 w-4" />
-              Calendar
-            </TabsTrigger>
-            <TabsTrigger value="list" className="flex items-center gap-2">
-              <ListChecks className="h-4 w-4" />
-              List
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+            <TabsList>
+              <TabsTrigger value="calendar" className="flex items-center gap-2">
+                <Grid3X3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Calendar</span>
+              </TabsTrigger>
+              <TabsTrigger value="list" className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4" />
+                <span className="hidden sm:inline">List</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        <div className="flex flex-wrap gap-2">
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search events..."
@@ -481,8 +484,11 @@ export default function Calendar() {
               className="pl-8"
             />
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-40">
               <SelectValue placeholder="Event Type" />
             </SelectTrigger>
             <SelectContent>
@@ -495,7 +501,7 @@ export default function Calendar() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-36">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -514,11 +520,11 @@ export default function Calendar() {
           {/* Calendar Grid */}
           <Card className="lg:col-span-3">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <Button variant="outline" size="icon" onClick={handlePreviousMonth}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <h2 className="text-xl font-semibold">
+                <h2 className="text-base sm:text-xl font-semibold">
                   {format(currentDate, "MMMM yyyy")}
                 </h2>
                 <Button variant="outline" size="icon" onClick={handleNextMonth}>
@@ -529,17 +535,18 @@ export default function Calendar() {
                 Today
               </Button>
             </CardHeader>
-            <CardContent>
-              {/* Day headers */}
-              <div className="grid grid-cols-7 mb-2">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                  <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
-                    {day}
-                  </div>
-                ))}
-              </div>
-              {/* Calendar grid */}
-              <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+            <CardContent className="overflow-x-auto">
+              <div className="min-w-[600px]">
+                {/* Day headers */}
+                <div className="grid grid-cols-7 mb-2">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                    <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
                 {calendarDays.map((day) => {
                   const dateKey = format(day, "yyyy-MM-dd");
                   const dayEvents = eventsByDate.get(dateKey) || [];
@@ -587,6 +594,7 @@ export default function Calendar() {
                     </button>
                   );
                 })}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -642,6 +650,10 @@ export default function Calendar() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/calendar/events/${event.id}/agenda`); }}>
+                                  <ClipboardList className="mr-2 h-4 w-4" />
+                                  Agenda
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(event); }}>
                                   <Edit className="mr-2 h-4 w-4" />
                                   Edit
@@ -729,7 +741,124 @@ export default function Calendar() {
                 No events found. Create your first event to get started.
               </div>
             ) : (
-              <Table>
+              <>
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {filteredEvents.map((event) => {
+                  const config = statusConfig[event.status];
+                  const EventIcon = eventTypeIcons[getEventTypeSlug(event.eventTypeId)] || CalendarIcon;
+
+                  return (
+                    <div
+                      key={event.id}
+                      className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleEdit(event)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className={cn("p-2 rounded shrink-0", getEventTypeColor(event.eventTypeId))}>
+                            <EventIcon className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <p className={cn(
+                              "font-medium",
+                              event.status === 'cancelled' && "line-through text-muted-foreground"
+                            )}>
+                              {event.title}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {getTenantName(event.tenantId)}
+                            </p>
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="shrink-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/calendar/events/${event.id}/agenda`); }}>
+                              <ClipboardList className="mr-2 h-4 w-4" />
+                              Agenda
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(event); }}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            {event.status === 'scheduled' && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); completeMutation.mutate(event.id); }}>
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Complete
+                              </DropdownMenuItem>
+                            )}
+                            {event.status !== 'cancelled' && event.status !== 'completed' && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); cancelMutation.mutate(event.id); }}>
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Cancel
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(event); }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Date & Time</p>
+                          <p className="font-medium">{format(parseISO(event.startDatetime), "MMM d, yyyy")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {event.allDay
+                              ? "All day"
+                              : `${format(parseISO(event.startDatetime), "h:mm a")} - ${format(parseISO(event.endDatetime), "h:mm a")}`}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Location</p>
+                          {event.location ? (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span className="truncate">{event.location}</span>
+                            </div>
+                          ) : event.meetingUrl ? (
+                            <div className="flex items-center gap-1 text-blue-600">
+                              <Video className="h-3 w-3" />
+                              Virtual
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="text-xs">
+                          {getEventTypeName(event.eventTypeId)}
+                        </Badge>
+                        <Badge
+                          variant={config?.variant || "secondary"}
+                          className={cn("text-xs", config?.className)}
+                        >
+                          {config?.label || event.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Event</TableHead>
@@ -818,6 +947,10 @@ export default function Calendar() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/calendar/events/${event.id}/agenda`); }}>
+                                <ClipboardList className="mr-2 h-4 w-4" />
+                                Agenda
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(event); }}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit
@@ -849,7 +982,9 @@ export default function Calendar() {
                     );
                   })}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
+              </>
             )}
           </CardContent>
         </Card>

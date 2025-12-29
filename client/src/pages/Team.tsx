@@ -269,15 +269,15 @@ export default function Team() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Team</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Team</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Manage your organization's team members at {currentTenant.name}
           </p>
         </div>
         {canManageTeam && assignableRoles.length > 0 && (
-          <Button onClick={() => setAddMemberOpen(true)}>
+          <Button onClick={() => setAddMemberOpen(true)} className="w-full sm:w-auto">
             <UserPlus className="mr-2 h-4 w-4" />
             Add Team Member
           </Button>
@@ -286,14 +286,14 @@ export default function Team() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle>Team Members</CardTitle>
               <CardDescription>
                 {filteredTeamMembers?.length || 0} {filteredTeamMembers?.length === 1 ? 'member' : 'members'}
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search team..."
@@ -305,7 +305,80 @@ export default function Team() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {isLoading ? (
+              <p className="text-center text-muted-foreground py-8">Loading...</p>
+            ) : filteredTeamMembers?.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No team members found</p>
+            ) : (
+              filteredTeamMembers?.map((member: any) => {
+                const primaryRole = getPrimaryRole(member.roles);
+                const assignments = propertyAssignments?.[member.id] || [];
+
+                return (
+                  <div key={member.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium">{member.firstName} {member.lastName}</p>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="h-3 w-3" />
+                          <span className="truncate">{member.email}</span>
+                        </div>
+                      </div>
+                      {canManageTeam && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="shrink-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {assignableRoles.length > 0 && (
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedMember({ ...member, currentRole: primaryRole });
+                                setEditMemberOpen(true);
+                              }}>
+                                <Shield className="mr-2 h-4 w-4" />
+                                Change Role
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedMember(member);
+                                setRemoveMemberOpen(true);
+                              }}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Badge variant={getRoleBadgeVariant(primaryRole)}>
+                        {formatRole(primaryRole)}
+                      </Badge>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Briefcase className="h-3 w-3" />
+                        <span>{assignments.length} {assignments.length === 1 ? 'property' : 'properties'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -399,7 +472,8 @@ export default function Team() {
                 })
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

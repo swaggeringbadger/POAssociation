@@ -290,15 +290,15 @@ export default function Directory() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Directory</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Directory</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Manage users and roles for {currentTenant.name}
           </p>
         </div>
         {canInviteUsers && (
-          <Button onClick={() => setAddUserOpen(true)}>
+          <Button onClick={() => setAddUserOpen(true)} className="w-full sm:w-auto">
             <UserPlus className="mr-2 h-4 w-4" />
             Add User
           </Button>
@@ -307,14 +307,14 @@ export default function Directory() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle>Community Members</CardTitle>
               <CardDescription>
                 {users?.length || 0} {users?.length === 1 ? 'member' : 'members'}
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search members..."
@@ -334,7 +334,70 @@ export default function Directory() {
               <p className="text-sm mt-2">Use the property filter in the sidebar to select a community</p>
             </div>
           ) : (
-            <Table>
+            <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {isLoading ? (
+                <p className="text-center text-muted-foreground py-8">Loading...</p>
+              ) : filteredUsers?.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No members found</p>
+              ) : (
+                filteredUsers?.map((user: any) => (
+                  <div key={user.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium">{user.firstName} {user.lastName}</p>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="h-3 w-3" />
+                          <span className="truncate">{user.email}</span>
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="shrink-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {assignableRoles.length > 0 && (
+                            <DropdownMenuItem onClick={() => handleEditUserRoles(user)}>
+                              <Shield className="mr-2 h-4 w-4" />
+                              Manage Roles
+                            </DropdownMenuItem>
+                          )}
+                          {canRemoveUsers && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleRemoveUser(user)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Remove User
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {user.roles.map((role: string) => (
+                        <Badge key={role} variant="secondary" className="text-xs">
+                          {formatRole(role)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -412,7 +475,9 @@ export default function Directory() {
                 ))
               )}
             </TableBody>
-            </Table>
+              </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

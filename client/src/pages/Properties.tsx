@@ -128,14 +128,14 @@ export default function Properties() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Properties</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Properties</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Manage properties and communities under your administration
           </p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Add Property
         </Button>
@@ -143,14 +143,14 @@ export default function Properties() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle>Your Properties</CardTitle>
               <CardDescription>
                 {filteredProperties.length} {filteredProperties.length === 1 ? 'property' : 'properties'}
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search properties..."
@@ -162,121 +162,222 @@ export default function Properties() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Subdomain</TableHead>
-                <TableHead>Management Company</TableHead>
-                <TableHead>Assigned Reps</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center">
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : filteredProperties.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center">
-                    {searchQuery ? "No properties found matching your search" : "No properties assigned to you yet"}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProperties.map((property) => (
-                  <TableRow key={property.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <TreePine className="h-4 w-4 text-muted-foreground" />
-                        {property.name}
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {isLoading ? (
+              <p className="text-center text-muted-foreground py-8">Loading...</p>
+            ) : filteredProperties.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                {searchQuery ? "No properties found matching your search" : "No properties assigned to you yet"}
+              </p>
+            ) : (
+              filteredProperties.map((property: any) => (
+                <div key={property.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <TreePine className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="font-medium">{property.name}</p>
+                        <code className="text-xs bg-muted px-2 py-0.5 rounded">
+                          {property.subdomain}
+                        </code>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-xs bg-muted px-2 py-1 rounded">
-                        {property.subdomain}
-                      </code>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <div className="flex items-center gap-2">
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleEdit(property)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleManageReps(property)}>
+                          <Users className="mr-2 h-4 w-4" />
+                          Manage Reps
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
+                          <Ticket className="mr-2 h-4 w-4" />
+                          Subscription
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => window.open(`/community/${property.subdomain}`, '_blank')}>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View Page
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(property)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Management Co.</p>
+                      <div className="flex items-center gap-1">
                         <Building className="h-3 w-3 text-muted-foreground" />
-                        {getManagementCompanyName(property.managementCompanyId)}
+                        <span className="truncate">{getManagementCompanyName(property.managementCompanyId)}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <PropertyRepAvatars propertyId={property.id} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Entity</p>
+                      <Badge variant="outline" className="text-xs">
                         {getLegalEntityLabel(property)}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Assigned Reps</p>
+                      <PropertyRepAvatars propertyId={property.id} />
+                    </div>
+                    <div className="flex items-center gap-2">
                       {property.demoCodeId ? (
-                        <Badge variant="outline" className="gap-1">
+                        <Badge variant="outline" className="gap-1 text-xs">
                           <Ticket className="h-3 w-3" />
                           Demo
                         </Badge>
                       ) : (
-                        <Badge variant="secondary">Production</Badge>
+                        <Badge variant="secondary" className="text-xs">Prod</Badge>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={property.isActive ? "default" : "secondary"}>
+                      <Badge variant={property.isActive ? "default" : "secondary"} className="text-xs">
                         {property.isActive ? "Active" : "Inactive"}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(property.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleEdit(property)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleManageReps(property)}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Manage Reps
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
-                            <Ticket className="mr-2 h-4 w-4" />
-                            Subscription & Feature Settings
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => window.open(`/community/${property.subdomain}`, '_blank')}>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View Community Page
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(property)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Subdomain</TableHead>
+                  <TableHead>Management Company</TableHead>
+                  <TableHead>Assigned Reps</TableHead>
+                  <TableHead>Entity</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center">
+                      Loading...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : filteredProperties.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center">
+                      {searchQuery ? "No properties found matching your search" : "No properties assigned to you yet"}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredProperties.map((property) => (
+                    <TableRow key={property.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <TreePine className="h-4 w-4 text-muted-foreground" />
+                          {property.name}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {property.subdomain}
+                        </code>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-2">
+                          <Building className="h-3 w-3 text-muted-foreground" />
+                          {getManagementCompanyName(property.managementCompanyId)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <PropertyRepAvatars propertyId={property.id} />
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {getLegalEntityLabel(property)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {property.demoCodeId ? (
+                          <Badge variant="outline" className="gap-1">
+                            <Ticket className="h-3 w-3" />
+                            Demo
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Production</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={property.isActive ? "default" : "secondary"}>
+                          {property.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(property.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleEdit(property)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleManageReps(property)}>
+                              <Users className="mr-2 h-4 w-4" />
+                              Manage Reps
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => window.location.href = `/properties/${property.id}/subscription`}>
+                              <Ticket className="mr-2 h-4 w-4" />
+                              Subscription & Feature Settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => window.open(`/community/${property.subdomain}`, '_blank')}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              View Community Page
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(property)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

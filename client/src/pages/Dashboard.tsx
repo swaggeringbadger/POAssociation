@@ -182,9 +182,9 @@ function ManagementDashboard() {
         <StatsCard title="Total Applications" value={applications.length.toString()} icon={Plus} trend={`${selectedPropertyFilter ? 'This community' : 'All communities'}`} />
       </div>
 
-      <div className="grid gap-8 md:grid-cols-7">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Main Activity Feed */}
-        <div className="col-span-4 space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Recent Applications</CardTitle>
@@ -284,7 +284,7 @@ function ManagementDashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-3 space-y-8">
+        <div className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Community Overview</CardTitle>
@@ -503,7 +503,7 @@ function BoardMemberDashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-3 space-y-8">
+        <div className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Community Status</CardTitle>
@@ -572,9 +572,9 @@ function ContributorDashboard() {
         <StatsCard title="Completed" value="23" icon={CheckCircle} trend="This month" />
       </div>
 
-      <div className="grid gap-8 md:grid-cols-7">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Main Activity Feed */}
-        <div className="col-span-4 space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Applications for Review</CardTitle>
@@ -626,7 +626,7 @@ function ContributorDashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-3 space-y-8">
+        <div className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Your Role</CardTitle>
@@ -746,9 +746,9 @@ function HomeownerDashboard() {
         <StatsCard title="Rejected" value={rejected.toString()} icon={AlertCircle} trend="Requires resubmission" />
       </div>
 
-      <div className="grid gap-8 md:grid-cols-7">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Main Activity Feed */}
-        <div className="col-span-4 space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           <Card className="shadow-sm border-blue-200">
             <CardHeader>
               <CardTitle>Submit New Application</CardTitle>
@@ -802,7 +802,7 @@ function HomeownerDashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-3 space-y-8">
+        <div className="space-y-8">
           {/* Property Rep Contact Card */}
           {currentTenant?.id && (
             <RepContactCard propertyId={currentTenant.id} />
@@ -883,9 +883,9 @@ function GeneralDashboard() {
         <StatsCard title="Completed" value="156" icon={CheckCircle} trend="This year" />
       </div>
 
-      <div className="grid gap-8 md:grid-cols-7">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Main Activity Feed */}
-        <div className="col-span-4 space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Recent Applications</CardTitle>
@@ -931,7 +931,7 @@ function GeneralDashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className="col-span-3 space-y-8">
+        <div className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Community Status</CardTitle>
