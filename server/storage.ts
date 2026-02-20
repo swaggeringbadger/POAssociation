@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, or, sql, inArray, desc, lt, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, asc, lt, gte, lte, isNull, isNotNull } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { workflowEngine } from "./workflowEngine";
 import { expandRecurringEvents, type ExpandedEvent, type EventWithType } from "./recurrenceExpander";
@@ -141,7 +141,7 @@ export interface IStorage {
   // AI Form Generations
   createAiFormGeneration(generation: schema.InsertAiFormGeneration): Promise<schema.AiFormGeneration>;
   getAiFormGeneration(id: string): Promise<schema.AiFormGeneration | undefined>;
-  listAiFormGenerations(tenantId?: string): Promise<schema.AiFormGeneration[]>;
+  listAiFormGenerations(tenantId?: string, startDate?: Date, endDate?: Date): Promise<schema.AiFormGeneration[]>;
   updateAiFormGenerationStatus(id: string, status: string, approvedByUserId?: string): Promise<schema.AiFormGeneration>;
   linkFormTemplateToGeneration(generationId: string, formTemplateId: string): Promise<schema.AiFormGeneration>;
 
@@ -275,6 +275,7 @@ export interface IStorage {
   getAiAnalysis(id: string): Promise<schema.AiAnalysis | undefined>;
   getAiAnalysisForApplication(applicationId: string): Promise<schema.AiAnalysis[]>;
   listAiAnalysesForTenant(tenantId: string): Promise<schema.AiAnalysis[]>;
+  listAllAiAnalyses(limit?: number, startDate?: Date, endDate?: Date): Promise<schema.AiAnalysis[]>;
   getNextQueuedAiAnalysis(): Promise<schema.AiAnalysis | undefined>;
   getStaleProcessingAnalyses(maxAgeMs: number): Promise<schema.AiAnalysis[]>;
   updateAiAnalysis(id: string, updates: Partial<schema.AiAnalysis>): Promise<schema.AiAnalysis>;
@@ -366,6 +367,36 @@ export interface IStorage {
   getTourContentOverride(pageKey: string, role: string): Promise<schema.TourContentOverride | undefined>;
   upsertTourContentOverride(data: schema.InsertTourContentOverride): Promise<schema.TourContentOverride>;
   deleteTourContentOverride(pageKey: string, role: string): Promise<void>;
+
+  // Delegated Application Edits
+  createApplicationFieldEdit(edit: schema.InsertApplicationFieldEdit): Promise<schema.ApplicationFieldEdit>;
+  getApplicationFieldEdits(applicationId: string): Promise<(schema.ApplicationFieldEdit & { editedByUser: { id: string; firstName: string | null; lastName: string | null } })[]>;
+  getFieldEditHistory(applicationId: string, fieldPath: string): Promise<schema.ApplicationFieldEdit[]>;
+  getApplicationEditSummary(applicationId: string): Promise<{
+    totalEdits: number;
+    editedFields: string[];
+    lastEdit: schema.ApplicationFieldEdit | null;
+    editorSummary: Array<{ userId: string; name: string; role: string; editCount: number }>;
+  }>;
+
+  // AI Context Sources
+  listAiContextSources(tenantId: string, includeInactive?: boolean): Promise<schema.AiContextSource[]>;
+  getAiContextSource(id: string): Promise<schema.AiContextSource | undefined>;
+  createAiContextSource(source: schema.InsertAiContextSource): Promise<schema.AiContextSource>;
+  updateAiContextSource(id: string, updates: Partial<schema.InsertAiContextSource>): Promise<schema.AiContextSource>;
+  deleteAiContextSource(id: string): Promise<void>;
+  toggleAiContextSource(id: string, isActive: boolean): Promise<schema.AiContextSource>;
+  reorderAiContextSources(tenantId: string, orderedIds: string[]): Promise<void>;
+  getActiveAiContextSourcesForForm(tenantId: string, formType?: string): Promise<schema.AiContextSource[]>;
+
+  // AI Instructions
+  listAiInstructions(tenantId: string, scope?: string, formType?: string): Promise<schema.AiInstruction[]>;
+  getAiInstruction(id: string): Promise<schema.AiInstruction | undefined>;
+  createAiInstruction(instruction: schema.InsertAiInstruction): Promise<schema.AiInstruction>;
+  updateAiInstruction(id: string, updates: Partial<schema.InsertAiInstruction>): Promise<schema.AiInstruction>;
+  deleteAiInstruction(id: string): Promise<void>;
+  toggleAiInstruction(id: string, isActive: boolean): Promise<schema.AiInstruction>;
+  getActiveInstructionsForAnalysis(tenantId: string, formType?: string): Promise<string>;
 }
 
 export class DbStorage implements IStorage {
@@ -1501,10 +1532,22 @@ export class DbStorage implements IStorage {
     return generation;
   }
 
-  async listAiFormGenerations(tenantId?: string): Promise<schema.AiFormGeneration[]> {
+  async listAiFormGenerations(tenantId?: string, startDate?: Date, endDate?: Date): Promise<schema.AiFormGeneration[]> {
+    const conditions = [];
+
     if (tenantId) {
+      conditions.push(eq(schema.aiFormGenerations.tenantId, tenantId));
+    }
+    if (startDate) {
+      conditions.push(gte(schema.aiFormGenerations.createdAt, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(schema.aiFormGenerations.createdAt, endDate));
+    }
+
+    if (conditions.length > 0) {
       return db.select().from(schema.aiFormGenerations)
-        .where(eq(schema.aiFormGenerations.tenantId, tenantId))
+        .where(and(...conditions))
         .orderBy(desc(schema.aiFormGenerations.createdAt));
     }
     return db.select().from(schema.aiFormGenerations).orderBy(desc(schema.aiFormGenerations.createdAt));
@@ -2971,7 +3014,25 @@ export class DbStorage implements IStorage {
       .orderBy(desc(schema.aiAnalyses.queuedAt));
   }
 
-  async listAllAiAnalyses(limit = 100): Promise<schema.AiAnalysis[]> {
+  async listAllAiAnalyses(limit = 100, startDate?: Date, endDate?: Date): Promise<schema.AiAnalysis[]> {
+    const conditions = [];
+
+    if (startDate) {
+      conditions.push(gte(schema.aiAnalyses.queuedAt, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(schema.aiAnalyses.queuedAt, endDate));
+    }
+
+    if (conditions.length > 0) {
+      return db
+        .select()
+        .from(schema.aiAnalyses)
+        .where(and(...conditions))
+        .orderBy(desc(schema.aiAnalyses.queuedAt))
+        .limit(limit);
+    }
+
     return db
       .select()
       .from(schema.aiAnalyses)
@@ -4054,6 +4115,255 @@ export class DbStorage implements IStorage {
     return event;
   }
 
+  // ==================== Meeting Facilitator Methods ====================
+
+  async claimFacilitator(eventId: string, userId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        facilitatorUserId: userId,
+        facilitatorClaimedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  async releaseFacilitator(eventId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        facilitatorUserId: null,
+        facilitatorClaimedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  async startMeeting(eventId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        meetingStartedAt: new Date(),
+        status: 'in_progress',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  async endMeeting(eventId: string): Promise<schema.Event> {
+    const [event] = await db.update(schema.events)
+      .set({
+        meetingEndedAt: new Date(),
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId))
+      .returning();
+    return event;
+  }
+
+  // ==================== Section Completion Methods ====================
+
+  async markSectionComplete(
+    eventId: string,
+    sectionId: string,
+    userId: string,
+    notes?: string
+  ): Promise<schema.MeetingSectionCompletion> {
+    const [completion] = await db.insert(schema.meetingSectionCompletions)
+      .values({
+        eventId,
+        sectionId,
+        completedByUserId: userId,
+        notes: notes || null,
+      })
+      .onConflictDoUpdate({
+        target: [schema.meetingSectionCompletions.eventId, schema.meetingSectionCompletions.sectionId],
+        set: {
+          completedByUserId: userId,
+          completedAt: new Date(),
+          notes: notes || null,
+        },
+      })
+      .returning();
+    return completion;
+  }
+
+  async unmarkSectionComplete(eventId: string, sectionId: string): Promise<void> {
+    await db.delete(schema.meetingSectionCompletions)
+      .where(
+        and(
+          eq(schema.meetingSectionCompletions.eventId, eventId),
+          eq(schema.meetingSectionCompletions.sectionId, sectionId)
+        )
+      );
+  }
+
+  async getSectionCompletions(eventId: string): Promise<schema.MeetingSectionCompletion[]> {
+    return db.select()
+      .from(schema.meetingSectionCompletions)
+      .where(eq(schema.meetingSectionCompletions.eventId, eventId));
+  }
+
+  // ==================== Meeting Attendance Methods ====================
+
+  async initializeMeetingAttendance(eventId: string, tenantId: string): Promise<schema.MeetingAttendance[]> {
+    // Get board members and management reps for this community
+    const roles = await db.select()
+      .from(schema.userTenantRoles)
+      .where(
+        and(
+          eq(schema.userTenantRoles.tenantId, tenantId),
+          eq(schema.userTenantRoles.isActive, true),
+          inArray(schema.userTenantRoles.role, [
+            'poa_board_member',
+            'poa_board_contributor',
+            'management_manager',
+            'management_rep'
+          ])
+        )
+      );
+
+    if (roles.length === 0) {
+      return [];
+    }
+
+    const attendanceRecords = roles.map(r => ({
+      eventId,
+      userId: r.userId,
+      status: 'expected' as const,
+      attendeeRole: r.role.includes('poa_') ? 'board_member' : 'management',
+    }));
+
+    // Insert all, ignoring duplicates
+    const inserted = await db.insert(schema.meetingAttendance)
+      .values(attendanceRecords)
+      .onConflictDoNothing()
+      .returning();
+
+    return inserted;
+  }
+
+  async markAttendance(
+    eventId: string,
+    userId: string,
+    status: schema.AttendanceStatus,
+    markedByUserId: string,
+    notes?: string
+  ): Promise<schema.MeetingAttendance> {
+    const [attendance] = await db.update(schema.meetingAttendance)
+      .set({
+        status,
+        markedAt: new Date(),
+        markedByUserId,
+        notes: notes || null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.meetingAttendance.eventId, eventId),
+          eq(schema.meetingAttendance.userId, userId)
+        )
+      )
+      .returning();
+    return attendance;
+  }
+
+  async addAttendee(data: schema.InsertMeetingAttendance): Promise<schema.MeetingAttendance> {
+    const [attendance] = await db.insert(schema.meetingAttendance)
+      .values(data)
+      .returning();
+    return attendance;
+  }
+
+  async getMeetingAttendance(eventId: string): Promise<(schema.MeetingAttendance & { user: schema.User })[]> {
+    const rows = await db.select({
+      attendance: schema.meetingAttendance,
+      user: schema.users,
+    })
+      .from(schema.meetingAttendance)
+      .innerJoin(schema.users, eq(schema.meetingAttendance.userId, schema.users.id))
+      .where(eq(schema.meetingAttendance.eventId, eventId))
+      .orderBy(schema.meetingAttendance.attendeeRole, schema.users.lastName);
+
+    return rows.map(r => ({
+      ...r.attendance,
+      user: r.user,
+    }));
+  }
+
+  // ==================== Presentation Mode Data ====================
+
+  async getEventPresentationData(eventId: string): Promise<{
+    event: schema.Event;
+    agenda: {
+      sections: schema.AgendaSection[];
+      items: (schema.EventAgendaItem & {
+        application?: schema.Application & { formTemplate?: schema.FormTemplate };
+        presenter?: schema.User;
+      })[];
+      completions: schema.MeetingSectionCompletion[];
+    };
+    attendance: (schema.MeetingAttendance & { user: schema.User })[];
+    facilitator?: schema.User;
+  }> {
+    // Get event with facilitator
+    const eventRows = await db.select({
+      event: schema.events,
+      facilitator: schema.users,
+    })
+      .from(schema.events)
+      .leftJoin(schema.users, eq(schema.events.facilitatorUserId, schema.users.id))
+      .where(eq(schema.events.id, eventId));
+
+    if (eventRows.length === 0) {
+      throw new Error('Event not found');
+    }
+
+    const eventRow = eventRows[0];
+
+    // Get agenda sections
+    const sections = await this.listAgendaSections();
+
+    // Get agenda items with applications, form templates, and presenters
+    const items = await db.select({
+      item: schema.eventAgendaItems,
+      application: schema.applications,
+      formTemplate: schema.formTemplates,
+      presenter: schema.users,
+    })
+      .from(schema.eventAgendaItems)
+      .leftJoin(schema.applications, eq(schema.eventAgendaItems.applicationId, schema.applications.id))
+      .leftJoin(schema.formTemplates, eq(schema.applications.formTemplateId, schema.formTemplates.id))
+      .leftJoin(schema.users, eq(schema.eventAgendaItems.presenterId, schema.users.id))
+      .where(eq(schema.eventAgendaItems.eventId, eventId))
+      .orderBy(schema.eventAgendaItems.sectionId, schema.eventAgendaItems.orderIndex);
+
+    const completions = await this.getSectionCompletions(eventId);
+    const attendance = await this.getMeetingAttendance(eventId);
+
+    return {
+      event: eventRow.event,
+      agenda: {
+        sections,
+        items: items.map(row => ({
+          ...row.item,
+          application: row.application ? {
+            ...row.application,
+            formTemplate: row.formTemplate || undefined,
+          } : undefined,
+          presenter: row.presenter || undefined,
+        })),
+        completions,
+      },
+      attendance,
+      facilitator: eventRow.facilitator || undefined,
+    };
+  }
+
   // ==================== Document OCR Methods ====================
 
   async updateDocumentOcr(documentId: string, data: {
@@ -4184,6 +4494,303 @@ export class DbStorage implements IStorage {
       .from(schema.documentOcrJobs)
       .where(eq(schema.documentOcrJobs.applicationId, applicationId))
       .orderBy(desc(schema.documentOcrJobs.createdAt));
+  }
+
+  // ============================================
+  // Delegated Application Edits
+  // ============================================
+
+  async createApplicationFieldEdit(edit: schema.InsertApplicationFieldEdit): Promise<schema.ApplicationFieldEdit> {
+    const [created] = await db
+      .insert(schema.applicationFieldEdits)
+      .values(edit)
+      .returning();
+
+    // Update application's delegated edit tracking
+    await db.update(schema.applications)
+      .set({
+        hasDelegatedEdits: true,
+        lastDelegatedEditAt: new Date(),
+        lastDelegatedEditByUserId: edit.editedByUserId,
+      })
+      .where(eq(schema.applications.id, edit.applicationId));
+
+    return created;
+  }
+
+  async getApplicationFieldEdits(applicationId: string): Promise<(schema.ApplicationFieldEdit & { editedByUser: { id: string; firstName: string | null; lastName: string | null } })[]> {
+    const edits = await db
+      .select({
+        edit: schema.applicationFieldEdits,
+        editedByUser: {
+          id: schema.users.id,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+        },
+      })
+      .from(schema.applicationFieldEdits)
+      .leftJoin(schema.users, eq(schema.applicationFieldEdits.editedByUserId, schema.users.id))
+      .where(eq(schema.applicationFieldEdits.applicationId, applicationId))
+      .orderBy(desc(schema.applicationFieldEdits.editedAt));
+
+    return edits.map(row => ({
+      ...row.edit,
+      editedByUser: row.editedByUser!,
+    }));
+  }
+
+  async getFieldEditHistory(applicationId: string, fieldPath: string): Promise<schema.ApplicationFieldEdit[]> {
+    return db
+      .select()
+      .from(schema.applicationFieldEdits)
+      .where(and(
+        eq(schema.applicationFieldEdits.applicationId, applicationId),
+        eq(schema.applicationFieldEdits.fieldPath, fieldPath)
+      ))
+      .orderBy(desc(schema.applicationFieldEdits.editedAt));
+  }
+
+  async getApplicationEditSummary(applicationId: string): Promise<{
+    totalEdits: number;
+    editedFields: string[];
+    lastEdit: schema.ApplicationFieldEdit | null;
+    editorSummary: Array<{ userId: string; name: string; role: string; editCount: number }>;
+  }> {
+    // Get all edits for this application
+    const edits = await db
+      .select({
+        edit: schema.applicationFieldEdits,
+        editedByUser: {
+          id: schema.users.id,
+          firstName: schema.users.firstName,
+          lastName: schema.users.lastName,
+        },
+      })
+      .from(schema.applicationFieldEdits)
+      .leftJoin(schema.users, eq(schema.applicationFieldEdits.editedByUserId, schema.users.id))
+      .where(eq(schema.applicationFieldEdits.applicationId, applicationId))
+      .orderBy(desc(schema.applicationFieldEdits.editedAt));
+
+    if (edits.length === 0) {
+      return {
+        totalEdits: 0,
+        editedFields: [],
+        lastEdit: null,
+        editorSummary: [],
+      };
+    }
+
+    // Get unique field paths
+    const editedFields = [...new Set(edits.map(e => e.edit.fieldPath))];
+
+    // Calculate editor summary
+    const editorMap = new Map<string, { userId: string; name: string; role: string; editCount: number }>();
+    for (const edit of edits) {
+      const userId = edit.edit.editedByUserId;
+      if (!editorMap.has(userId)) {
+        const name = [edit.editedByUser?.firstName, edit.editedByUser?.lastName]
+          .filter(Boolean)
+          .join(' ') || 'Unknown';
+        editorMap.set(userId, {
+          userId,
+          name,
+          role: edit.edit.editedByRole,
+          editCount: 0,
+        });
+      }
+      editorMap.get(userId)!.editCount++;
+    }
+
+    return {
+      totalEdits: edits.length,
+      editedFields,
+      lastEdit: edits[0].edit,
+      editorSummary: Array.from(editorMap.values()),
+    };
+  }
+
+  // ============================================
+  // AI Context Sources
+  // ============================================
+
+  async listAiContextSources(tenantId: string, includeInactive = false): Promise<schema.AiContextSource[]> {
+    const conditions = [eq(schema.aiContextSources.tenantId, tenantId)];
+    if (!includeInactive) {
+      conditions.push(eq(schema.aiContextSources.isActive, true));
+    }
+    return db.select()
+      .from(schema.aiContextSources)
+      .where(and(...conditions))
+      .orderBy(asc(schema.aiContextSources.priority), asc(schema.aiContextSources.createdAt));
+  }
+
+  async getAiContextSource(id: string): Promise<schema.AiContextSource | undefined> {
+    const [source] = await db.select()
+      .from(schema.aiContextSources)
+      .where(eq(schema.aiContextSources.id, id));
+    return source;
+  }
+
+  async createAiContextSource(source: schema.InsertAiContextSource): Promise<schema.AiContextSource> {
+    const [created] = await db.insert(schema.aiContextSources)
+      .values(source)
+      .returning();
+    return created;
+  }
+
+  async updateAiContextSource(id: string, updates: Partial<schema.InsertAiContextSource>): Promise<schema.AiContextSource> {
+    const [updated] = await db.update(schema.aiContextSources)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.aiContextSources.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAiContextSource(id: string): Promise<void> {
+    await db.delete(schema.aiContextSources)
+      .where(eq(schema.aiContextSources.id, id));
+  }
+
+  async toggleAiContextSource(id: string, isActive: boolean): Promise<schema.AiContextSource> {
+    const [updated] = await db.update(schema.aiContextSources)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(schema.aiContextSources.id, id))
+      .returning();
+    return updated;
+  }
+
+  async reorderAiContextSources(tenantId: string, orderedIds: string[]): Promise<void> {
+    // Update priority based on position in the orderedIds array
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(schema.aiContextSources)
+        .set({ priority: i + 1, updatedAt: new Date() })
+        .where(and(
+          eq(schema.aiContextSources.id, orderedIds[i]),
+          eq(schema.aiContextSources.tenantId, tenantId)
+        ));
+    }
+  }
+
+  async getActiveAiContextSourcesForForm(tenantId: string, formType?: string): Promise<schema.AiContextSource[]> {
+    const allSources = await db.select()
+      .from(schema.aiContextSources)
+      .where(and(
+        eq(schema.aiContextSources.tenantId, tenantId),
+        eq(schema.aiContextSources.isActive, true)
+      ))
+      .orderBy(asc(schema.aiContextSources.priority), asc(schema.aiContextSources.createdAt));
+
+    // Filter to sources that apply to this form type
+    return allSources.filter(source => {
+      // If applies to all forms, include it
+      if (source.appliesToAllForms) return true;
+      // If formType is specified and matches, include it
+      if (formType && source.appliesToFormTypes?.includes(formType)) return true;
+      // Otherwise, only include if no formType was specified
+      return !formType;
+    });
+  }
+
+  // ============================================
+  // AI Instructions
+  // ============================================
+
+  async listAiInstructions(tenantId: string, scope?: string, formType?: string): Promise<schema.AiInstruction[]> {
+    const conditions = [eq(schema.aiInstructions.tenantId, tenantId)];
+    if (scope) {
+      conditions.push(eq(schema.aiInstructions.scope, scope));
+    }
+    if (formType) {
+      conditions.push(eq(schema.aiInstructions.formType, formType));
+    }
+    return db.select()
+      .from(schema.aiInstructions)
+      .where(and(...conditions))
+      .orderBy(asc(schema.aiInstructions.scope), asc(schema.aiInstructions.createdAt));
+  }
+
+  async getAiInstruction(id: string): Promise<schema.AiInstruction | undefined> {
+    const [instruction] = await db.select()
+      .from(schema.aiInstructions)
+      .where(eq(schema.aiInstructions.id, id));
+    return instruction;
+  }
+
+  async createAiInstruction(instruction: schema.InsertAiInstruction): Promise<schema.AiInstruction> {
+    const [created] = await db.insert(schema.aiInstructions)
+      .values(instruction)
+      .returning();
+    return created;
+  }
+
+  async updateAiInstruction(id: string, updates: Partial<schema.InsertAiInstruction>): Promise<schema.AiInstruction> {
+    const [updated] = await db.update(schema.aiInstructions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.aiInstructions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAiInstruction(id: string): Promise<void> {
+    await db.delete(schema.aiInstructions)
+      .where(eq(schema.aiInstructions.id, id));
+  }
+
+  async toggleAiInstruction(id: string, isActive: boolean): Promise<schema.AiInstruction> {
+    const [updated] = await db.update(schema.aiInstructions)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(schema.aiInstructions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getActiveInstructionsForAnalysis(tenantId: string, formType?: string): Promise<string> {
+    // Get community-level instructions
+    const communityInstructions = await db.select()
+      .from(schema.aiInstructions)
+      .where(and(
+        eq(schema.aiInstructions.tenantId, tenantId),
+        eq(schema.aiInstructions.scope, 'community'),
+        eq(schema.aiInstructions.isActive, true)
+      ))
+      .orderBy(asc(schema.aiInstructions.createdAt));
+
+    // Get form-type-specific instructions if formType is provided
+    let formTypeInstructions: schema.AiInstruction[] = [];
+    if (formType) {
+      formTypeInstructions = await db.select()
+        .from(schema.aiInstructions)
+        .where(and(
+          eq(schema.aiInstructions.tenantId, tenantId),
+          eq(schema.aiInstructions.scope, 'form_type'),
+          eq(schema.aiInstructions.formType, formType),
+          eq(schema.aiInstructions.isActive, true)
+        ))
+        .orderBy(asc(schema.aiInstructions.createdAt));
+    }
+
+    // Combine instructions with clear section headers
+    const parts: string[] = [];
+
+    if (communityInstructions.length > 0) {
+      parts.push('=== Community Instructions ===');
+      for (const inst of communityInstructions) {
+        parts.push(`[${inst.title}]`);
+        parts.push(inst.instructions);
+        parts.push('');
+      }
+    }
+
+    if (formTypeInstructions.length > 0) {
+      parts.push(`=== ${formType} Specific Instructions ===`);
+      for (const inst of formTypeInstructions) {
+        parts.push(`[${inst.title}]`);
+        parts.push(inst.instructions);
+        parts.push('');
+      }
+    }
+
+    return parts.join('\n').trim();
   }
 }
 

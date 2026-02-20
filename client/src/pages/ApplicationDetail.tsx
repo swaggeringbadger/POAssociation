@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
+import { ApplicationEditHistory } from "@/components/ApplicationEditHistory";
 import { useEffect, useState } from "react";
 import type { Application } from "@shared/schema";
 import type { AdditionalInfoConfig, BylawReference } from "@shared/formTypes";
@@ -1679,6 +1680,9 @@ export default function ApplicationDetail() {
         <h2 className="text-xl font-semibold mb-3">Workflow & Review Process</h2>
         <WorkflowSection applicationId={applicationId} tenantId={tenantId} />
       </div>
+
+      {/* Delegated Edit History - only shown if there are delegated edits */}
+      <ApplicationEditHistory applicationId={applicationId} />
 
       {/* Comment Thread */}
       <div>

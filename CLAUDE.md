@@ -64,12 +64,22 @@
 
 ## Development Notes
 
-### Server Restart
-After modifying `/server/` files, restart the server:
+### Server Restart — MANDATORY
+
+**CRITICAL:** You MUST kill all server processes AND rebuild IMMEDIATELY after making ANY changes to server-side code (`/server/` or `/shared/` files). Do NOT wait for the user to do this. Do NOT batch multiple changes before killing — kill after EACH set of server file edits.
+
 ```bash
-pkill -f "tsx server/index.ts"
+pkill -f "tsx server/index.ts" ; pkill -f "node dist/index.js" ; npm run build
 ```
-Then click Run in Replit.
+Then inform the user to click **Run** in Replit.
+
+**Why:** This app runs in production mode (`node dist/index.js`). Code changes have NO effect until rebuilt. The old process will serve stale code and cause confusing bugs (HTML responses for API routes, missing endpoints, etc.).
+
+**When to do this (ALWAYS, automatically):**
+- After modifying ANY file in `/server/` directory
+- After modifying ANY file in `/shared/` directory
+- After changing environment variables or configuration
+- When debugging unexpected behavior that doesn't match code changes
 
 ### Database Migrations
 ```bash

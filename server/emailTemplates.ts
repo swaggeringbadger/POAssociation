@@ -985,3 +985,63 @@ export function contractorReferralSignupTemplate(
     `,
   });
 }
+
+/**
+ * Delegated Edit Notification
+ * Sent to homeowner when a management rep edits their application on their behalf
+ */
+export function delegatedEditNotificationTemplate(
+  recipientName: string,
+  applicationTitle: string,
+  editorName: string,
+  editorRole: string,
+  changedFields: string[],
+  editReason: string | undefined,
+  applicationLink: string,
+  communityName: string
+): string {
+  const roleDisplayNames: Record<string, string> = {
+    management_rep: 'Management Representative',
+    management_manager: 'Management Manager',
+    account_admin: 'Account Administrator',
+    super_admin: 'System Administrator',
+    poa_board_member: 'Board Member',
+  };
+
+  const roleDisplay = roleDisplayNames[editorRole] || editorRole;
+
+  const fieldsList = changedFields
+    .map(field => `<li style="margin-bottom: 4px;">${field}</li>`)
+    .join('');
+
+  return buildEmailTemplate({
+    title: "Your Application Was Updated",
+    preheader: `${editorName} made changes to your application on your behalf`,
+    recipientName,
+    communityName,
+    status: 'info',
+    mainContent: `
+      <p><strong>${editorName}</strong> (${roleDisplay}) has made changes to your application on your behalf.</p>
+      <div class="highlight-box">
+        <p style="margin-bottom: 8px;"><strong>Application</strong></p>
+        <p style="font-size: 18px; font-weight: bold; color: #3b82f6; margin: 8px 0;">${applicationTitle}</p>
+      </div>
+      <p style="margin-top: 20px;"><strong>Fields Updated:</strong></p>
+      <ul style="margin: 8px 0; padding-left: 20px; color: #4b5563;">
+        ${fieldsList}
+      </ul>
+      ${editReason ? `
+        <p style="margin-top: 16px;"><strong>Reason:</strong></p>
+        <p style="color: #6b7280; font-style: italic;">"${editReason}"</p>
+      ` : ''}
+      <p style="margin-top: 20px;">You can view the updated application details by clicking the button below.</p>
+    `,
+    actionButton: {
+      text: "View Application",
+      url: applicationLink,
+    },
+    secondaryContent: `
+      <strong>Questions?</strong><br>If you have any questions about these changes, please contact ${communityName} directly.
+    `,
+  });
+}

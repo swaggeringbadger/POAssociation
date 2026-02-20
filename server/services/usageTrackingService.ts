@@ -238,6 +238,29 @@ class UsageTrackingService {
     });
   }
 
+  /**
+   * Log AI credits used for a specific action (image sharpening, etc.)
+   */
+  async logAiCreditsUsed(
+    communityId: string,
+    creditsUsed: number,
+    actionType: string,
+    userId: string,
+    metadata?: Record<string, unknown>
+  ): Promise<LoggedUsageEvent> {
+    return this.logEvent({
+      communityId,
+      eventType: 'ai_credits_used',
+      entityType: actionType,
+      creditsUsed,
+      userId,
+      metadata: {
+        actionType,
+        ...metadata,
+      },
+    });
+  }
+
   // ==========================================
   // QUERIES
   // ==========================================

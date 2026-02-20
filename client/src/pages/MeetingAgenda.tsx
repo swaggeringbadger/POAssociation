@@ -73,6 +73,7 @@ import {
   CheckCircle,
   Users,
   Sparkles,
+  Presentation,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -354,6 +355,12 @@ export default function MeetingAgenda() {
             <Printer className="mr-2 h-4 w-4" />
             Print
           </Button>
+          <Link href={`/calendar/events/${eventId}/agenda/present`}>
+            <Button variant="outline">
+              <Presentation className="mr-2 h-4 w-4" />
+              Present Mode
+            </Button>
+          </Link>
           {isFinalized ? (
             <Button
               variant="outline"

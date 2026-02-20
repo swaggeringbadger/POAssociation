@@ -1,17 +1,19 @@
 /**
  * ProtectedRoute Component
  *
- * Enforces RBAC (Role-Based Access Control) on routes
- * Prevents unauthorized users from accessing restricted pages
+ * Enforces authentication and RBAC (Role-Based Access Control) on routes.
+ * - First checks if user is authenticated (redirects to landing if not)
+ * - Then checks RBAC permissions for the specific route
  */
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/lib/store';
 import { hasRoutePermission, getUnauthorizedMessage } from '@/lib/rbac';
 import type { Role } from '@/lib/mock-data';
 import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, Home } from 'lucide-react';
 
@@ -21,23 +23,37 @@ interface ProtectedRouteProps {
 }
 
 /**
- * Wrapper component that checks RBAC permissions before rendering children
- * If user lacks permission, shows an unauthorized message
+ * Wrapper component that checks authentication and RBAC permissions before rendering children.
+ * If user is not authenticated, redirects to landing page.
+ * If user lacks permission, shows an unauthorized message.
  */
 export function ProtectedRoute({ children, fallbackPath = '/dashboard' }: ProtectedRouteProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const currentUserRole = useAppStore(state => state.currentUserRole) as Role;
 
+  // Check authentication status
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+
   // Check if user is super admin
-  const { data: superAdminData, isLoading } = useQuery({
+  const { data: superAdminData, isLoading: isSuperAdminLoading } = useQuery({
     queryKey: ['/api/auth/is-super-admin'],
     queryFn: () => api.isSuperAdmin(),
     retry: false,
+    enabled: isAuthenticated, // Only check super admin if authenticated
   });
 
   const isSuperAdmin = superAdminData?.isSuperAdmin ?? false;
+  const isLoading = isAuthLoading || (isAuthenticated && isSuperAdminLoading);
 
-  // Show loading state while checking permissions
+  // Redirect to landing page if not authenticated
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      // Redirect to landing page - the user's session has expired or they're not logged in
+      setLocation('/');
+    }
+  }, [isAuthLoading, isAuthenticated, setLocation]);
+
+  // Show loading state while checking auth/permissions
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -47,6 +63,11 @@ export function ProtectedRoute({ children, fallbackPath = '/dashboard' }: Protec
         </div>
       </div>
     );
+  }
+
+  // If not authenticated, show nothing (useEffect will redirect)
+  if (!isAuthenticated) {
+    return null;
   }
 
   // Check if user has permission to access this route

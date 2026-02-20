@@ -371,6 +371,9 @@ export const CREDIT_COSTS = {
 
   /** AI Form Generation: generate custom application forms */
   AI_FORM_GENERATION: 2,
+
+  /** AI Image Sharpening: enhance hero images using AI */
+  AI_IMAGE_SHARPENING: 1,
 } as const;
 
 /**

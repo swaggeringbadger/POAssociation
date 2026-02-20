@@ -18,6 +18,7 @@ import type {
   GenerateFormResponse,
   FormValidationResult,
 } from '../shared/formTypes';
+import { aiContextService, type AggregatedContext } from './services/aiContextService';
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -112,6 +113,55 @@ export class AIFormGenerationService {
       console.error(`Error loading prompt template ${filename}:`, error);
       throw new Error(`Failed to load prompt template: ${filename}`);
     }
+  }
+
+  /**
+   * Escape unescaped newlines inside JSON strings
+   * This handles the case where the AI outputs multi-line strings with literal newlines
+   */
+  private escapeNewlinesInStrings(json: string): string {
+    let result = '';
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < json.length; i++) {
+      const char = json[i];
+
+      if (escaped) {
+        result += char;
+        escaped = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        result += char;
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        result += char;
+        continue;
+      }
+
+      // If we're inside a string and hit a newline, escape it
+      if (inString && (char === '\n' || char === '\r')) {
+        if (char === '\r' && json[i + 1] === '\n') {
+          result += '\\n';
+          i++; // Skip the \n that follows \r
+        } else if (char === '\n') {
+          result += '\\n';
+        } else {
+          result += '\\r';
+        }
+        continue;
+      }
+
+      result += char;
+    }
+
+    return result;
   }
 
   /**
@@ -226,12 +276,109 @@ export class AIFormGenerationService {
     try {
       // Remove markdown code blocks if present
       let cleanJson = jsonString.trim();
-      if (cleanJson.startsWith('```')) {
-        cleanJson = cleanJson.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+
+      // Handle ```json ... ``` blocks
+      if (cleanJson.includes('```json')) {
+        const match = cleanJson.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match) {
+          cleanJson = match[1].trim();
+        }
+      } else if (cleanJson.includes('```')) {
+        const match = cleanJson.match(/```\s*([\s\S]*?)\s*```/);
+        if (match) {
+          cleanJson = match[1].trim();
+        }
+      }
+
+      // If still not valid JSON, try to extract JSON object from the response
+      // The AI might add explanatory text before or after the JSON
+      if (!cleanJson.startsWith('{')) {
+        const jsonStart = cleanJson.indexOf('{');
+        if (jsonStart !== -1) {
+          // Find the matching closing brace
+          let braceCount = 0;
+          let jsonEnd = -1;
+          for (let i = jsonStart; i < cleanJson.length; i++) {
+            if (cleanJson[i] === '{') braceCount++;
+            if (cleanJson[i] === '}') braceCount--;
+            if (braceCount === 0) {
+              jsonEnd = i + 1;
+              break;
+            }
+          }
+          if (jsonEnd !== -1) {
+            console.log('[FormGeneration] Extracted JSON from response (had extra text before/after)');
+            cleanJson = cleanJson.slice(jsonStart, jsonEnd);
+          }
+        }
       }
 
       // Parse JSON
-      const form = JSON.parse(cleanJson) as AdditionalInfoConfig;
+      let form: AdditionalInfoConfig;
+      try {
+        form = JSON.parse(cleanJson) as AdditionalInfoConfig;
+      } catch (parseError) {
+        // Try to repair common JSON issues
+        console.log('[FormGeneration] Initial parse failed, attempting repair...');
+
+        let repairedJson = cleanJson;
+
+        // Fix 1: Handle citations placed outside string quotes
+        // Pattern: "text." (Section 7.7A)} -> "text. (Section 7.7A)"}
+        // The AI sometimes places citations outside the JSON string
+        repairedJson = repairedJson.replace(
+          /\."\s*\(([^)]+)\)\s*([,}\]\n])/g,
+          '. ($1)"$2'
+        );
+        // Also handle without period: "text" (Citation) -> "text (Citation)"
+        repairedJson = repairedJson.replace(
+          /([^.])"\s*\(([^)]+)\)\s*([,}\]\n])/g,
+          '$1 ($2)"$3'
+        );
+
+        // Fix 2: Escape unescaped newlines inside strings
+        // This regex finds strings and escapes any literal newlines within them
+        repairedJson = this.escapeNewlinesInStrings(repairedJson);
+
+        // Fix 3: Remove trailing commas before ] or }
+        repairedJson = repairedJson
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*]/g, ']');
+
+        // Fix 4: Remove any control characters except escaped ones
+        repairedJson = repairedJson.replace(/[\x00-\x1F\x7F]/g, (char) => {
+          // Keep actual newlines/tabs that are part of formatting, they'll be handled
+          if (char === '\n' || char === '\r' || char === '\t') return char;
+          return '';
+        });
+
+        // Try again after repair
+        try {
+          form = JSON.parse(repairedJson) as AdditionalInfoConfig;
+          console.log('[FormGeneration] JSON repair successful');
+        } catch (repairError) {
+          // Log debugging info
+          const errorMsg = repairError instanceof Error ? repairError.message : 'Unknown';
+          const posMatch = errorMsg.match(/position (\d+)/);
+          const errorPos = posMatch ? parseInt(posMatch[1]) : 1534;
+
+          console.error('[FormGeneration] JSON parse failed even after repair.');
+          console.error('[FormGeneration] Error:', errorMsg);
+          console.error('[FormGeneration] First 500 chars:');
+          console.error(repairedJson.slice(0, 500));
+          console.error(`[FormGeneration] Content around position ${errorPos}:`);
+          console.error(repairedJson.slice(Math.max(0, errorPos - 50), errorPos + 50));
+          console.error('[FormGeneration] Last 500 chars:');
+          console.error(repairedJson.slice(-500));
+
+          // Show hex dump around error position for debugging
+          const snippet = repairedJson.slice(Math.max(0, errorPos - 20), errorPos + 20);
+          console.error('[FormGeneration] Hex dump around error:');
+          console.error(Buffer.from(snippet).toString('hex'));
+
+          throw parseError;
+        }
+      }
 
       // Validate required fields
       if (!form.title) errors.push('Missing required field: title');
@@ -351,6 +498,185 @@ export class AIFormGenerationService {
       };
     } catch (error) {
       console.error('Form generation error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a form using the new multi-source context system
+   * Falls back to legacy designGuidelinesUrl if new system fails
+   */
+  async generateFormWithContext(
+    tenantId: string,
+    applicationType: ApplicationType,
+    fallbackDesignGuidelinesUrl?: string
+  ): Promise<GenerateFormResponse> {
+    const startTime = Date.now();
+
+    try {
+      // Step 1: Gather all AI context sources and instructions
+      console.log(`[FormGeneration] Gathering AI context for tenant ${tenantId}, type ${applicationType}`);
+      let aggregatedContext: AggregatedContext | null = null;
+      let guidelinesContent: { type: 'text' | 'pdf'; content: string | Buffer; mediaType?: string };
+
+      try {
+        aggregatedContext = await aiContextService.gatherContext(tenantId, applicationType);
+
+        if (aggregatedContext.documents.length === 0 && !aggregatedContext.instructions) {
+          throw new Error('No AI context sources configured');
+        }
+
+        if (aggregatedContext.truncated) {
+          console.warn(`[FormGeneration] Context truncated - excluded sources: ${aggregatedContext.excludedSources.join(', ')}`);
+        }
+
+        // Combine text documents and instructions for the prompt
+        const textContent = aiContextService.formatContextForPrompt(aggregatedContext);
+        guidelinesContent = { type: 'text', content: textContent };
+
+      } catch (contextError) {
+        console.warn('[FormGeneration] Failed to gather AI context, trying fallback:', contextError);
+
+        // Fallback to legacy URL
+        if (fallbackDesignGuidelinesUrl) {
+          guidelinesContent = await this.fetchDesignGuidelines(fallbackDesignGuidelinesUrl);
+        } else {
+          throw new Error('No AI context sources configured and no fallback URL provided');
+        }
+      }
+
+      // Step 2: Load reference architecture and example
+      console.log(`[FormGeneration] Loading reference architecture and example for: ${applicationType}`);
+      const referenceArchitecture = this.loadReferenceArchitecture();
+      const exampleForm = this.loadExampleForm(applicationType);
+
+      // Step 3: Build prompts
+      const systemPrompt = this.buildSystemPrompt(applicationType, referenceArchitecture, exampleForm);
+      let userPrompt = this.buildUserPrompt(applicationType);
+
+      // Step 4: Call Anthropic API with PDFs if available
+      console.log('[FormGeneration] Calling Anthropic API for form generation...');
+
+      // Get PDF documents from aggregated context
+      const pdfDocuments = aggregatedContext ? aiContextService.getPdfDocuments(aggregatedContext) : [];
+
+      const { content, tokensUsed } = await this.callAnthropicAPIWithPdfs(
+        systemPrompt,
+        userPrompt,
+        guidelinesContent,
+        pdfDocuments
+      );
+
+      // Step 5: Parse and validate
+      console.log('[FormGeneration] Parsing and validating generated form...');
+      const { form, validation } = this.parseAndValidate(content);
+
+      if (!validation.isValid) {
+        throw new Error(`Generated form validation failed:\n${validation.errors.join('\n')}`);
+      }
+
+      if (validation.warnings && validation.warnings.length > 0) {
+        console.warn('[FormGeneration] Form generation warnings:', validation.warnings);
+      }
+
+      // Step 6: Calculate cost and time
+      const endTime = Date.now();
+      const generationTimeMs = endTime - startTime;
+
+      const estimatedCost = ((tokensUsed / 1000000) * 9).toFixed(4);
+
+      return {
+        generatedForm: form,
+        generationId: '',
+        tokensUsed,
+        estimatedCost,
+        generationTimeMs,
+      };
+    } catch (error) {
+      console.error('[FormGeneration] Form generation error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extended API call that supports multiple PDF documents
+   */
+  private async callAnthropicAPIWithPdfs(
+    systemPrompt: string,
+    userPrompt: string,
+    guidelinesData: { type: 'text' | 'pdf'; content: string | Buffer; mediaType?: string },
+    pdfDocuments: Array<{ name: string; base64: string }> = []
+  ): Promise<{ content: string; tokensUsed: number }> {
+    const startTime = Date.now();
+
+    try {
+      const messageContent: any[] = [];
+
+      // Add PDF documents from context service
+      for (const pdf of pdfDocuments) {
+        console.log(`[FormGeneration] Including PDF document "${pdf.name}" in API request`);
+        messageContent.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: pdf.base64,
+          },
+        });
+      }
+
+      // Handle legacy guideline content
+      if (guidelinesData.type === 'pdf' && pdfDocuments.length === 0) {
+        messageContent.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: guidelinesData.mediaType,
+            data: (guidelinesData.content as Buffer).toString('base64'),
+          },
+        });
+        console.log('[FormGeneration] Sending legacy PDF document to Claude');
+      } else if (guidelinesData.type === 'text') {
+        userPrompt = userPrompt.replace(
+          '{DESIGN_GUIDELINES_CONTENT}',
+          guidelinesData.content as string
+        );
+      }
+
+      messageContent.push({
+        type: 'text',
+        text: userPrompt,
+      });
+
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 16000,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: messageContent,
+          },
+        ],
+      });
+
+      const endTime = Date.now();
+      console.log(`[FormGeneration] Anthropic API call completed in ${endTime - startTime}ms`);
+
+      const textContent = message.content.find(block => block.type === 'text');
+      if (!textContent || textContent.type !== 'text') {
+        throw new Error('No text content in API response');
+      }
+
+      const tokensUsed = (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0);
+
+      return {
+        content: textContent.text,
+        tokensUsed,
+      };
+    } catch (error) {
+      console.error('[FormGeneration] Anthropic API error:', error);
       throw error;
     }
   }

@@ -217,14 +217,13 @@ export default function FormWizard() {
 
       // Invalidate and refetch all related queries to ensure fresh data
       await queryClient.invalidateQueries({ queryKey: ["formTemplates", effectiveTenantId] });
-      await queryClient.invalidateQueries({ queryKey: ["formVersions", effectiveTenantId, applicationType] });
 
       // Refresh form templates
       await refetchTemplates();
 
-      // If the modal is open for this type, refresh the versions list
+      // Force refetch versions if modal is open - use refetchQueries to ensure immediate update
       if (viewFormOpen && viewingType === applicationType) {
-        await refetchVersions();
+        await queryClient.refetchQueries({ queryKey: ["formVersions", effectiveTenantId, applicationType] });
 
         // Set the newly generated version ID for animation
         setNewlyGeneratedVersionId(result.formTemplateId);

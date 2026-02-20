@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
@@ -28,11 +28,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle, FileSearch, XCircle, Loader2, Satellite, Image, ScanText, BarChart3 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Sparkles, Eye, CheckCircle, Clock, DollarSign, Zap, AlertCircle, FileSearch, XCircle, Loader2, Satellite, Image, ScanText, BarChart3, CalendarIcon } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, format } from "date-fns";
+import { cn } from "@/lib/utils";
+
+type TimePeriod = 'thisMonth' | 'lastMonth' | 'thisYear' | 'lastYear' | 'custom';
+
+function getDateRange(period: TimePeriod, customStart?: Date, customEnd?: Date): { startDate: string; endDate: string } {
+  const now = new Date();
+  let start: Date;
+  let end: Date;
+
+  switch (period) {
+    case 'thisMonth':
+      start = startOfMonth(now);
+      end = endOfMonth(now);
+      break;
+    case 'lastMonth':
+      const lastMonth = subMonths(now, 1);
+      start = startOfMonth(lastMonth);
+      end = endOfMonth(lastMonth);
+      break;
+    case 'thisYear':
+      start = startOfYear(now);
+      end = now;
+      break;
+    case 'lastYear':
+      const lastYear = subYears(now, 1);
+      start = startOfYear(lastYear);
+      end = new Date(lastYear.getFullYear(), 11, 31, 23, 59, 59);
+      break;
+    case 'custom':
+      start = customStart || startOfMonth(now);
+      end = customEnd || endOfMonth(now);
+      break;
+    default:
+      start = startOfMonth(now);
+      end = endOfMonth(now);
+  }
+
+  return {
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+  };
+}
 
 export default function AIActivity() {
   const { setCurrentPageTitle } = useAppStore();
@@ -40,22 +88,34 @@ export default function AIActivity() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tenantFilter, setTenantFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("analyses");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('thisMonth');
+  const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
+  const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
 
   useEffect(() => {
     setCurrentPageTitle("AI Activity");
     return () => setCurrentPageTitle(null);
   }, [setCurrentPageTitle]);
 
+  // Get date range based on selected period
+  const dateRange = useMemo(() => {
+    return getDateRange(timePeriod, customStartDate, customEndDate);
+  }, [timePeriod, customStartDate, customEndDate]);
+
   // Fetch all AI generations (form generation)
   const { data: generations = [], isLoading, refetch } = useQuery({
-    queryKey: ["aiGenerations", tenantFilter],
-    queryFn: () => api.listAiGenerations(tenantFilter === "all" ? undefined : tenantFilter),
+    queryKey: ["aiGenerations", tenantFilter, dateRange.startDate, dateRange.endDate],
+    queryFn: () => api.listAiGenerations(
+      tenantFilter === "all" ? undefined : tenantFilter,
+      dateRange.startDate,
+      dateRange.endDate
+    ),
   });
 
   // Fetch all AI analyses (application analysis)
   const { data: analyses = [], isLoading: loadingAnalyses } = useQuery({
-    queryKey: ["aiAnalyses"],
-    queryFn: () => api.getAllAiAnalyses(100),
+    queryKey: ["aiAnalyses", dateRange.startDate, dateRange.endDate],
+    queryFn: () => api.getAllAiAnalyses(100, dateRange.startDate, dateRange.endDate),
   });
 
   // Fetch all tenants for filter
@@ -176,13 +236,87 @@ export default function AIActivity() {
     }
   };
 
+  // Get period label for display
+  const getPeriodLabel = () => {
+    switch (timePeriod) {
+      case 'thisMonth': return 'This Month';
+      case 'lastMonth': return 'Last Month';
+      case 'thisYear': return 'This Year';
+      case 'lastYear': return 'Last Year';
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return `${format(customStartDate, 'MMM d, yyyy')} - ${format(customEndDate, 'MMM d, yyyy')}`;
+        }
+        return 'Custom';
+      default: return 'This Month';
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">AI Activity Dashboard</h1>
-        <p className="text-muted-foreground">
-          Monitor AI usage and costs across all properties
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">AI Activity Dashboard</h1>
+          <p className="text-muted-foreground">
+            Monitor AI usage and costs across all properties
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
+            <SelectTrigger className="w-[180px]">
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="thisMonth">This Month</SelectItem>
+              <SelectItem value="lastMonth">Last Month</SelectItem>
+              <SelectItem value="thisYear">This Year</SelectItem>
+              <SelectItem value="lastYear">Last Year</SelectItem>
+              <SelectItem value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {timePeriod === 'custom' && (
+            <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-[130px] justify-start text-left font-normal", !customStartDate && "text-muted-foreground")}>
+                    {customStartDate ? format(customStartDate, "MMM d, yyyy") : "Start date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={customStartDate}
+                    onSelect={setCustomStartDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <span className="text-muted-foreground">to</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-[130px] justify-start text-left font-normal", !customEndDate && "text-muted-foreground")}>
+                    {customEndDate ? format(customEndDate, "MMM d, yyyy") : "End date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={customEndDate}
+                    onSelect={setCustomEndDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Period indicator */}
+      <div className="text-sm text-muted-foreground">
+        Showing data for: <span className="font-medium text-foreground">{getPeriodLabel()}</span>
       </div>
 
       {/* Combined Stats Cards */}

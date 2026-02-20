@@ -40,6 +40,8 @@ interface PublicCommunityInfo {
         zip?: string;
       };
       website?: string;
+      heroImageFocusX?: number;
+      heroImageFocusY?: number;
     } | null;
   };
   nextEvent: {
@@ -99,6 +101,8 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
   const { tenant, nextEvent } = data;
   const settings = tenant.communitySettings || {};
   const heroImage = tenant.heroImageUrl || defaultHeroImage;
+  const focusX = settings.heroImageFocusX ?? 50;
+  const focusY = settings.heroImageFocusY ?? 50;
   const entityType = settings.legalEntityType === 'hoa' ? 'HOA' : 'POA';
 
   // Format address
@@ -154,6 +158,7 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
             src={heroImage}
             alt={tenant.name}
             className="w-full h-full object-cover"
+            style={{ objectPosition: `${focusX}% ${focusY}%` }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-8">

@@ -117,6 +117,10 @@ export const communitySettingsSchema = z.object({
   website: z.string().optional(),
   yearEstablished: z.number().optional(),
   numberOfLots: z.number().optional(),
+
+  // Hero image focus point (percentages 0-100, default 50/50 = center)
+  heroImageFocusX: z.number().optional(),
+  heroImageFocusY: z.number().optional(),
 });
 
 export type CommunitySettings = z.infer<typeof communitySettingsSchema>;
@@ -281,6 +285,11 @@ export const applications = pgTable("applications", {
   reviewedAt: timestamp("reviewed_at"),
   reviewedByUserId: varchar("reviewed_by_user_id").references(() => users.id),
   reviewNotes: text("review_notes"),
+
+  // Delegated Edit Tracking
+  hasDelegatedEdits: boolean("has_delegated_edits").default(false),
+  lastDelegatedEditAt: timestamp("last_delegated_edit_at"),
+  lastDelegatedEditByUserId: varchar("last_delegated_edit_by_user_id").references(() => users.id),
 });
 
 export const insertApplicationSchema = createInsertSchema(applications).omit({
@@ -839,6 +848,12 @@ export const events = pgTable("events", {
   agendaFinalizedAt: timestamp("agenda_finalized_at"),
   agendaFinalizedByUserId: varchar("agenda_finalized_by_user_id").references(() => users.id),
 
+  // Meeting Facilitator & Live Meeting State
+  facilitatorUserId: varchar("facilitator_user_id").references(() => users.id),
+  facilitatorClaimedAt: timestamp("facilitator_claimed_at"),
+  meetingStartedAt: timestamp("meeting_started_at"),
+  meetingEndedAt: timestamp("meeting_ended_at"),
+
   // Audit
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
@@ -1156,6 +1171,81 @@ export const insertEventAgendaItemSchema = createInsertSchema(eventAgendaItems).
 });
 export type InsertEventAgendaItem = z.infer<typeof insertEventAgendaItemSchema>;
 export type EventAgendaItem = typeof eventAgendaItems.$inferSelect;
+
+// Meeting Section Completions - Track section completion during live meetings
+export const meetingSectionCompletions = pgTable("meeting_section_completions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  sectionId: varchar("section_id").notNull().references(() => agendaSections.id),
+
+  // Completion tracking
+  completedAt: timestamp("completed_at").defaultNow().notNull(),
+  completedByUserId: varchar("completed_by_user_id").notNull().references(() => users.id),
+
+  // Optional notes
+  notes: text("notes"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventSectionIdx: uniqueIndex("meeting_section_completions_event_section_idx").on(table.eventId, table.sectionId),
+  eventIdx: index("meeting_section_completions_event_idx").on(table.eventId),
+}));
+
+export const insertMeetingSectionCompletionSchema = createInsertSchema(meetingSectionCompletions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertMeetingSectionCompletion = z.infer<typeof insertMeetingSectionCompletionSchema>;
+export type MeetingSectionCompletion = typeof meetingSectionCompletions.$inferSelect;
+
+// Attendance Status enum for roll call
+export const attendanceStatusSchema = z.enum([
+  'expected',  // Expected to attend (not yet marked)
+  'present',   // Present at meeting
+  'absent',    // Not present
+  'late',      // Arrived late
+  'excused'    // Absent with excuse
+]);
+export type AttendanceStatus = z.infer<typeof attendanceStatusSchema>;
+
+// Meeting Attendance - Track roll call attendance during live meetings
+export const meetingAttendance = pgTable("meeting_attendance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // Attendance status
+  status: text("status").notNull().default('expected'), // 'expected', 'present', 'absent', 'late', 'excused'
+
+  // Role for this meeting (board member, management, guest, etc.)
+  attendeeRole: text("attendee_role"), // 'board_member', 'management', 'homeowner', 'guest'
+
+  // Timestamps
+  markedAt: timestamp("marked_at"), // When attendance was recorded
+  markedByUserId: varchar("marked_by_user_id").references(() => users.id),
+
+  // Optional notes (e.g., "joined at 7:15pm", "proxy: John Smith")
+  notes: text("notes"),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  eventUserIdx: uniqueIndex("meeting_attendance_event_user_idx").on(table.eventId, table.userId),
+  eventIdx: index("meeting_attendance_event_idx").on(table.eventId),
+  statusIdx: index("meeting_attendance_status_idx").on(table.status),
+}));
+
+export const insertMeetingAttendanceSchema = createInsertSchema(meetingAttendance).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertMeetingAttendance = z.infer<typeof insertMeetingAttendanceSchema>;
+export type MeetingAttendance = typeof meetingAttendance.$inferSelect;
 
 // ============================================
 // SUBSCRIPTION & BILLING MODULE TABLES
@@ -1558,6 +1648,52 @@ export const insertApplicationEventSchema = createInsertSchema(applicationEvents
 });
 export type InsertApplicationEvent = z.infer<typeof insertApplicationEventSchema>;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
+
+// ============================================
+// Delegated Application Edit Tracking
+// ============================================
+
+// Track field-level changes made by non-owners (management reps, board members, etc.)
+export const applicationFieldEdits = pgTable("application_field_edits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Who made the edit
+  editedByUserId: varchar("edited_by_user_id").notNull().references(() => users.id),
+  editedByRole: text("edited_by_role").notNull(), // Role user was acting under
+
+  // On whose behalf (the application owner)
+  onBehalfOfUserId: varchar("on_behalf_of_user_id").notNull().references(() => users.id),
+
+  // What changed
+  fieldPath: text("field_path").notNull(), // e.g., "formData.projectDescription" or "title"
+  fieldLabel: text("field_label"), // Human-readable label from form config
+  previousValue: jsonb("previous_value"), // Can be any JSON value
+  newValue: jsonb("new_value"),
+
+  // Edit context
+  editReason: text("edit_reason"), // Optional reason/notes for the edit
+  editSource: text("edit_source").notNull().default("phone_call"), // 'phone_call', 'in_person', 'email', 'system_correction'
+
+  // Timestamps
+  editedAt: timestamp("edited_at").defaultNow().notNull(),
+
+  // Demo support
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+}, (table) => ({
+  applicationIdx: index("field_edits_application_idx").on(table.applicationId),
+  editedByIdx: index("field_edits_edited_by_idx").on(table.editedByUserId),
+  editedAtIdx: index("field_edits_edited_at_idx").on(table.editedAt),
+  fieldPathIdx: index("field_edits_field_path_idx").on(table.fieldPath),
+}));
+
+export const insertApplicationFieldEditSchema = createInsertSchema(applicationFieldEdits).omit({
+  id: true,
+  editedAt: true,
+});
+export type InsertApplicationFieldEdit = z.infer<typeof insertApplicationFieldEditSchema>;
+export type ApplicationFieldEdit = typeof applicationFieldEdits.$inferSelect;
 
 // ============================================
 // Inter-App Sync Events
@@ -1968,3 +2104,99 @@ export const insertTourContentOverrideSchema = createInsertSchema(tourContentOve
 });
 export type InsertTourContentOverride = z.infer<typeof insertTourContentOverrideSchema>;
 export type TourContentOverride = typeof tourContentOverrides.$inferSelect;
+
+// ============================================
+// AI Context Sources
+// ============================================
+
+// Multiple document sources (URLs and uploaded files) for AI form generation and analysis
+export const aiContextSourceTypeSchema = z.enum(['url', 'uploaded_document']);
+export type AiContextSourceType = z.infer<typeof aiContextSourceTypeSchema>;
+
+export const aiContextSources = pgTable("ai_context_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Source identification
+  name: text("name").notNull(),
+  description: text("description"),
+  sourceType: text("source_type").notNull(), // 'url' | 'uploaded_document'
+
+  // URL sources
+  sourceUrl: text("source_url"),
+
+  // Uploaded documents (Azure Blob Storage)
+  blobPath: text("blob_path"),
+  containerName: text("container_name"),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+
+  // Priority & scope
+  priority: integer("priority").default(100).notNull(), // Lower = higher priority
+  appliesToAllForms: boolean("applies_to_all_forms").default(true).notNull(),
+  appliesToFormTypes: jsonb("applies_to_form_types").$type<string[]>(), // ['fencing', 'landscaping'] etc.
+
+  // State
+  isActive: boolean("is_active").default(true).notNull(),
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("ai_context_sources_tenant_idx").on(table.tenantId),
+  activeIdx: index("ai_context_sources_active_idx").on(table.tenantId, table.isActive),
+  priorityIdx: index("ai_context_sources_priority_idx").on(table.tenantId, table.priority),
+}));
+
+export const insertAiContextSourceSchema = createInsertSchema(aiContextSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAiContextSource = z.infer<typeof insertAiContextSourceSchema>;
+export type AiContextSource = typeof aiContextSources.$inferSelect;
+
+// ============================================
+// AI Instructions
+// ============================================
+
+// Custom instructions for AI form generation and analysis (community-level and per-form-type)
+export const aiInstructionScopeSchema = z.enum(['community', 'form_type']);
+export type AiInstructionScope = z.infer<typeof aiInstructionScopeSchema>;
+
+export const aiInstructions = pgTable("ai_instructions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Instruction scope
+  scope: text("scope").notNull(), // 'community' | 'form_type'
+  formType: text("form_type"), // Only set if scope = 'form_type' (e.g., 'fencing', 'roofing')
+
+  // Content
+  title: text("title").notNull(),
+  instructions: text("instructions").notNull(), // The actual instruction text
+
+  // State
+  isActive: boolean("is_active").default(true).notNull(),
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("ai_instructions_tenant_idx").on(table.tenantId),
+  scopeIdx: index("ai_instructions_scope_idx").on(table.tenantId, table.scope),
+  formTypeIdx: index("ai_instructions_form_type_idx").on(table.tenantId, table.formType),
+}));
+
+export const insertAiInstructionSchema = createInsertSchema(aiInstructions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAiInstruction = z.infer<typeof insertAiInstructionSchema>;
+export type AiInstruction = typeof aiInstructions.$inferSelect;

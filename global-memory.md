@@ -135,25 +135,27 @@ All implemented features now have proper subscription tier checks:
 
 ## Development Workflow Conventions
 
-### Server Restart After Code Changes
+### Server Restart After Code Changes — MANDATORY
 
-**CRITICAL FOR CLAUDE:** You MUST kill all server processes immediately after making ANY changes to server-side code. Do not wait for the user to restart manually.
+**CRITICAL FOR CLAUDE:** You MUST kill ALL server processes AND rebuild IMMEDIATELY after making ANY changes to server-side code. Do NOT wait for the user. Do NOT batch changes — kill + rebuild after EACH set of server/shared file edits.
+
+**This app runs in PRODUCTION mode** (`node dist/index.js`). Code changes have NO effect until the project is rebuilt. Failing to rebuild causes stale code bugs: HTML responses for API routes, missing endpoints, broken features.
 
 ```bash
-pkill -f "tsx server/index.ts"
+pkill -f "tsx server/index.ts" ; pkill -f "node dist/index.js" ; npm run build
 ```
 
-Then the user will click **Run** in Replit to restart. This prevents debugging inconsistencies from stale code.
+Then inform the user to click **Run** in Replit.
 
-**When to kill processes (ALWAYS do this automatically):**
-- After modifying any file in `/server/` directory
-- After modifying `/shared/` files that are used server-side
+**When to do this (ALWAYS, automatically — no exceptions):**
+- After modifying ANY file in `/server/` directory
+- After modifying ANY file in `/shared/` directory
 - After changing environment variables or configuration
 - When debugging unexpected behavior that doesn't match code changes
 
 **Claude workflow:**
-1. Make server code changes
-2. Immediately run `pkill -f "tsx server/index.ts"`
+1. Make server/shared code changes
+2. Immediately run: `pkill -f "tsx server/index.ts" ; pkill -f "node dist/index.js" ; npm run build`
 3. Inform user to click Run in Replit
 
 ### Helper Functions Available

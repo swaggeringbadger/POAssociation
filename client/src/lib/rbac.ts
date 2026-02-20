@@ -159,6 +159,16 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
+  // Meeting Agenda Presentation Mode - same access as agenda
+  '/calendar/events/:eventId/agenda/present': [
+    'poa_board_contributor',
+    'poa_board_member',
+    'management_rep',
+    'management_manager',
+    'account_admin',
+    'super_admin'
+  ],
+
   // Form Wizard - board members and management
   '/form-wizard': [
     'poa_board_member',

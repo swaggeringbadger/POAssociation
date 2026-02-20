@@ -19,6 +19,7 @@ import {
   contractorInviteAcceptedTemplate,
   contractorReferralTemplate,
   contractorReferralSignupTemplate,
+  delegatedEditNotificationTemplate,
 } from './emailTemplates';
 
 interface EmailPayload {
@@ -468,6 +469,38 @@ export class EmailService {
     return this.send({
       to: recipientEmail,
       subject: `New Referral: ${communityName} signed up!`,
+      html,
+    });
+  }
+
+  /**
+   * Send notification when application is edited on behalf of homeowner
+   */
+  async sendDelegatedEditNotification(
+    recipientEmail: string,
+    recipientName: string,
+    applicationTitle: string,
+    editorName: string,
+    editorRole: string,
+    changedFields: string[],
+    editReason: string | undefined,
+    applicationLink: string,
+    communityName: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const html = delegatedEditNotificationTemplate(
+      recipientName,
+      applicationTitle,
+      editorName,
+      editorRole,
+      changedFields,
+      editReason,
+      applicationLink,
+      communityName
+    );
+
+    return this.send({
+      to: recipientEmail,
+      subject: `Your application "${applicationTitle}" was updated`,
       html,
     });
   }

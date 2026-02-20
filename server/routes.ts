@@ -522,6 +522,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Hero Image Upload - Upload and optionally sharpen hero image for community
+  app.post("/api/tenants/:tenantId/hero-image", isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({
+          error: "Image storage is not configured. Please configure Azure Blob Storage."
+        });
+      }
+
+      const { tenantId } = req.params;
+      const { sharpen } = req.body; // 'true' or 'false' as string from FormData
+      const shouldSharpen = sharpen === 'true';
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({
+          error: "Invalid file type. Allowed types: JPEG, PNG, WebP, GIF"
+        });
+      }
+
+      // Verify tenant exists
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Community not found" });
+      }
+
+      // Get current user ID
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      let imageBuffer = file.buffer;
+      let imageMimeType = file.mimetype;
+      let wasSharpened = false;
+      let sharpeningError: string | undefined;
+
+      // If sharpening requested, process (free service, no credit cost)
+      if (shouldSharpen) {
+        const { imageSharpeningService } = await import('./services/imageSharpeningService');
+
+        if (imageSharpeningService.isConfigured()) {
+          console.log(`[HeroImage] Sharpening image for tenant ${tenantId}`);
+          const sharpenResult = await imageSharpeningService.sharpenImage(
+            file.buffer,
+            file.mimetype,
+            file.originalname
+          );
+
+          if (sharpenResult.success && sharpenResult.sharpenedImageBase64) {
+            imageBuffer = Buffer.from(sharpenResult.sharpenedImageBase64, 'base64');
+            imageMimeType = sharpenResult.mimeType;
+            wasSharpened = true;
+            console.log(`[HeroImage] Image sharpened successfully. Original: ${file.buffer.length} bytes, Enhanced: ${imageBuffer.length} bytes`);
+          } else {
+            sharpeningError = sharpenResult.error || 'Sharpening failed';
+            console.warn(`[HeroImage] Sharpening failed: ${sharpeningError}. Uploading original.`);
+          }
+        } else {
+          sharpeningError = 'Image sharpening service not configured';
+          console.warn('[HeroImage] Sharpening service not configured. Uploading original.');
+        }
+      }
+
+      // Generate unique path for hero image
+      const fileExtension = imageMimeType.split('/')[1] || 'jpg';
+      const blobPath = `${tenantId}/hero-image.${fileExtension}`;
+
+      // Upload to Azure Blob Storage
+      const uploadResult = await azureBlobStorage.uploadFile(
+        'community-assets',
+        imageBuffer,
+        `hero-image.${fileExtension}`,
+        imageMimeType,
+        blobPath
+      );
+
+      // Store proxy URL with filename so the view endpoint knows exact blob path
+      const heroImageUrl = `/api/tenants/${tenantId}/hero-image/view/hero-image.${fileExtension}`;
+      const updatedTenant = await storage.updateTenant(tenantId, {
+        heroImageUrl,
+      });
+
+      res.json({
+        success: true,
+        heroImageUrl,
+        wasSharpened,
+        sharpeningError: wasSharpened ? undefined : sharpeningError,
+        originalSize: file.buffer.length,
+        finalSize: imageBuffer.length,
+        tenant: updatedTenant,
+      });
+    } catch (error: any) {
+      console.error('[HeroImage] Upload error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete hero image
+  app.delete("/api/tenants/:tenantId/hero-image", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+
+      // Verify tenant exists
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Community not found" });
+      }
+
+      // Update tenant to remove hero image URL
+      const updatedTenant = await storage.updateTenant(tenantId, {
+        heroImageUrl: null,
+      });
+
+      // Note: We don't delete the blob as it may be referenced in cached pages
+      // Azure lifecycle policies can clean up old blobs
+
+      res.json({
+        success: true,
+        tenant: updatedTenant,
+      });
+    } catch (error: any) {
+      console.error('[HeroImage] Delete error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Serve hero image (public proxy - streams from private Azure blob storage)
+  app.get("/api/tenants/:tenantId/hero-image/view/:fileName", async (req, res) => {
+    try {
+      const { tenantId, fileName } = req.params;
+
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: "Storage not configured" });
+      }
+
+      const blobPath = `${tenantId}/${fileName}`;
+      const ext = fileName.split('.').pop()?.toLowerCase() || 'jpeg';
+      const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+
+      const imageBuffer = await azureBlobStorage.downloadFile('community-assets', blobPath);
+
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(imageBuffer);
+    } catch (error: any) {
+      console.error('[HeroImage] View error:', error);
+      res.status(404).json({ error: "Hero image not found" });
+    }
+  });
+
   // Management Company Settings - Protected routes
   app.get("/api/management-company/:id/settings", isAuthenticated, async (req: any, res) => {
     try {
@@ -1293,39 +1450,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update application (for homeowner edits)
+  // Update application (for homeowner edits OR delegated edits by management/board)
   app.patch("/api/applications/:id", isAuthenticated, async (req, res) => {
     try {
       const applicationId = req.params.id;
       const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
-      
-      // Fetch application to verify ownership
+
+      // Fetch application
       const application = await storage.getApplication(applicationId);
       if (!application) {
         return res.status(404).json({ error: "Application not found" });
       }
-      
-      // Verify user is the submitter
-      if (application.submittedByUserId !== userId) {
+
+      // Determine edit type and permissions
+      const isOwner = application.submittedByUserId === userId;
+
+      // Check if user is a contractor collaborator with edit permission
+      let isContractorCollaborator = false;
+      const collaborators = await storage.getApplicationCollaborators(applicationId);
+      const contractorCollab = collaborators.find(c =>
+        c.contractor?.user?.id === userId &&
+        c.status === 'active' &&
+        c.canEditForm
+      );
+      if (contractorCollab) {
+        isContractorCollaborator = true;
+      }
+
+      // Check if user has a role that allows delegated edits
+      const delegatedEditRoles = ['management_rep', 'management_manager', 'account_admin', 'super_admin', 'poa_board_member'];
+      const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+      const roleNames = userRoles.map(r => r.role);
+      const canMakeDelegatedEdit = roleNames.some(role => delegatedEditRoles.includes(role));
+      const actingRole = roleNames.find(r => delegatedEditRoles.includes(r)) || roleNames[0];
+
+      // Determine edit type
+      let editType: 'owner' | 'contractor' | 'delegated' | 'unauthorized' = 'unauthorized';
+      if (isOwner) {
+        editType = 'owner';
+      } else if (isContractorCollaborator) {
+        editType = 'contractor';
+      } else if (canMakeDelegatedEdit) {
+        editType = 'delegated';
+      }
+
+      if (editType === 'unauthorized') {
         return res.status(403).json({ error: "You don't have permission to edit this application" });
       }
-      
+
       // Verify application can be edited (draft, pending, or under_review)
       if (!['draft', 'pending', 'under_review'].includes(application.status)) {
         return res.status(400).json({ error: "This application cannot be edited in its current status" });
       }
-      
-      const { title, description, propertyAddress, formData, status } = req.body;
-      
-      // Calculate new completeness score if formData changed
-      let completenessScore = application.completenessScore;
-      if (formData) {
-        const config = await additionalInfoService.getFormTemplateConfig(application.formTemplateId);
-        if (config) {
-          completenessScore = additionalInfoService.calculateCompletenessScore(config, formData);
+
+      const { title, description, propertyAddress, formData, status, editReason, editSource } = req.body;
+
+      // Get form config for field labels (used for delegated edits)
+      const formConfig = await additionalInfoService.getFormTemplateConfig(application.formTemplateId);
+
+      // Helper function to detect changes between old and new values
+      const detectChanges = () => {
+        const changes: Array<{ fieldPath: string; fieldLabel: string | null; previousValue: any; newValue: any }> = [];
+
+        // Check top-level fields
+        const topLevelFields = [
+          { key: 'title', label: 'Project Title' },
+          { key: 'description', label: 'Project Description' },
+          { key: 'propertyAddress', label: 'Property Address' },
+        ];
+
+        for (const field of topLevelFields) {
+          const reqValue = req.body[field.key];
+          if (reqValue !== undefined && reqValue !== (application as any)[field.key]) {
+            changes.push({
+              fieldPath: field.key,
+              fieldLabel: field.label,
+              previousValue: (application as any)[field.key],
+              newValue: reqValue,
+            });
+          }
+        }
+
+        // Check formData fields
+        if (formData) {
+          const originalFormData = (application.formData as Record<string, any>) || {};
+          for (const [key, newValue] of Object.entries(formData)) {
+            const previousValue = originalFormData[key];
+            if (JSON.stringify(previousValue) !== JSON.stringify(newValue)) {
+              // Try to get field label from form config
+              let fieldLabel: string | null = null;
+              if (formConfig?.sections) {
+                for (const section of formConfig.sections) {
+                  const field = section.fields?.find((f: any) => f.id === key);
+                  if (field) {
+                    fieldLabel = field.label;
+                    break;
+                  }
+                }
+              }
+              changes.push({
+                fieldPath: `formData.${key}`,
+                fieldLabel,
+                previousValue,
+                newValue,
+              });
+            }
+          }
+        }
+
+        return changes;
+      };
+
+      // For delegated edits, track field-level changes
+      if (editType === 'delegated') {
+        const changes = detectChanges();
+
+        // Create field edit records for each change
+        for (const change of changes) {
+          await storage.createApplicationFieldEdit({
+            applicationId,
+            tenantId: application.tenantId,
+            editedByUserId: userId,
+            editedByRole: actingRole || 'unknown',
+            onBehalfOfUserId: application.submittedByUserId,
+            fieldPath: change.fieldPath,
+            fieldLabel: change.fieldLabel,
+            previousValue: change.previousValue,
+            newValue: change.newValue,
+            editReason: editReason || null,
+            editSource: editSource || 'phone_call',
+            demoCodeId: application.demoCodeId || undefined,
+          });
+        }
+
+        // Send notification to the application owner
+        if (changes.length > 0) {
+          try {
+            const owner = await storage.getUser(application.submittedByUserId);
+            const editor = await storage.getUser(userId);
+            const tenant = await storage.getTenant(application.tenantId);
+
+            if (owner?.email && editor && tenant) {
+              const { emailService } = await import('./emailService');
+              const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
+              const ownerName = `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Valued Resident';
+              const editorName = `${editor.firstName || ''} ${editor.lastName || ''}`.trim() || 'A representative';
+              const changedFieldLabels = changes.map(c => c.fieldLabel || c.fieldPath);
+
+              await emailService.sendDelegatedEditNotification(
+                owner.email,
+                ownerName,
+                application.title,
+                editorName,
+                actingRole || 'Representative',
+                changedFieldLabels,
+                editReason,
+                applicationLink,
+                tenant.name
+              );
+            }
+          } catch (emailError) {
+            console.error("[Email] Error sending delegated edit notification:", emailError);
+            // Don't fail the update if email fails
+          }
         }
       }
-      
+
+      // Calculate new completeness score if formData changed
+      let completenessScore = application.completenessScore;
+      if (formData && formConfig) {
+        completenessScore = additionalInfoService.calculateCompletenessScore(formConfig, formData);
+      }
+
       // Update the application
       const updates: Partial<any> = {};
       if (title !== undefined) updates.title = title;
@@ -1334,9 +1630,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (formData !== undefined) updates.formData = formData;
       if (status !== undefined) updates.status = status;
       if (completenessScore !== undefined) updates.completenessScore = completenessScore;
-      
+
       const updatedApplication = await storage.updateApplication(applicationId, updates);
-      
+
       // Reset workflow step back to 0 (Application Submitted) when application is edited
       try {
         const [workflow] = await db.select().from(schema.applicationWorkflows).where(eq(schema.applicationWorkflows.applicationId, applicationId));
@@ -1349,35 +1645,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("[PATCH /api/applications/:id] Error resetting workflow:", workflowError);
         // Don't fail the update if workflow reset fails
       }
-      
-      // Send email notification if application was reset to pending from under_review
-      try {
-        if (application.status === 'under_review' && status === 'pending') {
-          const user = await storage.getUser(userId);
-          const tenant = await storage.getTenant(application.tenantId);
-          
-          if (user && tenant && user.email) {
-            const { emailService } = await import('./emailService');
-            const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
-            const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
-            
-            await emailService.sendApplicationSubmitted(
-              user.email,
-              title || application.title,
-              applicantName,
-              tenant.name,
-              applicationLink
-            );
+
+      // Send email notification if application was reset to pending from under_review (for owner edits)
+      if (editType === 'owner') {
+        try {
+          if (application.status === 'under_review' && status === 'pending') {
+            const user = await storage.getUser(userId);
+            const tenant = await storage.getTenant(application.tenantId);
+
+            if (user && tenant && user.email) {
+              const { emailService } = await import('./emailService');
+              const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
+              const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
+
+              await emailService.sendApplicationSubmitted(
+                user.email,
+                title || application.title,
+                applicantName,
+                tenant.name,
+                applicationLink
+              );
+            }
           }
+        } catch (emailError) {
+          console.error("[Email] Error sending application update email:", emailError);
+          // Don't fail the update if email fails
         }
-      } catch (emailError) {
-        console.error("[Email] Error sending application update email:", emailError);
-        // Don't fail the update if email fails
       }
-      
+
       res.json(updatedApplication);
     } catch (error: any) {
       console.error("[PATCH /api/applications/:id] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get edit history for an application (delegated edits only)
+  app.get("/api/applications/:id/edit-history", isAuthenticated, async (req, res) => {
+    try {
+      const applicationId = req.params.id;
+      const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+
+      // Verify application exists and user has access
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      // Check if user has access to view this application
+      const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+      const roleNames = userRoles.map(r => r.role);
+      const hasAccess = application.submittedByUserId === userId ||
+        roleNames.some(r => ['management_rep', 'management_manager', 'account_admin', 'super_admin', 'poa_board_member', 'poa_board_contributor'].includes(r));
+
+      if (!hasAccess) {
+        // Check if user is a contractor collaborator
+        const collaborators = await storage.getApplicationCollaborators(applicationId);
+        const isCollaborator = collaborators.some(c => c.contractor?.user?.id === userId && c.status === 'active');
+        if (!isCollaborator) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const edits = await storage.getApplicationFieldEdits(applicationId);
+      const summary = await storage.getApplicationEditSummary(applicationId);
+
+      res.json({ edits, summary });
+    } catch (error: any) {
+      console.error("[GET /api/applications/:id/edit-history] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get edit history for a specific field (for tooltips)
+  app.get("/api/applications/:id/field-history/:fieldPath", isAuthenticated, async (req, res) => {
+    try {
+      const { id: applicationId, fieldPath } = req.params;
+      const userId = (req as any).session?.userId || (req as any).user?.claims?.sub;
+
+      // Verify application exists and user has access
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      // Check access (same logic as edit-history)
+      const userRoles = await storage.getUserRolesForTenant(userId, application.tenantId);
+      const roleNames = userRoles.map(r => r.role);
+      const hasAccess = application.submittedByUserId === userId ||
+        roleNames.some(r => ['management_rep', 'management_manager', 'account_admin', 'super_admin', 'poa_board_member', 'poa_board_contributor'].includes(r));
+
+      if (!hasAccess) {
+        const collaborators = await storage.getApplicationCollaborators(applicationId);
+        const isCollaborator = collaborators.some(c => c.contractor?.user?.id === userId && c.status === 'active');
+        if (!isCollaborator) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const history = await storage.getFieldEditHistory(applicationId, decodeURIComponent(fieldPath));
+      res.json(history);
+    } catch (error: any) {
+      console.error("[GET /api/applications/:id/field-history/:fieldPath] Error:", error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -2203,7 +2572,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/ai-analyses", isAuthenticated, requireSuperAdmin, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
-      const analyses = await storage.listAllAiAnalyses(limit);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const analyses = await storage.listAllAiAnalyses(limit, startDate, endDate);
       res.json(analyses);
     } catch (error: any) {
       console.error('Error listing AI analyses:', error);
@@ -2372,7 +2743,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existing) {
         return res.status(404).json({ error: 'Demo code not found' });
       }
-      const demoCode = await storage.updateDemoCode(req.params.id, req.body);
+
+      // Convert date strings to Date objects for timestamp fields
+      const updates = { ...req.body };
+      if (updates.validFrom && typeof updates.validFrom === 'string') {
+        updates.validFrom = new Date(updates.validFrom);
+      }
+      if (updates.validUntil && typeof updates.validUntil === 'string') {
+        updates.validUntil = new Date(updates.validUntil);
+      }
+
+      const demoCode = await storage.updateDemoCode(req.params.id, updates);
       res.json(demoCode);
     } catch (error: any) {
       console.error('Error updating demo code:', error);
@@ -3127,19 +3508,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (!tenant.designGuidelinesUrl) {
+      // Check if we have any AI context sources OR the legacy design guidelines URL
+      const aiContextSources = await storage.listAiContextSources(tenantId, false);
+      if (aiContextSources.length === 0 && !tenant.designGuidelinesUrl) {
         return res.status(400).json({
-          error: "No design guidelines URL configured for this property. Please add one in settings first."
+          error: "No AI context sources configured for this property. Please add document sources or a design guidelines URL in settings first."
         });
       }
 
       // Import AI generation service
       const { aiFormGenerationService } = await import('./aiFormGenerationService');
 
-      // Generate form
-      const result = await aiFormGenerationService.generateForm(
-        tenant.designGuidelinesUrl,
-        applicationType
+      // Generate form using new multi-source context system (with legacy fallback)
+      const result = await aiFormGenerationService.generateFormWithContext(
+        tenantId,
+        applicationType,
+        tenant.designGuidelinesUrl || undefined
       );
 
       // Save generation to database
@@ -3212,8 +3596,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // List AI form generations (for admin dashboard)
   app.get("/api/admin/ai-generations", isAuthenticated, async (req: any, res) => {
     try {
-      const { tenantId } = req.query;
-      const generations = await storage.listAiFormGenerations(tenantId);
+      const { tenantId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      const generations = await storage.listAiFormGenerations(tenantId, start, end);
       res.json(generations);
     } catch (error: any) {
       console.error("Error listing AI generations:", error);
@@ -4833,6 +5219,177 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(event);
     } catch (error: any) {
       console.error('Error unfinalizing agenda:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // MEETING FACILITATOR & PRESENTATION MODE ROUTES
+  // ============================================
+
+  // Claim facilitator role for a meeting
+  app.post('/api/events/:eventId/facilitator/claim', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required to run meeting' });
+      }
+      const event = await storage.claimFacilitator(req.params.eventId, req.userId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error claiming facilitator:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Release facilitator role
+  app.post('/api/events/:eventId/facilitator/release', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const event = await storage.releaseFacilitator(req.params.eventId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error releasing facilitator:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Start meeting
+  app.post('/api/events/:eventId/meeting/start', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const event = await storage.startMeeting(req.params.eventId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error starting meeting:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // End meeting
+  app.post('/api/events/:eventId/meeting/end', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const event = await storage.endMeeting(req.params.eventId);
+      res.json(event);
+    } catch (error: any) {
+      console.error('Error ending meeting:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark section complete
+  app.post('/api/events/:eventId/sections/:sectionId/complete', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const completion = await storage.markSectionComplete(
+        req.params.eventId,
+        req.params.sectionId,
+        req.userId,
+        req.body.notes
+      );
+      res.json(completion);
+    } catch (error: any) {
+      console.error('Error marking section complete:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unmark section complete
+  app.delete('/api/events/:eventId/sections/:sectionId/complete', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      await storage.unmarkSectionComplete(req.params.eventId, req.params.sectionId);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error unmarking section complete:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get attendance for an event
+  app.get('/api/events/:eventId/attendance', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      const attendance = await storage.getMeetingAttendance(req.params.eventId);
+      res.json(attendance);
+    } catch (error: any) {
+      console.error('Error getting attendance:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Initialize attendance (populate expected attendees)
+  app.post('/api/events/:eventId/attendance/initialize', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const event = await storage.getEvent(req.params.eventId);
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+      const attendance = await storage.initializeMeetingAttendance(req.params.eventId, event.tenantId);
+      res.json(attendance);
+    } catch (error: any) {
+      console.error('Error initializing attendance:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark attendance for a user
+  app.patch('/api/events/:eventId/attendance/:userId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const { status, notes } = req.body;
+      const attendance = await storage.markAttendance(
+        req.params.eventId,
+        req.params.userId,
+        status,
+        req.userId,
+        notes
+      );
+      res.json(attendance);
+    } catch (error: any) {
+      console.error('Error marking attendance:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Add attendee manually (for guests)
+  app.post('/api/events/:eventId/attendance', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      const attendance = await storage.addAttendee({
+        eventId: req.params.eventId,
+        ...req.body,
+      });
+      res.status(201).json(attendance);
+    } catch (error: any) {
+      console.error('Error adding attendee:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get full presentation data for a meeting
+  app.get('/api/events/:eventId/present', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      const data = await storage.getEventPresentationData(req.params.eventId);
+      res.json(data);
+    } catch (error: any) {
+      console.error('Error getting presentation data:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -8559,6 +9116,336 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error resetting tour:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AI Context Sources
+  // ============================================
+
+  // List AI context sources for a tenant
+  app.get('/api/tenants/:tenantId/ai-context-sources', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const includeInactive = req.query.includeInactive === 'true';
+
+      const sources = await storage.listAiContextSources(tenantId, includeInactive);
+      res.json(sources);
+    } catch (error: any) {
+      console.error('Error listing AI context sources:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get a single AI context source
+  app.get('/api/tenants/:tenantId/ai-context-sources/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const source = await storage.getAiContextSource(id);
+      if (!source) {
+        return res.status(404).json({ error: 'AI context source not found' });
+      }
+
+      res.json(source);
+    } catch (error: any) {
+      console.error('Error getting AI context source:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create a URL-based AI context source
+  app.post('/api/tenants/:tenantId/ai-context-sources', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { name, description, sourceUrl, priority, appliesToAllForms, appliesToFormTypes } = req.body;
+
+      if (!name || !sourceUrl) {
+        return res.status(400).json({ error: 'Name and sourceUrl are required' });
+      }
+
+      const source = await storage.createAiContextSource({
+        tenantId,
+        name,
+        description,
+        sourceType: 'url',
+        sourceUrl,
+        priority: priority || 100,
+        appliesToAllForms: appliesToAllForms !== false,
+        appliesToFormTypes: appliesToFormTypes || null,
+        createdByUserId: userId,
+      });
+
+      res.json(source);
+    } catch (error: any) {
+      console.error('Error creating AI context source:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload a document as AI context source
+  app.post('/api/tenants/:tenantId/ai-context-sources/upload', isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const { name, description, priority, appliesToAllForms, appliesToFormTypes } = req.body;
+
+      if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+
+      // Check if Azure Blob Storage is available
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: 'File storage is not configured' });
+      }
+
+      // Generate unique blob path
+      const fileExt = file.originalname.split('.').pop() || 'pdf';
+      const blobPath = `${tenantId}/ai-context/${crypto.randomUUID()}.${fileExt}`;
+      const containerName = 'ai-context-documents';
+
+      // Upload to Azure Blob Storage
+      await azureBlobStorage.uploadFile(
+        containerName,
+        blobPath,
+        file.buffer,
+        file.mimetype
+      );
+
+      // Create database record
+      const source = await storage.createAiContextSource({
+        tenantId,
+        name,
+        description,
+        sourceType: 'uploaded_document',
+        blobPath,
+        containerName,
+        fileName: file.originalname,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        priority: priority ? parseInt(priority) : 100,
+        appliesToAllForms: appliesToAllForms !== 'false',
+        appliesToFormTypes: appliesToFormTypes ? JSON.parse(appliesToFormTypes) : null,
+        createdByUserId: userId,
+      });
+
+      res.json(source);
+    } catch (error: any) {
+      console.error('Error uploading AI context document:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update an AI context source
+  app.patch('/api/tenants/:tenantId/ai-context-sources/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, sourceUrl, priority, appliesToAllForms, appliesToFormTypes } = req.body;
+
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      if (sourceUrl !== undefined) updates.sourceUrl = sourceUrl;
+      if (priority !== undefined) updates.priority = priority;
+      if (appliesToAllForms !== undefined) updates.appliesToAllForms = appliesToAllForms;
+      if (appliesToFormTypes !== undefined) updates.appliesToFormTypes = appliesToFormTypes;
+
+      const source = await storage.updateAiContextSource(id, updates);
+      res.json(source);
+    } catch (error: any) {
+      console.error('Error updating AI context source:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete an AI context source
+  app.delete('/api/tenants/:tenantId/ai-context-sources/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get source to check if we need to delete from blob storage
+      const source = await storage.getAiContextSource(id);
+      if (source && source.sourceType === 'uploaded_document' && source.blobPath && source.containerName) {
+        try {
+          await azureBlobStorage.deleteFile(source.containerName, source.blobPath);
+        } catch (blobError) {
+          console.warn('Failed to delete blob:', blobError);
+          // Continue with database deletion even if blob deletion fails
+        }
+      }
+
+      await storage.deleteAiContextSource(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting AI context source:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Toggle an AI context source active/inactive
+  app.post('/api/tenants/:tenantId/ai-context-sources/:id/toggle', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ error: 'isActive must be a boolean' });
+      }
+
+      const source = await storage.toggleAiContextSource(id, isActive);
+      res.json(source);
+    } catch (error: any) {
+      console.error('Error toggling AI context source:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reorder AI context sources
+  app.post('/api/tenants/:tenantId/ai-context-sources/reorder', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { orderedIds } = req.body;
+
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: 'orderedIds must be an array' });
+      }
+
+      await storage.reorderAiContextSources(tenantId, orderedIds);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error reordering AI context sources:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AI Instructions
+  // ============================================
+
+  // List AI instructions for a tenant
+  app.get('/api/tenants/:tenantId/ai-instructions', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { scope, formType } = req.query;
+
+      const instructions = await storage.listAiInstructions(
+        tenantId,
+        scope as string | undefined,
+        formType as string | undefined
+      );
+      res.json(instructions);
+    } catch (error: any) {
+      console.error('Error listing AI instructions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get a single AI instruction
+  app.get('/api/tenants/:tenantId/ai-instructions/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const instruction = await storage.getAiInstruction(id);
+      if (!instruction) {
+        return res.status(404).json({ error: 'AI instruction not found' });
+      }
+
+      res.json(instruction);
+    } catch (error: any) {
+      console.error('Error getting AI instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create an AI instruction
+  app.post('/api/tenants/:tenantId/ai-instructions', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const { scope, formType, title, instructions } = req.body;
+
+      if (!scope || !title || !instructions) {
+        return res.status(400).json({ error: 'scope, title, and instructions are required' });
+      }
+
+      if (scope !== 'community' && scope !== 'form_type') {
+        return res.status(400).json({ error: 'scope must be "community" or "form_type"' });
+      }
+
+      if (scope === 'form_type' && !formType) {
+        return res.status(400).json({ error: 'formType is required when scope is "form_type"' });
+      }
+
+      const instruction = await storage.createAiInstruction({
+        tenantId,
+        scope,
+        formType: scope === 'form_type' ? formType : null,
+        title,
+        instructions,
+        createdByUserId: userId,
+      });
+
+      res.json(instruction);
+    } catch (error: any) {
+      console.error('Error creating AI instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update an AI instruction
+  app.patch('/api/tenants/:tenantId/ai-instructions/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { title, instructions, formType } = req.body;
+
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (instructions !== undefined) updates.instructions = instructions;
+      if (formType !== undefined) updates.formType = formType;
+
+      const instruction = await storage.updateAiInstruction(id, updates);
+      res.json(instruction);
+    } catch (error: any) {
+      console.error('Error updating AI instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete an AI instruction
+  app.delete('/api/tenants/:tenantId/ai-instructions/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      await storage.deleteAiInstruction(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting AI instruction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Toggle an AI instruction active/inactive
+  app.post('/api/tenants/:tenantId/ai-instructions/:id/toggle', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ error: 'isActive must be a boolean' });
+      }
+
+      const instruction = await storage.toggleAiInstruction(id, isActive);
+      res.json(instruction);
+    } catch (error: any) {
+      console.error('Error toggling AI instruction:', error);
       res.status(500).json({ error: error.message });
     }
   });

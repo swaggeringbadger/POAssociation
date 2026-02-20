@@ -205,8 +205,11 @@ class ApiClient {
     return response.json();
   }
 
-  async getAllAiAnalyses(limit = 100): Promise<any[]> {
-    const response = await fetch(`${this.baseUrl}/admin/ai-analyses?limit=${limit}`);
+  async getAllAiAnalyses(limit = 100, startDate?: string, endDate?: string): Promise<any[]> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const response = await fetch(`${this.baseUrl}/admin/ai-analyses?${params}`);
     if (!response.ok) throw new Error("Failed to fetch AI analyses");
     return response.json();
   }
@@ -726,9 +729,14 @@ class ApiClient {
     return response.json();
   }
 
-  async listAiGenerations(tenantId?: string): Promise<any[]> {
-    const url = tenantId
-      ? `${this.baseUrl}/admin/ai-generations?tenantId=${tenantId}`
+  async listAiGenerations(tenantId?: string, startDate?: string, endDate?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (tenantId) params.append('tenantId', tenantId);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const queryString = params.toString();
+    const url = queryString
+      ? `${this.baseUrl}/admin/ai-generations?${queryString}`
       : `${this.baseUrl}/admin/ai-generations`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch AI generations");
@@ -1464,6 +1472,11 @@ export interface CalendarEvent {
   updatedAt: string;
   exceptionDates: string | null;
   originalOccurrenceDate: string | null;
+  // Meeting/agenda fields
+  agendaFinalized: boolean;
+  agendaFinalizedAt: string | null;
+  agendaFinalizedByUserId: string | null;
+  meetingTemplateId: string | null;
   // Joined data
   eventType?: EventType;
   tenant?: { id: string; name: string };
@@ -2815,6 +2828,183 @@ export async function getApplicationJourney(applicationId: string): Promise<Appl
 }
 
 // ============================================
+// Meeting Facilitator & Presentation Mode
+// ============================================
+
+// Attendance types
+export type AttendanceStatus = 'expected' | 'present' | 'absent' | 'late' | 'excused';
+
+export interface MeetingAttendance {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: AttendanceStatus;
+  attendeeRole: string | null;
+  markedAt: string | null;
+  markedByUserId: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: User;
+}
+
+// Section completion type
+export interface MeetingSectionCompletion {
+  id: string;
+  eventId: string;
+  sectionId: string;
+  completedAt: string;
+  completedByUserId: string;
+  notes: string | null;
+}
+
+// Form Template type for bylaw extraction
+export interface FormTemplate {
+  id: string;
+  tenantId: string | null;
+  projectType: string | null;
+  name: string;
+  description: string | null;
+  schema: {
+    title?: string;
+    description?: string;
+    relevantBylaws?: {
+      primary?: {
+        section: string;
+        document: string;
+        summary: string;
+        keyRequirements?: string[];
+        quote?: string;
+      };
+      additionalReferences?: Array<{
+        section: string;
+        document: string;
+        summary: string;
+        keyProvisions?: string[];
+      }>;
+    };
+    sections?: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      fields?: Array<{
+        id: string;
+        label: string;
+        type: string;
+        required?: boolean;
+        description?: string;
+        relevantBylaws?: {
+          reference?: string;
+          requirement?: string;
+          requirements?: string[];
+          note?: string;
+          quote?: string;
+          keyRestrictions?: string[];
+          approvedMaterials?: string[];
+          prohibited?: string;
+          preferredStyles?: string[];
+          keyProvisions?: string[];
+        };
+      }>;
+    }>;
+  };
+  isActive: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Extended application with form template
+export interface ApplicationWithFormTemplate extends Application {
+  formTemplate?: FormTemplate;
+}
+
+// Extended agenda item with application and form template
+export interface EventAgendaItemWithDetails extends EventAgendaItem {
+  application?: ApplicationWithFormTemplate;
+  presenter?: User;
+}
+
+// Presentation data type
+export interface EventPresentationData {
+  event: CalendarEvent & {
+    facilitatorUserId?: string;
+    facilitatorClaimedAt?: string;
+    meetingStartedAt?: string;
+    meetingEndedAt?: string;
+  };
+  agenda: {
+    sections: AgendaSection[];
+    items: EventAgendaItemWithDetails[];
+    completions: MeetingSectionCompletion[];
+  };
+  attendance: MeetingAttendance[];
+  facilitator?: User;
+}
+
+// Facilitator functions
+export async function claimFacilitator(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/facilitator/claim`);
+}
+
+export async function releaseFacilitator(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/facilitator/release`);
+}
+
+export async function startMeeting(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/meeting/start`);
+}
+
+export async function endMeeting(eventId: string): Promise<CalendarEvent> {
+  return apiRequest('POST', `/api/events/${eventId}/meeting/end`);
+}
+
+// Section completion functions
+export async function markSectionComplete(
+  eventId: string,
+  sectionId: string,
+  notes?: string
+): Promise<MeetingSectionCompletion> {
+  return apiRequest('POST', `/api/events/${eventId}/sections/${sectionId}/complete`, { notes });
+}
+
+export async function unmarkSectionComplete(eventId: string, sectionId: string): Promise<void> {
+  return apiRequest('DELETE', `/api/events/${eventId}/sections/${sectionId}/complete`);
+}
+
+// Attendance functions
+export async function getMeetingAttendance(eventId: string): Promise<MeetingAttendance[]> {
+  return apiRequest('GET', `/api/events/${eventId}/attendance`);
+}
+
+export async function initializeMeetingAttendance(eventId: string): Promise<MeetingAttendance[]> {
+  return apiRequest('POST', `/api/events/${eventId}/attendance/initialize`);
+}
+
+export async function markAttendance(
+  eventId: string,
+  userId: string,
+  status: AttendanceStatus,
+  notes?: string
+): Promise<MeetingAttendance> {
+  return apiRequest('PATCH', `/api/events/${eventId}/attendance/${userId}`, { status, notes });
+}
+
+export async function addAttendee(eventId: string, data: {
+  userId: string;
+  attendeeRole?: string;
+  status?: AttendanceStatus;
+  notes?: string;
+}): Promise<MeetingAttendance> {
+  return apiRequest('POST', `/api/events/${eventId}/attendance`, data);
+}
+
+// Presentation data
+export async function getEventPresentationData(eventId: string): Promise<EventPresentationData> {
+  return apiRequest('GET', `/api/events/${eventId}/present`);
+}
+
+// ============================================
 // OCR & Document Processing
 // ============================================
 
@@ -2874,4 +3064,217 @@ export async function getOcrResults(applicationId: string): Promise<OcrResults> 
 // Check OCR service availability
 export async function getOcrServiceStatus(): Promise<OcrServiceStatus> {
   return apiRequest('GET', '/api/ai/ocr/status');
+}
+
+// ============================================
+// Delegated Application Edit Types and Functions
+// ============================================
+
+export interface ApplicationFieldEdit {
+  id: string;
+  applicationId: string;
+  tenantId: string;
+  editedByUserId: string;
+  editedByRole: string;
+  onBehalfOfUserId: string;
+  fieldPath: string;
+  fieldLabel: string | null;
+  previousValue: any;
+  newValue: any;
+  editReason: string | null;
+  editSource: string;
+  editedAt: string;
+  editedByUser: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+  };
+}
+
+export interface EditHistoryResponse {
+  edits: ApplicationFieldEdit[];
+  summary: {
+    totalEdits: number;
+    editedFields: string[];
+    lastEdit: ApplicationFieldEdit | null;
+    editorSummary: Array<{
+      userId: string;
+      name: string;
+      role: string;
+      editCount: number;
+    }>;
+  };
+}
+
+// Get edit history for an application
+export async function getApplicationEditHistory(applicationId: string): Promise<EditHistoryResponse> {
+  return apiRequest('GET', `/api/applications/${applicationId}/edit-history`);
+}
+
+// Get edit history for a specific field
+export async function getFieldEditHistory(applicationId: string, fieldPath: string): Promise<ApplicationFieldEdit[]> {
+  return apiRequest('GET', `/api/applications/${applicationId}/field-history/${encodeURIComponent(fieldPath)}`);
+}
+
+// ============================================
+// AI Context Sources
+// ============================================
+
+export interface AiContextSource {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  sourceType: 'url' | 'uploaded_document';
+  sourceUrl: string | null;
+  blobPath: string | null;
+  containerName: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  priority: number;
+  appliesToAllForms: boolean;
+  appliesToFormTypes: string[] | null;
+  isActive: boolean;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAiContextSourceRequest {
+  name: string;
+  description?: string;
+  sourceUrl: string;
+  priority?: number;
+  appliesToAllForms?: boolean;
+  appliesToFormTypes?: string[];
+}
+
+export interface UpdateAiContextSourceRequest {
+  name?: string;
+  description?: string;
+  sourceUrl?: string;
+  priority?: number;
+  appliesToAllForms?: boolean;
+  appliesToFormTypes?: string[];
+}
+
+export async function listAiContextSources(tenantId: string, includeInactive = false): Promise<AiContextSource[]> {
+  return apiRequest('GET', `/api/tenants/${tenantId}/ai-context-sources?includeInactive=${includeInactive}`);
+}
+
+export async function getAiContextSource(tenantId: string, id: string): Promise<AiContextSource> {
+  return apiRequest('GET', `/api/tenants/${tenantId}/ai-context-sources/${id}`);
+}
+
+export async function createAiContextSource(tenantId: string, data: CreateAiContextSourceRequest): Promise<AiContextSource> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/ai-context-sources`, data);
+}
+
+export async function uploadAiContextDocument(
+  tenantId: string,
+  file: File,
+  metadata: {
+    name: string;
+    description?: string;
+    priority?: number;
+    appliesToAllForms?: boolean;
+    appliesToFormTypes?: string[];
+  }
+): Promise<AiContextSource> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('name', metadata.name);
+  if (metadata.description) formData.append('description', metadata.description);
+  if (metadata.priority !== undefined) formData.append('priority', String(metadata.priority));
+  if (metadata.appliesToAllForms !== undefined) formData.append('appliesToAllForms', String(metadata.appliesToAllForms));
+  if (metadata.appliesToFormTypes) formData.append('appliesToFormTypes', JSON.stringify(metadata.appliesToFormTypes));
+
+  const response = await fetch(`/api/tenants/${tenantId}/ai-context-sources/upload`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  return response.json();
+}
+
+export async function updateAiContextSource(tenantId: string, id: string, data: UpdateAiContextSourceRequest): Promise<AiContextSource> {
+  return apiRequest('PATCH', `/api/tenants/${tenantId}/ai-context-sources/${id}`, data);
+}
+
+export async function deleteAiContextSource(tenantId: string, id: string): Promise<void> {
+  return apiRequest('DELETE', `/api/tenants/${tenantId}/ai-context-sources/${id}`);
+}
+
+export async function toggleAiContextSource(tenantId: string, id: string, isActive: boolean): Promise<AiContextSource> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/ai-context-sources/${id}/toggle`, { isActive });
+}
+
+export async function reorderAiContextSources(tenantId: string, orderedIds: string[]): Promise<void> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/ai-context-sources/reorder`, { orderedIds });
+}
+
+// ============================================
+// AI Instructions
+// ============================================
+
+export interface AiInstruction {
+  id: string;
+  tenantId: string;
+  scope: 'community' | 'form_type';
+  formType: string | null;
+  title: string;
+  instructions: string;
+  isActive: boolean;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAiInstructionRequest {
+  scope: 'community' | 'form_type';
+  formType?: string;
+  title: string;
+  instructions: string;
+}
+
+export interface UpdateAiInstructionRequest {
+  title?: string;
+  instructions?: string;
+  formType?: string;
+}
+
+export async function listAiInstructions(tenantId: string, scope?: string, formType?: string): Promise<AiInstruction[]> {
+  let url = `/api/tenants/${tenantId}/ai-instructions`;
+  const params = new URLSearchParams();
+  if (scope) params.set('scope', scope);
+  if (formType) params.set('formType', formType);
+  if (params.toString()) url += `?${params.toString()}`;
+  return apiRequest('GET', url);
+}
+
+export async function getAiInstruction(tenantId: string, id: string): Promise<AiInstruction> {
+  return apiRequest('GET', `/api/tenants/${tenantId}/ai-instructions/${id}`);
+}
+
+export async function createAiInstruction(tenantId: string, data: CreateAiInstructionRequest): Promise<AiInstruction> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/ai-instructions`, data);
+}
+
+export async function updateAiInstruction(tenantId: string, id: string, data: UpdateAiInstructionRequest): Promise<AiInstruction> {
+  return apiRequest('PATCH', `/api/tenants/${tenantId}/ai-instructions/${id}`, data);
+}
+
+export async function deleteAiInstruction(tenantId: string, id: string): Promise<void> {
+  return apiRequest('DELETE', `/api/tenants/${tenantId}/ai-instructions/${id}`);
+}
+
+export async function toggleAiInstruction(tenantId: string, id: string, isActive: boolean): Promise<AiInstruction> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/ai-instructions/${id}/toggle`, { isActive });
 }

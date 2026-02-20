@@ -15,6 +15,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { storage } from '../storage';
+import { aiContextService, type AggregatedContext } from './aiContextService';
 import {
   AiAnalysisResultSchema,
   BreakdownReportResultSchema,
@@ -64,14 +65,34 @@ export class AiAnalysisService {
     console.log(`[AiAnalysis] Gathering context for analysis ${analysisRecord.id}`);
     const context = await this.gatherAnalysisContext(analysisRecord.applicationId, analysisRecord.tenantId);
 
-    // Step 2: Fetch design guidelines if available
+    // Step 2: Fetch all AI context sources (documents + instructions)
+    console.log(`[AiAnalysis] Fetching AI context sources for ${analysisRecord.id}`);
+    let aggregatedContext: AggregatedContext | null = null;
     let designGuidelines = '';
-    if (context.tenant.designGuidelinesUrl) {
-      try {
-        designGuidelines = await this.fetchDesignGuidelines(context.tenant.designGuidelinesUrl);
-      } catch (error) {
-        console.warn('[AiAnalysis] Failed to fetch design guidelines:', error);
-        designGuidelines = '(Design guidelines not available)';
+
+    try {
+      aggregatedContext = await aiContextService.gatherContext(
+        analysisRecord.tenantId,
+        context.application.projectType
+      );
+      designGuidelines = aiContextService.formatContextForPrompt(aggregatedContext);
+
+      if (aggregatedContext.truncated) {
+        console.warn(`[AiAnalysis] Context truncated - excluded sources: ${aggregatedContext.excludedSources.join(', ')}`);
+      }
+    } catch (error) {
+      console.warn('[AiAnalysis] Failed to gather AI context:', error);
+
+      // Fallback to legacy designGuidelinesUrl if new context system fails
+      if (context.tenant.designGuidelinesUrl) {
+        try {
+          designGuidelines = await this.fetchDesignGuidelines(context.tenant.designGuidelinesUrl);
+        } catch (fallbackError) {
+          console.warn('[AiAnalysis] Fallback design guidelines also failed:', fallbackError);
+          designGuidelines = '(Design guidelines not available)';
+        }
+      } else {
+        designGuidelines = '(No design guidelines configured)';
       }
     }
 
@@ -85,9 +106,10 @@ export class AiAnalysisService {
     const systemPrompt = this.loadPromptTemplate('analysis-system-prompt.md');
     const userPrompt = this.buildUserPrompt(context, designGuidelines, propertyResearchSummary);
 
-    // Step 5: Call Anthropic API
+    // Step 5: Call Anthropic API (with PDF documents if available)
     console.log(`[AiAnalysis] Calling Anthropic API for ${analysisRecord.id}`);
-    const { content, inputTokens, outputTokens } = await this.callAnthropicAPI(systemPrompt, userPrompt);
+    const pdfDocuments = aggregatedContext ? aiContextService.getPdfDocuments(aggregatedContext) : [];
+    const { content, inputTokens, outputTokens } = await this.callAnthropicAPI(systemPrompt, userPrompt, pdfDocuments);
 
     // Step 6: Parse and validate response
     console.log(`[AiAnalysis] Parsing response for ${analysisRecord.id}`);
@@ -527,22 +549,39 @@ export class AiAnalysisService {
 
   /**
    * Call Anthropic API for analysis
-   * Supports PDF documents when design guidelines are in PDF format
+   * Supports PDF documents from both legacy cache and new context service
    */
-  private async callAnthropicAPI(systemPrompt: string, userPrompt: string): Promise<{
+  private async callAnthropicAPI(
+    systemPrompt: string,
+    userPrompt: string,
+    pdfDocuments: Array<{ name: string; base64: string }> = []
+  ): Promise<{
     content: string;
     inputTokens: number;
     outputTokens: number;
   }> {
     try {
-      // Build user content - include PDF if available
+      // Build user content - include PDFs if available
       const userContent: Array<{ type: string; text?: string; source?: { type: string; media_type: string; data: string } }> = [];
 
-      // Check if we have a PDF to include
-      if (this.hasDesignGuidelinesPdf()) {
+      // Add PDF documents from new context service
+      for (const pdf of pdfDocuments) {
+        console.log(`[AiAnalysis] Including PDF document "${pdf.name}" in API request`);
+        userContent.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: pdf.base64,
+          },
+        });
+      }
+
+      // Legacy: Check if we have a PDF in cache (fallback scenario)
+      if (pdfDocuments.length === 0 && this.hasDesignGuidelinesPdf()) {
         const pdfBase64 = this.getDesignGuidelinesPdf();
         if (pdfBase64) {
-          console.log('[AiAnalysis] Including PDF design guidelines in API request');
+          console.log('[AiAnalysis] Including legacy cached PDF design guidelines in API request');
           userContent.push({
             type: 'document',
             source: {
@@ -577,7 +616,7 @@ export class AiAnalysisService {
         'Anthropic API call'
       );
 
-      // Clear cache after use
+      // Clear legacy cache after use
       this.clearDesignGuidelinesCache();
 
       // Extract text content

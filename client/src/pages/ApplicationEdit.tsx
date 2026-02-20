@@ -1,7 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
 import { apiRequest, createSignature } from "@/lib/api";
@@ -14,10 +14,41 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, AlertTriangle, Check } from "lucide-react";
-import type { Application } from "@shared/schema";
+import { ChevronLeft, ChevronRight, AlertTriangle, Check, Loader2, UserCog } from "lucide-react";
+import type { Application, User } from "@shared/schema";
 import type { AdditionalInfoConfig } from "@shared/additionalInfoTypes";
+
+// Roles that can make delegated edits on behalf of homeowners
+const DELEGATED_EDIT_ROLES = [
+  'management_rep',
+  'management_manager',
+  'poa_board_member',
+  'account_admin',
+  'super_admin',
+];
+
+const roleDisplayNames: Record<string, string> = {
+  management_rep: "Management Rep",
+  management_manager: "Management Manager",
+  account_admin: "Account Admin",
+  super_admin: "Super Admin",
+  poa_board_member: "Board Member",
+};
+
+const editSourceOptions = [
+  { value: "phone_call", label: "Phone Call" },
+  { value: "in_person", label: "In Person" },
+  { value: "email", label: "Email Request" },
+  { value: "system_correction", label: "System Correction" },
+];
 
 interface ProjectDetails {
   title: string;
@@ -31,7 +62,7 @@ export default function ApplicationEdit() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { currentTenant, setCurrentPageTitle } = useAppStore();
+  const { currentTenant, setCurrentPageTitle, currentUserRole } = useAppStore();
   const queryClient = useQueryClient();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -43,6 +74,10 @@ export default function ApplicationEdit() {
   const [additionalInfoData, setAdditionalInfoData] = useState<any>({});
   const [initialId, setInitialId] = useState<string | null>(null);
   const [isCreatingInitial, setIsCreatingInitial] = useState(false);
+
+  // Delegated edit state
+  const [editSource, setEditSource] = useState<string>("phone_call");
+  const [editReason, setEditReason] = useState<string>("");
 
   // Fetch application
   const { data: application, isLoading: appLoading } = useQuery({
@@ -61,6 +96,33 @@ export default function ApplicationEdit() {
     queryFn: () => apiRequest('GET', `/api/additional-info/${currentTenant?.id}/${application?.projectType}`),
     enabled: !!currentTenant?.id && !!application?.projectType,
   });
+
+  // Fetch the homeowner/submitter info for delegated edit display
+  const { data: applicationOwner } = useQuery<User>({
+    queryKey: ["/api/users", application?.submittedByUserId],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${application?.submittedByUserId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch user");
+      return res.json();
+    },
+    enabled: !!application?.submittedByUserId && user?.id !== application?.submittedByUserId,
+  });
+
+  // Determine if this is a delegated edit (non-owner with delegated edit permission)
+  const isDelegatedEdit = useMemo(() => {
+    if (!user || !application) return false;
+    // Owner edits are not delegated
+    if (user.id === application.submittedByUserId) return false;
+    // Check if user has a role that can make delegated edits
+    return DELEGATED_EDIT_ROLES.includes(currentUserRole || '');
+  }, [user, application, currentUserRole]);
+
+  const ownerDisplayName = useMemo(() => {
+    if (!applicationOwner) return "the homeowner";
+    const firstName = applicationOwner.firstName || '';
+    const lastName = applicationOwner.lastName || '';
+    return `${firstName} ${lastName}`.trim() || applicationOwner.email || "the homeowner";
+  }, [applicationOwner]);
 
   // Initialize form with application data
   const form = useForm<ProjectDetails>({
@@ -87,13 +149,21 @@ export default function ApplicationEdit() {
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('PATCH', `/api/applications/${applicationId}`, {
+      const payload: any = {
         title: data.title,
         description: data.description,
         propertyAddress: data.propertyAddress,
         formData: data.additionalInfo,
         status: data.status,
-      });
+      };
+
+      // Include delegated edit context if this is a delegated edit
+      if (isDelegatedEdit) {
+        payload.editReason = editReason || undefined;
+        payload.editSource = editSource;
+      }
+
+      return apiRequest('PATCH', `/api/applications/${applicationId}`, payload);
     },
     onSuccess: (updatedApp) => {
       const wasUnderReview = application?.status === 'under_review';
@@ -217,8 +287,12 @@ export default function ApplicationEdit() {
     );
   }
 
-  // Check if user is the submitter
-  if (user?.id !== application.submittedByUserId) {
+  // Check if user has permission to edit
+  // - Owner can always edit
+  // - Users with delegated edit roles can edit on behalf of owner
+  const canEdit = user?.id === application.submittedByUserId || isDelegatedEdit;
+
+  if (!canEdit) {
     return (
       <Card>
         <CardContent className="pt-6">
@@ -248,6 +322,52 @@ export default function ApplicationEdit() {
             <span className="font-semibold">This application is under review.</span> Saving changes will reset it to "submitted" status and restart the review process.
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Delegated edit context card */}
+      {isDelegatedEdit && (
+        <Card className="border-amber-300 bg-amber-50/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <UserCog className="h-5 w-5 text-amber-600" />
+              <CardTitle className="text-base">Editing on Behalf of {ownerDisplayName}</CardTitle>
+            </div>
+            <CardDescription>
+              You are making changes as a {roleDisplayNames[currentUserRole || ''] || currentUserRole}.
+              Changes will be tracked and the homeowner will be notified.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-0">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="editSource">How was this change requested? <span className="text-destructive">*</span></Label>
+                <Select value={editSource} onValueChange={setEditSource}>
+                  <SelectTrigger id="editSource">
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editSourceOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editReason">Reason for edit (optional)</Label>
+                <Textarea
+                  id="editReason"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="Brief explanation of why this change is being made..."
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <Card>

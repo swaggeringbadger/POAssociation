@@ -54,6 +54,7 @@ import ContractorReferrals from "@/pages/ContractorReferrals";
 import AccountAdminBilling from "@/pages/AccountAdminBilling";
 import AccountAdminBillingDetail from "@/pages/AccountAdminBillingDetail";
 import MeetingAgenda from "@/pages/MeetingAgenda";
+import AgendaPresentation from "@/pages/AgendaPresentation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -148,361 +149,368 @@ function Router() {
       <Route path="/community/:subdomain" component={CommunityLandingByPath} />
       <Route path="/management/:subdomain" component={ManagementLandingByPath} />
 
-      {/* Community landing for subdomain access when not authenticated */}
-      {showCommunityLanding && (
+      {/* Dashboard Routes wrapped in Layout - ProtectedRoute handles auth redirect */}
+      <Route path="/dashboard">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Dashboard />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Join Community - requires auth but not tenant membership */}
+      <Route path="/join">
+        <ProtectedRoute>
+          <JoinCommunity />
+        </ProtectedRoute>
+      </Route>
+
+      {/* Add other dashboard pages here similarly */}
+      <Route path="/applications">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <Applications />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/applications/:id">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <ApplicationDetail />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/applications/:id/edit">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <ApplicationEdit />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/form-builder">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <FormBuilder />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/apply">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <ApplicationTypeSelect />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/applications/submit/:typeId">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <ApplicationSubmit />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/apply/markland-demo">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <MarklandExample />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/directory">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Directory />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/properties">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Properties />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/team">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Team />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/compliance">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Compliance />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/calendar">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Calendar />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/calendar/events/:eventId/agenda/present">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <AgendaPresentation />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/calendar/events/:eventId/agenda">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <MeetingAgenda />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/form-wizard">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <FormWizard />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/form-builder/:templateId">
+        <ProtectedRoute>
+          <FormBuilderPage />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/workflows">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <WorkflowTemplatesPage />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/workflow-designer/:templateId">
+        <ProtectedRoute>
+          <WorkflowDesignerPage />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/settings">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <TenantSettings />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/profile">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <ProfileSettings />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Household Settings */}
+      <Route path="/settings/household">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <HouseholdSettings />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Contractor Routes */}
+      <Route path="/contractor">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <ContractorDashboard />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/contractor/profile">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <ContractorProfile />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/contractor/referrals">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <div className="p-8">
+              <ContractorReferrals />
+            </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/properties/:propertyId/subscription">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <PropertySubscription />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Billing Dashboard */}
+      <Route path="/billing">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <ConsumptionDashboard />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Payment Methods */}
+      <Route path="/billing/payment-methods">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <PaymentMethodsPage />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Account Admin Billing Routes */}
+      <Route path="/account-admin/billing">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <AccountAdminBilling />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/account-admin/billing/:communityId">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <AccountAdminBillingDetail />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Admin Routes */}
+      <Route path="/admin/management-companies">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <ManagementCompanies />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/communities">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Communities />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/ai-activity">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <AIActivity />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/email-templates">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <EmailTemplates />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/tours">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <TourContent />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/demo-codes">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <DemoCodes />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/demo-codes/new">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <DemoCodeForm />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/demo-codes/:id/edit">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <DemoCodeForm />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/demo-codes/:id/stats">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <DemoCodeStats />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/demo-codes/:id">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <DemoCodeForm />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Root route - show landing or redirect to dashboard */}
+      {showCommunityLanding ? (
         <Route path="/">
           {() => <CommunityLanding subdomain={subdomain} />}
         </Route>
-      )}
-
-      {isLoading || !isAuthenticated || isLoggingOut ? (
+      ) : isLoading || isLoggingOut ? (
         <Route path="/" component={Landing} />
+      ) : isAuthenticated ? (
+        <Route path="/">
+          {() => <Redirect to="/dashboard" />}
+        </Route>
       ) : (
-        <>
-          {/* Redirect root to dashboard when authenticated */}
-          <Route path="/">
-            {() => <Redirect to="/dashboard" />}
-          </Route>
-
-          {/* Dashboard Routes wrapped in Layout */}
-          <Route path="/dashboard">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Dashboard />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Join Community - requires auth but not tenant membership */}
-          <Route path="/join">
-            <ProtectedRoute>
-              <JoinCommunity />
-            </ProtectedRoute>
-          </Route>
-
-          {/* Add other dashboard pages here similarly */}
-          <Route path="/applications">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <Applications />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/applications/:id">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <ApplicationDetail />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/applications/:id/edit">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <ApplicationEdit />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/form-builder">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <FormBuilder />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/apply">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <ApplicationTypeSelect />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/applications/submit/:typeId">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <ApplicationSubmit />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/apply/markland-demo">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <MarklandExample />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/directory">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Directory />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/properties">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Properties />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/team">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Team />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/compliance">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Compliance />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/calendar">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Calendar />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/calendar/events/:eventId/agenda">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <MeetingAgenda />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/form-wizard">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <FormWizard />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/form-builder/:templateId">
-            <ProtectedRoute>
-              <FormBuilderPage />
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/workflows">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <WorkflowTemplatesPage />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/workflow-designer/:templateId">
-            <ProtectedRoute>
-              <WorkflowDesignerPage />
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/settings">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <TenantSettings />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/profile">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <ProfileSettings />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Household Settings */}
-          <Route path="/settings/household">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <HouseholdSettings />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Contractor Routes */}
-          <Route path="/contractor">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <ContractorDashboard />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/contractor/profile">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <ContractorProfile />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/contractor/referrals">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <div className="p-8">
-                  <ContractorReferrals />
-                </div>
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/properties/:propertyId/subscription">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <PropertySubscription />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Billing Dashboard */}
-          <Route path="/billing">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <ConsumptionDashboard />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Payment Methods */}
-          <Route path="/billing/payment-methods">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <PaymentMethodsPage />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Account Admin Billing Routes */}
-          <Route path="/account-admin/billing">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <AccountAdminBilling />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/account-admin/billing/:communityId">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <AccountAdminBillingDetail />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          {/* Admin Routes */}
-          <Route path="/admin/management-companies">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <ManagementCompanies />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/communities">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <Communities />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/ai-activity">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <AIActivity />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/email-templates">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <EmailTemplates />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/tours">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <TourContent />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/demo-codes">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <DemoCodes />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/demo-codes/new">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <DemoCodeForm />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/demo-codes/:id/edit">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <DemoCodeForm />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/demo-codes/:id/stats">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <DemoCodeStats />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-
-          <Route path="/admin/demo-codes/:id">
-            <ProtectedRoute>
-              <DashboardLayout>
-                <DemoCodeForm />
-              </DashboardLayout>
-            </ProtectedRoute>
-          </Route>
-        </>
+        <Route path="/" component={Landing} />
       )}
 
       <Route component={NotFound} />

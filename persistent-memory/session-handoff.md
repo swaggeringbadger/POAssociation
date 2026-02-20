@@ -1,13 +1,136 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-26
-**Current Session:** Intelligent Agenda System (UI Complete)
+**Last Updated:** 2025-12-31
+**Current Session:** Multiple AI Context Sources & Instructions Complete
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed (2025-12-26)
+### Just Completed (2025-12-31)
+
+#### Multiple AI Context Sources & Instructions - COMPLETE
+
+Built support for multiple document sources (URLs + uploaded files) and custom instructions for AI form generation and application analysis, replacing the single `designGuidelinesUrl` field.
+
+**New Database Tables (in `shared/schema.ts`):**
+- `ai_context_sources` - Multiple document sources (URL or uploaded) with priority ordering
+  - Fields: id, tenantId, name, description, sourceType ('url' | 'uploaded_document')
+  - URL fields: sourceUrl
+  - Upload fields: blobPath, containerName, fileName, fileSize, mimeType
+  - Scope: priority, appliesToAllForms, appliesToFormTypes
+  - State: isActive (toggle), audit fields
+- `ai_instructions` - Custom AI instructions at community or form-type level
+  - Fields: id, tenantId, scope ('community' | 'form_type'), formType, title, instructions
+  - State: isActive (toggle), audit fields
+
+**New Service (in `server/services/aiContextService.ts`):**
+- `AiContextService` class for aggregating context from multiple sources
+- `gatherContext(tenantId, formType?)` - Main method to collect active sources
+- `formatContextForPrompt()` - Format text documents for prompts
+- `getPdfDocuments()` - Get PDF documents for Claude's document blocks API
+- 15-minute content caching, token limit handling via priority ordering
+
+**New Components (in `client/src/components/`):**
+- `AiContextSourcesManager.tsx` - List view with add URL, upload file, toggle, edit, delete
+- `AiInstructionsEditor.tsx` - Community + per-form-type instructions management
+
+**Modified Components:**
+- `CommunitySettingsCard.tsx` - Added collapsible "AI Configuration" section with both components
+
+**New API Endpoints (in `server/routes.ts`):**
+```
+GET    /api/tenants/:tenantId/ai-context-sources
+POST   /api/tenants/:tenantId/ai-context-sources          (URL source)
+POST   /api/tenants/:tenantId/ai-context-sources/upload   (file upload)
+PATCH  /api/tenants/:tenantId/ai-context-sources/:id
+DELETE /api/tenants/:tenantId/ai-context-sources/:id
+POST   /api/tenants/:tenantId/ai-context-sources/:id/toggle
+POST   /api/tenants/:tenantId/ai-context-sources/reorder
+
+GET    /api/tenants/:tenantId/ai-instructions
+POST   /api/tenants/:tenantId/ai-instructions
+PATCH  /api/tenants/:tenantId/ai-instructions/:id
+DELETE /api/tenants/:tenantId/ai-instructions/:id
+POST   /api/tenants/:tenantId/ai-instructions/:id/toggle
+```
+
+**New Storage Methods (in `server/storage.ts`):**
+- Context sources: `listAiContextSources()`, `createAiContextSource()`, `updateAiContextSource()`, `deleteAiContextSource()`, `toggleAiContextSource()`, `reorderAiContextSources()`
+- Instructions: `listAiInstructions()`, `createAiInstruction()`, `updateAiInstruction()`, `deleteAiInstruction()`, `toggleAiInstruction()`, `getActiveInstructionsForAnalysis()`
+
+**Modified AI Services:**
+- `server/services/aiAnalysisService.ts` - Uses `aiContextService.gatherContext()` with fallback to legacy URL
+- `server/aiFormGenerationService.ts` - Added `generateFormWithContext()` method
+
+**API Client Functions (in `client/src/lib/api.ts`):**
+- Types: `AiContextSource`, `AiInstruction`, request types
+- Full CRUD functions for both entities
+
+**Backward Compatibility:**
+- If no AI context sources exist, falls back to legacy `designGuidelinesUrl`
+- Existing tenants continue to work without migration
+
+---
+
+### Previous Session (2025-12-30)
+
+#### Meeting Agenda Presentation Mode - COMPLETE
+
+Built a "flattened" presentation view for running live ARC review meetings with facilitator tracking, section completion, roll call attendance, and inline bylaws display.
+
+**New Database Tables (in `shared/schema.ts`):**
+- `meetingSectionCompletions` - Track which sections are completed during meeting (eventId, sectionId, completedAt, completedByUserId)
+- `meetingAttendance` - Roll call attendance tracking (eventId, userId, status, attendeeRole, markedAt, markedByUserId)
+
+**Modified Tables:**
+- `events` - Added: `facilitatorUserId`, `facilitatorClaimedAt`, `meetingStartedAt`, `meetingEndedAt`
+
+**New Components (in `client/src/components/agenda/`):**
+- `RollCallAttendance.tsx` - Checkbox list of attendees grouped by role (board members, management)
+- `InlineBylawDisplay.tsx` - Always-visible bylaw card (no hover/click) + FormLevelBylawsDisplay
+- `MeetingControls.tsx` - Claim facilitator, start/end meeting buttons with elapsed timer
+- `PresentationAgendaItem.tsx` - Agenda item with inline bylaws and full application details
+- `PresentationAgendaSection.tsx` - Non-collapsible section with completion checkbox
+
+**New Helper File:**
+- `client/src/lib/bylawHelpers.ts` - Functions for extracting bylaws from form schemas
+
+**New Page:**
+- `client/src/pages/AgendaPresentation.tsx` - Presentation mode at `/calendar/events/:eventId/agenda/present`
+
+**New API Endpoints (in `server/routes.ts`):**
+```
+POST /api/events/:eventId/facilitator/claim
+POST /api/events/:eventId/facilitator/release
+POST /api/events/:eventId/meeting/start
+POST /api/events/:eventId/meeting/end
+POST /api/events/:eventId/sections/:sectionId/complete
+DELETE /api/events/:eventId/sections/:sectionId/complete
+GET  /api/events/:eventId/attendance
+POST /api/events/:eventId/attendance/initialize
+PATCH /api/events/:eventId/attendance/:userId
+POST /api/events/:eventId/attendance
+GET  /api/events/:eventId/present (full presentation data)
+```
+
+**New Storage Methods (in `server/storage.ts`):**
+- Facilitator: `claimFacilitator()`, `releaseFacilitator()`, `startMeeting()`, `endMeeting()`
+- Section completions: `markSectionComplete()`, `unmarkSectionComplete()`, `getSectionCompletions()`
+- Attendance: `initializeMeetingAttendance()`, `markAttendance()`, `addAttendee()`, `getMeetingAttendance()`
+- `getEventPresentationData()` - Full presentation payload with bylaws
+
+**RBAC (in `client/src/lib/rbac.ts`):**
+- Added permission for `/calendar/events/:eventId/agenda/present`
+- Roles with edit access: `poa_board_member`, `management_manager`, `account_admin`, `super_admin`
+- Roles with view-only access: `poa_board_contributor`, `management_rep`
+
+**UI Integration:**
+- Added "Present Mode" button to MeetingAgenda.tsx (next to Print button)
+
+---
+
+### Previous Session (2025-12-26)
 
 #### Intelligent Agenda System - UI Phase 1 Complete
 
@@ -180,8 +303,9 @@ Fixed activity log not showing credits for historical events.
 **Phase 1: Core UI Components** - COMPLETE
 - `AgendaSection.tsx`, `AgendaItem.tsx`, `AgendaSuggestions.tsx`
 
-**Phase 2: Pages & Integration** - MOSTLY COMPLETE
+**Phase 2: Pages & Integration** - COMPLETE
 - `MeetingAgenda.tsx` page - DONE
+- `AgendaPresentation.tsx` (Presentation Mode) - DONE (2025-12-30)
 - Add "Agenda" tab to `EventModal.tsx` - Optional enhancement
 - Add template selector when creating events - Optional enhancement
 
@@ -200,6 +324,10 @@ Fixed activity log not showing credits for historical events.
 3. **Add Items** - Use suggestions panel to add applications, or manually add discussion items
 4. **Record Decision** - Click item dropdown → Record Decision
 5. **Finalize** - Lock the agenda and verify editing is disabled
+6. **Present Mode** - Click "Present Mode" button to enter presentation view
+7. **Claim Facilitator** - Click "I'm Running This Meeting" to claim facilitator role
+8. **Roll Call** - Initialize attendance and mark members present/absent
+9. **Section Completion** - Check off sections as they're completed during meeting
 
 ---
 

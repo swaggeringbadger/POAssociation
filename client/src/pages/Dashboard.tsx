@@ -440,9 +440,9 @@ function BoardMemberDashboard() {
         <StatsCard title="Rejected" value={rejected.toString()} icon={AlertCircle} trend="Requires resubmission" />
       </div>
 
-      <div className="grid gap-8 md:grid-cols-7">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Main Review Queue */}
-        <div className="col-span-4 space-y-8">
+        <div className="lg:col-span-2 space-y-8">
           <Card className="shadow-sm border-orange-200">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

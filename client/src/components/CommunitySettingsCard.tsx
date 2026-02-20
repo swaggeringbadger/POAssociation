@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Building, FileText, Globe, Phone, Mail, MapPin, Scale, Loader2, ExternalLink, Image, Users } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Building, FileText, Globe, Phone, Mail, MapPin, Scale, Loader2, ExternalLink, Image, Users, Upload, Sparkles, X } from "lucide-react";
 import type { CommunitySettings, LegalEntityType } from "@shared/schema";
 
 const US_STATES = [
@@ -60,6 +61,10 @@ export default function CommunitySettingsCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
+  const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
+  const [sharpenImage, setSharpenImage] = useState(true); // Default checked
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<FormData>({
     designGuidelinesUrl: "",
     heroImageUrl: "",
@@ -135,6 +140,143 @@ export default function CommunitySettingsCard() {
       });
     },
   });
+
+  // Hero image upload mutation
+  const heroImageMutation = useMutation({
+    mutationFn: async ({ file, sharpen }: { file: File; sharpen: boolean }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sharpen', sharpen.toString());
+
+      const response = await fetch(`/api/tenants/${currentTenant!.id}/hero-image`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to upload hero image');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["currentTenant"] });
+      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      setHeroImageFile(null);
+      setHeroImagePreview(null);
+      setFormData(prev => ({ ...prev, heroImageUrl: data.heroImageUrl }));
+
+      if (data.wasSharpened) {
+        toast({
+          title: "Hero image uploaded and enhanced",
+          description: "Your image has been sharpened using AI.",
+        });
+      } else if (data.sharpeningError) {
+        toast({
+          title: "Hero image uploaded",
+          description: `Image uploaded but sharpening was skipped: ${data.sharpeningError}`,
+        });
+      } else {
+        toast({
+          title: "Hero image uploaded",
+          description: "Your community hero image has been updated.",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete hero image mutation
+  const deleteHeroImageMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/tenants/${currentTenant!.id}/hero-image`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete hero image');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["currentTenant"] });
+      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      setFormData(prev => ({ ...prev, heroImageUrl: '' }));
+      toast({
+        title: "Hero image removed",
+        description: "Your community hero image has been deleted.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPEG, PNG, WebP, or GIF image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setHeroImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setHeroImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle upload
+  const handleUploadHeroImage = () => {
+    if (!heroImageFile) return;
+    heroImageMutation.mutate({ file: heroImageFile, sharpen: sharpenImage });
+  };
+
+  // Clear selected file
+  const clearSelectedFile = () => {
+    setHeroImageFile(null);
+    setHeroImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const updateCommunitySettings = (path: string, value: string | number | undefined) => {
     setFormData((prev) => {
@@ -330,36 +472,132 @@ export default function CommunitySettingsCard() {
             Community Landing Page
           </h4>
 
-          <div className="space-y-2">
-            <Label htmlFor="heroImage">Hero Image URL</Label>
-            <Input
-              id="heroImage"
-              placeholder="https://your-community.com/hero-image.jpg"
-              type="url"
-              value={formData.heroImageUrl}
-              onChange={(e) => setFormData({ ...formData, heroImageUrl: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              Image displayed at the top of your community's public landing page. Use a high-quality image of your community.
-            </p>
-          </div>
-
-          {formData.heroImageUrl && (
-            <div className="pl-2">
-              <p className="text-xs text-muted-foreground mb-2">Preview:</p>
-              <div className="relative h-32 w-64 rounded overflow-hidden border">
+          {/* Current hero image */}
+          {formData.heroImageUrl && !heroImagePreview && (
+            <div className="space-y-2">
+              <Label>Current Hero Image</Label>
+              <div className="relative h-32 w-64 rounded overflow-hidden border group">
                 <img
                   src={formData.heroImageUrl}
-                  alt="Hero preview"
+                  alt="Current hero image"
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '';
-                    (e.target as HTMLImageElement).alt = 'Invalid image URL';
-                  }}
                 />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteHeroImageMutation.mutate()}
+                    disabled={deleteHeroImageMutation.isPending}
+                  >
+                    {deleteHeroImageMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+
+          {/* File upload section */}
+          <div className="space-y-3">
+            <Label>{formData.heroImageUrl ? 'Upload New Hero Image' : 'Upload Hero Image'}</Label>
+
+            {/* File input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="hero-image-input"
+            />
+
+            {!heroImageFile ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-accent/50 transition-colors"
+              >
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm font-medium">Click to select an image</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  JPEG, PNG, WebP, or GIF (max 10MB)
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Preview */}
+                <div className="relative h-32 w-64 rounded overflow-hidden border">
+                  <img
+                    src={heroImagePreview || ''}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1 right-1 h-6 w-6 bg-black/50 hover:bg-black/70"
+                    onClick={clearSelectedFile}
+                  >
+                    <X className="h-4 w-4 text-white" />
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Selected: {heroImageFile.name} ({(heroImageFile.size / 1024).toFixed(1)} KB)
+                </p>
+
+                {/* AI Sharpening option */}
+                <div className="flex items-start space-x-3 p-3 rounded-lg border bg-accent/30">
+                  <Checkbox
+                    id="sharpen-image"
+                    checked={sharpenImage}
+                    onCheckedChange={(checked) => setSharpenImage(checked as boolean)}
+                  />
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="sharpen-image"
+                      className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-500" />
+                      Enhance image with AI
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically sharpen and improve image quality using AI.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Upload button */}
+                <Button
+                  onClick={handleUploadHeroImage}
+                  disabled={heroImageMutation.isPending}
+                  className="w-full"
+                >
+                  {heroImageMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {sharpenImage ? 'Uploading & Enhancing...' : 'Uploading...'}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      {sharpenImage ? 'Upload & Enhance' : 'Upload Image'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              This image is displayed at the top of your community's public landing page.
+              Use a high-quality photo of your community, entrance, or common areas.
+            </p>
+          </div>
         </div>
 
         <Separator />

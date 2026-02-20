@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Building, Users, Activity, Shield, Search, FileText, Key } from "lucide-react";
+import { HomeHubCard } from "@/components/HomeHubCard";
 
 export function SuperAdminDashboard() {
   return (
@@ -87,31 +88,37 @@ export function SuperAdminDashboard() {
         </Link>
       </div>
 
-      {/* Community Selector Prompt */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            View as Community Member
-          </CardTitle>
-          <CardDescription>
-            Select a community to view the dashboard from a member's perspective
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground mb-4">
-            Use the community selector in the header to switch context, or browse communities in the admin section.
-          </p>
-          <div className="flex gap-2">
-            <Link href="/admin/communities">
-              <Button variant="outline">Browse Communities</Button>
-            </Link>
-            <Link href="/join">
-              <Button variant="outline">Join a Community</Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Bottom section with community selector and Hazel Hippo */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Community Selector Prompt */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              View as Community Member
+            </CardTitle>
+            <CardDescription>
+              Select a community to view the dashboard from a member's perspective
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Use the community selector in the header to switch context, or browse communities in the admin section.
+            </p>
+            <div className="flex gap-2">
+              <Link href="/admin/communities">
+                <Button variant="outline">Browse Communities</Button>
+              </Link>
+              <Link href="/join">
+                <Button variant="outline">Join a Community</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Hazel Hippo - available for super admins */}
+        <HomeHubCard />
+      </div>
     </div>
   );
 }

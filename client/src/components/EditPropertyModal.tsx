@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -21,10 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
-import { Building, MapPin, Scale, Settings, Loader2, Phone, Globe, Mail } from "lucide-react";
+import { Building, MapPin, Scale, Settings, Loader2, Phone, Globe, Mail, Sparkles, Image, Upload, X, Crosshair } from "lucide-react";
 import type { CommunitySettings, LegalEntityType } from "@shared/schema";
+import { AiContextSourcesManager } from "./AiContextSourcesManager";
+import { AiInstructionsEditor } from "./AiInstructionsEditor";
 
 interface EditPropertyModalProps {
   open: boolean;
@@ -105,6 +108,10 @@ export default function EditPropertyModal({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>(defaultFormData);
+  const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
+  const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
+  const [sharpenImage, setSharpenImage] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form data when property changes
   useEffect(() => {
@@ -129,11 +136,17 @@ export default function EditPropertyModal({
           website: property.communitySettings?.website || "",
           yearEstablished: property.communitySettings?.yearEstablished,
           numberOfLots: property.communitySettings?.numberOfLots,
+          heroImageFocusX: property.communitySettings?.heroImageFocusX,
+          heroImageFocusY: property.communitySettings?.heroImageFocusY,
         },
       });
     } else if (isCreating) {
       setFormData(defaultFormData);
     }
+    // Reset hero image state when property changes
+    setHeroImageFile(null);
+    setHeroImagePreview(null);
+    setSharpenImage(true);
   }, [property, isCreating]);
 
   const saveMutation = useMutation({
@@ -167,6 +180,132 @@ export default function EditPropertyModal({
       });
     },
   });
+
+  // Hero image upload mutation
+  const heroImageMutation = useMutation({
+    mutationFn: async ({ file, sharpen }: { file: File; sharpen: boolean }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('sharpen', sharpen.toString());
+
+      const response = await fetch(`/api/tenants/${property!.id}/hero-image`, {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to upload hero image');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      setHeroImageFile(null);
+      setHeroImagePreview(null);
+
+      if (data.wasSharpened) {
+        toast({
+          title: "Hero image uploaded and enhanced",
+          description: "Your image has been sharpened using AI.",
+        });
+      } else if (data.sharpeningError) {
+        toast({
+          title: "Hero image uploaded",
+          description: `Image uploaded but sharpening was skipped: ${data.sharpeningError}`,
+        });
+      } else {
+        toast({
+          title: "Hero image uploaded",
+          description: "The community hero image has been updated.",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete hero image mutation
+  const deleteHeroImageMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/tenants/${property!.id}/hero-image`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete hero image');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      toast({
+        title: "Hero image removed",
+        description: "The community hero image has been deleted.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleHeroFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPEG, PNG, WebP, or GIF image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setHeroImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setHeroImagePreview(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadHeroImage = () => {
+    if (!heroImageFile) return;
+    heroImageMutation.mutate({ file: heroImageFile, sharpen: sharpenImage });
+  };
+
+  const clearSelectedFile = () => {
+    setHeroImageFile(null);
+    setHeroImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSubmit = () => {
     if (!formData.name || !formData.subdomain) {
@@ -218,7 +357,7 @@ export default function EditPropertyModal({
         </DialogHeader>
 
         <Tabs defaultValue="general" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${!isCreating ? 'grid-cols-5' : 'grid-cols-4'}`}>
             <TabsTrigger value="general" className="text-xs sm:text-sm">
               <Settings className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">General</span>
@@ -235,6 +374,12 @@ export default function EditPropertyModal({
               <Scale className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">Legal Entity</span>
             </TabsTrigger>
+            {!isCreating && (
+              <TabsTrigger value="ai" className="text-xs sm:text-sm">
+                <Sparkles className="h-4 w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">AI</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* General Tab */}
@@ -295,7 +440,10 @@ export default function EditPropertyModal({
                 onChange={(e) => setFormData({ ...formData, designGuidelinesUrl: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                URL to your publicly posted design guidelines/covenants. Used for AI form generation.
+                URL to your publicly posted design guidelines/covenants.
+                {!isCreating && (
+                  <span className="text-primary"> For multiple sources or uploaded documents, use the AI tab.</span>
+                )}
               </p>
             </div>
 
@@ -334,6 +482,151 @@ export default function EditPropertyModal({
                 />
               </div>
             </div>
+
+            {/* Hero Image Section - only for existing properties */}
+            {!isCreating && property && (
+              <>
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <Image className="h-4 w-4" />
+                    Community Hero Image
+                  </Label>
+
+                  {/* File picker (hidden) */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleHeroFileSelect}
+                    className="hidden"
+                    id="modal-hero-image-input"
+                  />
+
+                  {property.heroImageUrl && !heroImageFile ? (
+                    <>
+                      {/* Current hero image with focus point picker */}
+                      <div
+                        className="relative h-32 w-full rounded overflow-hidden border cursor-crosshair"
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                          const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+                          updateCommunitySettings("heroImageFocusX", x);
+                          updateCommunitySettings("heroImageFocusY", y);
+                        }}
+                      >
+                        <img
+                          src={property.heroImageUrl}
+                          alt="Current hero image"
+                          className="w-full h-full object-cover"
+                          style={{
+                            objectPosition: `${formData.communitySettings.heroImageFocusX ?? 50}% ${formData.communitySettings.heroImageFocusY ?? 50}%`,
+                          }}
+                        />
+                        {/* Focus point indicator */}
+                        <div
+                          className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                          style={{
+                            left: `${formData.communitySettings.heroImageFocusX ?? 50}%`,
+                            top: `${formData.communitySettings.heroImageFocusY ?? 50}%`,
+                          }}
+                        >
+                          <Crosshair className="h-5 w-5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Click on the image to set the focus point. This determines the visible center when the image is cropped on the landing page.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteHeroImageMutation.mutate()}
+                        disabled={deleteHeroImageMutation.isPending}
+                      >
+                        {deleteHeroImageMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <X className="h-4 w-4 mr-2" />
+                        )}
+                        Remove Image
+                      </Button>
+                    </>
+                  ) : heroImageFile ? (
+                    <div className="flex items-start gap-3">
+                      <div className="relative h-16 w-28 flex-shrink-0 rounded overflow-hidden border">
+                        <img
+                          src={heroImagePreview || ''}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-0.5 right-0.5 h-5 w-5 bg-black/50 hover:bg-black/70"
+                          onClick={clearSelectedFile}
+                        >
+                          <X className="h-3 w-3 text-white" />
+                        </Button>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground truncate">
+                          {heroImageFile.name} ({(heroImageFile.size / 1024).toFixed(1)} KB)
+                        </p>
+                        {/* AI Sharpening option */}
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Checkbox
+                            id="modal-sharpen-image"
+                            checked={sharpenImage}
+                            onCheckedChange={(checked) => setSharpenImage(checked as boolean)}
+                          />
+                          <label
+                            htmlFor="modal-sharpen-image"
+                            className="text-xs font-medium cursor-pointer flex items-center gap-1"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                            Enhance with AI
+                          </label>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handleUploadHeroImage}
+                          disabled={heroImageMutation.isPending}
+                          size="sm"
+                          className="w-full mt-1.5"
+                        >
+                          {heroImageMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              {sharpenImage ? 'Uploading & Enhancing...' : 'Uploading...'}
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              {sharpenImage ? 'Upload & Enhance' : 'Upload Image'}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="modal-hero-image-input"
+                      className="border-2 border-dashed rounded-lg p-3 text-center cursor-pointer hover:border-primary hover:bg-accent/50 transition-colors block"
+                    >
+                      <Upload className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                      <p className="text-sm font-medium">Click to select an image</p>
+                      <p className="text-xs text-muted-foreground">
+                        JPEG, PNG, WebP, or GIF (max 10MB)
+                      </p>
+                    </label>
+                  )}
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Contact Tab */}
@@ -593,6 +886,17 @@ export default function EditPropertyModal({
               </div>
             </div>
           </TabsContent>
+
+          {/* AI Tab - Only shown when editing existing property */}
+          {!isCreating && property && (
+            <TabsContent value="ai" className="space-y-6 mt-4">
+              <div className="text-sm text-muted-foreground mb-4">
+                Configure AI document sources and custom instructions for form generation and application analysis.
+              </div>
+              <AiContextSourcesManager tenantId={property.id} />
+              <AiInstructionsEditor tenantId={property.id} />
+            </TabsContent>
+          )}
         </Tabs>
 
         <DialogFooter className="mt-6">
