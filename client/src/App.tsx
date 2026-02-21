@@ -40,6 +40,7 @@ import AIActivity from "@/pages/admin/AIActivity";
 import EmailTemplates from "@/pages/admin/EmailTemplates";
 import TourContent from "@/pages/admin/TourContent";
 import MobileDocumentUpload from "@/pages/MobileDocumentUpload";
+import MobileResidenceUpload from "@/pages/MobileResidenceUpload";
 import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import PricingPage from "@/pages/PricingPage";
@@ -55,6 +56,8 @@ import AccountAdminBilling from "@/pages/AccountAdminBilling";
 import AccountAdminBillingDetail from "@/pages/AccountAdminBillingDetail";
 import MeetingAgenda from "@/pages/MeetingAgenda";
 import AgendaPresentation from "@/pages/AgendaPresentation";
+import Neighborhood from "@/pages/Neighborhood";
+import NeighborhoodDetail from "@/pages/NeighborhoodDetail";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -132,6 +135,9 @@ function Router() {
 
       {/* Mobile document upload - accessible without auth */}
       <Route path="/upload/:token" component={MobileDocumentUpload} />
+
+      {/* Mobile residence photo upload - accessible without auth */}
+      <Route path="/residence-upload/:token" component={MobileResidenceUpload} />
 
       {/* Invitation accept page - public but requires auth to accept */}
       <Route path="/invite/:token" component={InvitationAccept} />
@@ -284,6 +290,23 @@ function Router() {
             <div className="p-8">
               <MeetingAgenda />
             </div>
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Neighborhood Residences */}
+      <Route path="/neighborhood/:id">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <NeighborhoodDetail />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/neighborhood">
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Neighborhood />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>

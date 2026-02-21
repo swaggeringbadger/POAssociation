@@ -397,6 +397,27 @@ export interface IStorage {
   deleteAiInstruction(id: string): Promise<void>;
   toggleAiInstruction(id: string, isActive: boolean): Promise<schema.AiInstruction>;
   getActiveInstructionsForAnalysis(tenantId: string, formType?: string): Promise<string>;
+
+  // Community Residences (Neighborhood Archive)
+  listCommunityResidences(tenantId: string): Promise<(schema.CommunityResidence & { photoCount: number; thumbnailPhotoId: string | null })[]>;
+  getCommunityResidence(id: string): Promise<schema.CommunityResidence | undefined>;
+  getCommunityResidenceByAddress(tenantId: string, normalizedAddress: string): Promise<schema.CommunityResidence | undefined>;
+  createCommunityResidence(data: schema.InsertCommunityResidence): Promise<schema.CommunityResidence>;
+  updateCommunityResidence(id: string, updates: Partial<schema.InsertCommunityResidence>): Promise<schema.CommunityResidence>;
+  deleteCommunityResidence(id: string): Promise<void>;
+  getLinkedApplications(tenantId: string, normalizedAddress: string): Promise<schema.Application[]>;
+
+  // Residence Photos
+  listResidencePhotos(residenceId: string): Promise<schema.ResidencePhoto[]>;
+  createResidencePhoto(data: schema.InsertResidencePhoto): Promise<schema.ResidencePhoto>;
+  deleteResidencePhoto(id: string): Promise<void>;
+  getResidencePhoto(id: string): Promise<schema.ResidencePhoto | undefined>;
+  countResidencePhotosByType(residenceId: string, photoType: string): Promise<number>;
+
+  // Residence Upload Tokens (QR Code Mobile Upload)
+  createResidenceUploadToken(token: schema.InsertResidenceUploadToken): Promise<schema.ResidenceUploadToken>;
+  getResidenceUploadToken(token: string): Promise<schema.ResidenceUploadToken | undefined>;
+  markResidenceTokenAsUsed(token: string, photosUploaded: number): Promise<schema.ResidenceUploadToken>;
 }
 
 export class DbStorage implements IStorage {
@@ -4791,6 +4812,138 @@ export class DbStorage implements IStorage {
     }
 
     return parts.join('\n').trim();
+  }
+
+  // ============================================
+  // Community Residences (Neighborhood Archive)
+  // ============================================
+
+  async listCommunityResidences(tenantId: string): Promise<(schema.CommunityResidence & { photoCount: number; thumbnailPhotoId: string | null })[]> {
+    const residences = await db.select()
+      .from(schema.communityResidences)
+      .where(eq(schema.communityResidences.tenantId, tenantId))
+      .orderBy(desc(schema.communityResidences.updatedAt));
+
+    // Get photo counts and best thumbnail photo (prefer satellite > uploaded > any)
+    const results = await Promise.all(residences.map(async (r) => {
+      const photos = await db.select({ id: schema.residencePhotos.id, photoType: schema.residencePhotos.photoType })
+        .from(schema.residencePhotos)
+        .where(eq(schema.residencePhotos.residenceId, r.id));
+      const thumbnail = photos.find(p => p.photoType === 'satellite')
+        || photos.find(p => p.photoType === 'uploaded')
+        || photos[0]
+        || null;
+      return { ...r, photoCount: photos.length, thumbnailPhotoId: thumbnail?.id ?? null };
+    }));
+
+    return results;
+  }
+
+  async getCommunityResidence(id: string): Promise<schema.CommunityResidence | undefined> {
+    const [residence] = await db.select()
+      .from(schema.communityResidences)
+      .where(eq(schema.communityResidences.id, id));
+    return residence;
+  }
+
+  async getCommunityResidenceByAddress(tenantId: string, normalizedAddress: string): Promise<schema.CommunityResidence | undefined> {
+    const [residence] = await db.select()
+      .from(schema.communityResidences)
+      .where(and(
+        eq(schema.communityResidences.tenantId, tenantId),
+        eq(schema.communityResidences.normalizedAddress, normalizedAddress)
+      ));
+    return residence;
+  }
+
+  async createCommunityResidence(data: schema.InsertCommunityResidence): Promise<schema.CommunityResidence> {
+    const [created] = await db.insert(schema.communityResidences)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async updateCommunityResidence(id: string, updates: Partial<schema.InsertCommunityResidence>): Promise<schema.CommunityResidence> {
+    const [updated] = await db.update(schema.communityResidences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.communityResidences.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCommunityResidence(id: string): Promise<void> {
+    await db.delete(schema.communityResidences)
+      .where(eq(schema.communityResidences.id, id));
+  }
+
+  async getLinkedApplications(tenantId: string, normalizedAddress: string): Promise<schema.Application[]> {
+    return db.select()
+      .from(schema.applications)
+      .where(and(
+        eq(schema.applications.tenantId, tenantId),
+        sql`lower(trim(${schema.applications.propertyAddress})) = ${normalizedAddress}`
+      ))
+      .orderBy(desc(schema.applications.submittedAt));
+  }
+
+  // Residence Photos
+  async listResidencePhotos(residenceId: string): Promise<schema.ResidencePhoto[]> {
+    return db.select()
+      .from(schema.residencePhotos)
+      .where(eq(schema.residencePhotos.residenceId, residenceId))
+      .orderBy(asc(schema.residencePhotos.sortOrder), asc(schema.residencePhotos.createdAt));
+  }
+
+  async createResidencePhoto(data: schema.InsertResidencePhoto): Promise<schema.ResidencePhoto> {
+    const [created] = await db.insert(schema.residencePhotos)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async deleteResidencePhoto(id: string): Promise<void> {
+    await db.delete(schema.residencePhotos)
+      .where(eq(schema.residencePhotos.id, id));
+  }
+
+  async getResidencePhoto(id: string): Promise<schema.ResidencePhoto | undefined> {
+    const [photo] = await db.select()
+      .from(schema.residencePhotos)
+      .where(eq(schema.residencePhotos.id, id));
+    return photo;
+  }
+
+  async countResidencePhotosByType(residenceId: string, photoType: string): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(schema.residencePhotos)
+      .where(and(
+        eq(schema.residencePhotos.residenceId, residenceId),
+        eq(schema.residencePhotos.photoType, photoType)
+      ));
+    return result?.count ?? 0;
+  }
+
+  // Residence Upload Tokens (QR Code Mobile Upload)
+  async createResidenceUploadToken(token: schema.InsertResidenceUploadToken): Promise<schema.ResidenceUploadToken> {
+    const [created] = await db.insert(schema.residenceUploadTokens)
+      .values(token)
+      .returning();
+    return created;
+  }
+
+  async getResidenceUploadToken(token: string): Promise<schema.ResidenceUploadToken | undefined> {
+    const [uploadToken] = await db.select()
+      .from(schema.residenceUploadTokens)
+      .where(eq(schema.residenceUploadTokens.token, token));
+    return uploadToken;
+  }
+
+  async markResidenceTokenAsUsed(token: string, photosUploaded: number): Promise<schema.ResidenceUploadToken> {
+    const [updated] = await db.update(schema.residenceUploadTokens)
+      .set({ isUsed: true, usedAt: new Date(), photosUploaded })
+      .where(eq(schema.residenceUploadTokens.token, token))
+      .returning();
+    return updated;
   }
 }
 

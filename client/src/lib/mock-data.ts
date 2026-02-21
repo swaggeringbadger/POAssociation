@@ -93,6 +93,12 @@ export const NAV_ITEMS = [
     roles: ['homeowner', 'poa_board_contributor', 'poa_board_member', 'management_rep', 'management_manager', 'account_admin', 'super_admin']
   },
   {
+    label: 'Neighborhood',
+    icon: Home,
+    href: '/neighborhood',
+    roles: ['poa_board_contributor', 'poa_board_member', 'management_rep', 'management_manager', 'management_auxiliary', 'account_admin', 'super_admin']
+  },
+  {
     label: 'Form Wizard',
     icon: Sparkles,
     href: '/form-wizard',

@@ -1,13 +1,68 @@
 # Session Handoff Document
 
-**Last Updated:** 2025-12-31
-**Current Session:** Multiple AI Context Sources & Instructions Complete
+**Last Updated:** 2026-02-20
+**Current Session:** Neighborhood Residences Feature Complete
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed (2025-12-31)
+### Just Completed (2026-02-20)
+
+#### Neighborhood Residences (Property Archive) - COMPLETE
+
+Built a persistent, address-based property archive for community management. Residences are keyed by address (not user), with photos, satellite imagery, AI mockups, and linked applications — providing continuity across ownership changes.
+
+**Route:** `/neighborhood` (distinct from `/community` which is used for public landing pages)
+
+**New Database Tables (in `shared/schema.ts`):**
+- `community_residences` - Address-based property records with geocoding, satellite/mockup blob paths
+- `residence_photos` - Photos attached to residences (uploaded, satellite, neighborhood, mockup types)
+- `normalizeAddress()` utility function (shared between client/server)
+
+**New Storage Methods (in `server/storage.ts`):**
+- `listCommunityResidences()`, `getCommunityResidence()`, `getCommunityResidenceByAddress()`
+- `createCommunityResidence()`, `updateCommunityResidence()`, `deleteCommunityResidence()`
+- `getLinkedApplications()` - Query applications by normalized address
+- `listResidencePhotos()`, `createResidencePhoto()`, `deleteResidencePhoto()`, `getResidencePhoto()`
+- `countResidencePhotosByType()` - For enforcing 5-upload limit
+
+**New API Endpoints (in `server/routes.ts`):**
+```
+GET    /api/tenants/:tenantId/residences                          # List all
+GET    /api/tenants/:tenantId/residences/:id                      # Get with photos + linked apps
+POST   /api/tenants/:tenantId/residences                          # Create; geocode; auto-fetch satellite
+PATCH  /api/tenants/:tenantId/residences/:id                      # Update name/description
+DELETE /api/tenants/:tenantId/residences/:id                      # Delete + blob cleanup
+POST   /api/tenants/:tenantId/residences/:id/photos               # Upload photos (max 5)
+DELETE /api/tenants/:tenantId/residences/:id/photos/:photoId      # Delete single photo
+GET    /api/tenants/:tenantId/residences/:id/photos/:photoId/view # Proxy from Azure
+POST   /api/tenants/:tenantId/residences/:id/generate-mockup      # AI mockup generation
+POST   /api/tenants/:tenantId/residences/:id/fetch-satellite      # Re-fetch satellite imagery
+```
+
+**New Frontend Pages:**
+- `client/src/pages/Neighborhood.tsx` - List page with search, card grid
+- `client/src/pages/NeighborhoodDetail.tsx` - Detail with carousel gallery, upload, satellite, AI mockup, linked apps
+- `client/src/components/AddResidenceModal.tsx` - Create dialog with drag-drop upload
+
+**Features:**
+- Auto-geocoding via Radar on creation
+- Auto-fetch satellite imagery via `propertyBoundaryService`
+- AI mockup generation via `imageGenerationService`
+- Photo proxy from Azure (same pattern as hero-image)
+- "Upload from Mobile" QR code feature on desktop resolution
+- Max 5 uploaded photos per residence
+- Linked Applications section (matched by normalized address)
+- Carousel gallery with Embla (using shadcn/ui carousel)
+
+**RBAC:** Accessible to `poa_board_contributor`, `poa_board_member`, `management_rep`, `management_manager`, `management_auxiliary`, `account_admin`, `super_admin`. Excluded: `homeowner`, `delegated_rep`, `contractor`.
+
+**Navigation:** Added "Neighborhood" nav item with Home icon after Calendar in sidebar.
+
+---
+
+### Previous Session (2025-12-31)
 
 #### Multiple AI Context Sources & Instructions - COMPLETE
 

@@ -256,6 +256,26 @@ export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
     'super_admin'
   ],
 
+  // Neighborhood Residences
+  '/neighborhood': [
+    'poa_board_contributor',
+    'poa_board_member',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+  '/neighborhood/:id': [
+    'poa_board_contributor',
+    'poa_board_member',
+    'management_rep',
+    'management_manager',
+    'management_auxiliary',
+    'account_admin',
+    'super_admin'
+  ],
+
   // Account Admin Billing Routes
   '/account-admin/billing': ['account_admin', 'super_admin'],
   '/account-admin/billing/:communityId': ['account_admin', 'super_admin'],

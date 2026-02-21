@@ -2200,3 +2200,119 @@ export const insertAiInstructionSchema = createInsertSchema(aiInstructions).omit
 });
 export type InsertAiInstruction = z.infer<typeof insertAiInstructionSchema>;
 export type AiInstruction = typeof aiInstructions.$inferSelect;
+
+// ============================================
+// NEIGHBORHOOD RESIDENCES
+// ============================================
+
+/**
+ * Normalize an address for matching: lowercase, trim, collapse spaces,
+ * remove periods, normalize comma spacing.
+ * Shared between client and server.
+ */
+export function normalizeAddress(address: string): string {
+  return address
+    .toLowerCase()
+    .trim()
+    .replace(/\./g, '')           // remove periods
+    .replace(/\s+/g, ' ')        // collapse whitespace
+    .replace(/\s*,\s*/g, ', ');  // normalize comma spacing
+}
+
+// Community Residences - persistent address-based property archive
+export const communityResidences = pgTable("community_residences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+
+  // Address
+  propertyAddress: text("property_address").notNull(),
+  normalizedAddress: text("normalized_address").notNull(),
+  propertyCoordinates: jsonb("property_coordinates").$type<{ lat: number; lng: number }>(),
+
+  // Display
+  name: text("name"),           // Friendly name like "The Johnson House"
+  description: text("description"),
+
+  // Satellite imagery blob paths
+  satelliteImageBlobPath: text("satellite_image_blob_path"),
+  neighborhoodImageBlobPath: text("neighborhood_image_blob_path"),
+
+  // AI Mockup
+  mockupBlobPath: text("mockup_blob_path"),
+  mockupGeneratedAt: timestamp("mockup_generated_at"),
+  mockupStatus: text("mockup_status"),  // 'pending' | 'generating' | 'completed' | 'failed'
+  mockupError: text("mockup_error"),
+
+  // Audit
+  createdByUserId: varchar("created_by_user_id").references(() => users.id),
+  demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("community_residences_tenant_idx").on(table.tenantId),
+  tenantAddressIdx: index("community_residences_tenant_address_idx").on(table.tenantId, table.normalizedAddress),
+}));
+
+export const insertCommunityResidenceSchema = createInsertSchema(communityResidences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCommunityResidence = z.infer<typeof insertCommunityResidenceSchema>;
+export type CommunityResidence = typeof communityResidences.$inferSelect;
+
+// Residence Photos - photos attached to a residence
+export const residencePhotos = pgTable("residence_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  residenceId: varchar("residence_id").notNull().references(() => communityResidences.id, { onDelete: "cascade" }),
+
+  // Photo metadata
+  photoType: text("photo_type").notNull(), // 'uploaded' | 'satellite' | 'neighborhood' | 'mockup'
+  caption: text("caption"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+
+  // Azure Blob Storage
+  blobPath: text("blob_path").notNull(),
+  containerName: text("container_name").notNull().default("residence-images"),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+
+  // Audit
+  uploadedByUserId: varchar("uploaded_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  residenceIdx: index("residence_photos_residence_idx").on(table.residenceId),
+  typeIdx: index("residence_photos_type_idx").on(table.residenceId, table.photoType),
+}));
+
+export const insertResidencePhotoSchema = createInsertSchema(residencePhotos).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertResidencePhoto = z.infer<typeof insertResidencePhotoSchema>;
+export type ResidencePhoto = typeof residencePhotos.$inferSelect;
+
+// Residence Upload Tokens - for QR code mobile photo uploads
+export const residenceUploadTokens = pgTable("residence_upload_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  residenceId: varchar("residence_id").notNull().references(() => communityResidences.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").notNull().default(false),
+  photosUploaded: integer("photos_uploaded").default(0),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  usedAt: timestamp("used_at"),
+}, (table) => ({
+  tokenIdx: index("residence_upload_tokens_token_idx").on(table.token),
+}));
+
+export const insertResidenceUploadTokenSchema = createInsertSchema(residenceUploadTokens).omit({
+  id: true,
+  createdAt: true,
+  usedAt: true,
+});
+export type InsertResidenceUploadToken = z.infer<typeof insertResidenceUploadTokenSchema>;
+export type ResidenceUploadToken = typeof residenceUploadTokens.$inferSelect;

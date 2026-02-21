@@ -9450,6 +9450,686 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // Google Maps Configuration
+  // ============================================
+
+  // Get Google Maps API key (for client-side map rendering)
+  app.get('/api/maps/config', isAuthenticated, async (req: any, res) => {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+    res.json({
+      apiKey,
+      enabled: !!apiKey,
+    });
+  });
+
+  // ============================================
+  // Community Residences (Neighborhood Archive)
+  // ============================================
+
+  // Batch-fetch linked applications for map detail view
+  app.get('/api/tenants/:tenantId/residence-map-details', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const idsParam = req.query.ids as string;
+      if (!idsParam) {
+        return res.status(400).json({ error: 'ids query parameter is required' });
+      }
+      const ids = idsParam.split(',').slice(0, 50); // Max 50 IDs
+      const result: Record<string, { linkedApplications: any[] }> = {};
+
+      await Promise.all(ids.map(async (id) => {
+        const residence = await storage.getCommunityResidence(id.trim());
+        if (residence && residence.tenantId === tenantId) {
+          const linkedApplications = await storage.getLinkedApplications(
+            tenantId,
+            residence.normalizedAddress
+          );
+          result[id.trim()] = { linkedApplications };
+        }
+      }));
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[Residences] Map details error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List all residences for a tenant
+  app.get('/api/tenants/:tenantId/residences', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const residences = await storage.listCommunityResidences(tenantId);
+      res.json(residences);
+    } catch (error: any) {
+      console.error('[Residences] List error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get a single residence with photos and linked applications
+  app.get('/api/tenants/:tenantId/residences/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const residence = await storage.getCommunityResidence(id);
+      if (!residence) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+      const photos = await storage.listResidencePhotos(id);
+      const linkedApplications = await storage.getLinkedApplications(
+        residence.tenantId,
+        residence.normalizedAddress
+      );
+      res.json({ ...residence, photos, linkedApplications });
+    } catch (error: any) {
+      console.error('[Residences] Get error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create a new residence
+  app.post('/api/tenants/:tenantId/residences', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { propertyAddress, name, description, coordinates } = req.body;
+
+      if (!propertyAddress || !propertyAddress.trim()) {
+        return res.status(400).json({ error: 'Property address is required' });
+      }
+
+      const normalizedAddress = schema.normalizeAddress(propertyAddress);
+
+      // Check for duplicate address
+      const existing = await storage.getCommunityResidenceByAddress(tenantId, normalizedAddress);
+      if (existing) {
+        return res.status(409).json({ error: 'A residence with this address already exists', existingId: existing.id });
+      }
+
+      // Use pre-validated coordinates from frontend if provided, otherwise geocode via Radar
+      let propertyCoordinates: { lat: number; lng: number } | null = null;
+      if (coordinates && typeof coordinates.lat === 'number' && typeof coordinates.lng === 'number') {
+        propertyCoordinates = { lat: coordinates.lat, lng: coordinates.lng };
+      } else {
+        try {
+          const { radarService } = await import('./services/radarService');
+          const validation = await radarService.validateAddress(propertyAddress);
+          if (validation.isValid && validation.coordinates) {
+            propertyCoordinates = {
+              lat: validation.coordinates.latitude,
+              lng: validation.coordinates.longitude,
+            };
+          }
+        } catch (geoErr) {
+          console.warn('[Residences] Geocoding failed, continuing without coordinates:', geoErr);
+        }
+      }
+
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const residence = await storage.createCommunityResidence({
+        tenantId,
+        propertyAddress: propertyAddress.trim(),
+        normalizedAddress,
+        propertyCoordinates,
+        name: name?.trim() || null,
+        description: description?.trim() || null,
+        createdByUserId: userId,
+      });
+
+      // Auto-fetch satellite imagery if we have coordinates
+      if (propertyCoordinates) {
+        try {
+          const { propertyBoundaryService } = await import('./services/propertyBoundaryService');
+          const images = await propertyBoundaryService.getEnhancedSatelliteImages(propertyCoordinates);
+          if (images) {
+            // Upload satellite images to Azure
+            if (images.propertyViewBase64) {
+              const satBuffer = Buffer.from(images.propertyViewBase64, 'base64');
+              const satBlobPath = `${tenantId}/residences/${residence.id}/satellite.png`;
+              await azureBlobStorage.uploadFile('residence-images', satBuffer, 'satellite.png', 'image/png', satBlobPath);
+
+              await storage.createResidencePhoto({
+                residenceId: residence.id,
+                photoType: 'satellite',
+                caption: 'Satellite view',
+                sortOrder: 100,
+                blobPath: satBlobPath,
+                containerName: 'residence-images',
+                fileName: 'satellite.png',
+                fileSize: satBuffer.length,
+                mimeType: 'image/png',
+                uploadedByUserId: userId,
+              });
+
+              await storage.updateCommunityResidence(residence.id, {
+                satelliteImageBlobPath: satBlobPath,
+              });
+            }
+
+            if (images.neighborhoodViewBase64) {
+              const nbBuffer = Buffer.from(images.neighborhoodViewBase64, 'base64');
+              const nbBlobPath = `${tenantId}/residences/${residence.id}/neighborhood.png`;
+              await azureBlobStorage.uploadFile('residence-images', nbBuffer, 'neighborhood.png', 'image/png', nbBlobPath);
+
+              await storage.createResidencePhoto({
+                residenceId: residence.id,
+                photoType: 'neighborhood',
+                caption: 'Neighborhood view',
+                sortOrder: 101,
+                blobPath: nbBlobPath,
+                containerName: 'residence-images',
+                fileName: 'neighborhood.png',
+                fileSize: nbBuffer.length,
+                mimeType: 'image/png',
+                uploadedByUserId: userId,
+              });
+
+              await storage.updateCommunityResidence(residence.id, {
+                neighborhoodImageBlobPath: nbBlobPath,
+              });
+            }
+          }
+        } catch (satErr) {
+          console.warn('[Residences] Satellite fetch failed:', satErr);
+        }
+      }
+
+      // Return the freshly created residence with photos
+      const updated = await storage.getCommunityResidence(residence.id);
+      const photos = await storage.listResidencePhotos(residence.id);
+      res.json({ ...updated, photos });
+    } catch (error: any) {
+      console.error('[Residences] Create error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update a residence
+  app.patch('/api/tenants/:tenantId/residences/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description } = req.body;
+
+      const existing = await storage.getCommunityResidence(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      const updated = await storage.updateCommunityResidence(id, {
+        name: name !== undefined ? (name?.trim() || null) : existing.name,
+        description: description !== undefined ? (description?.trim() || null) : existing.description,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error('[Residences] Update error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a residence
+  app.delete('/api/tenants/:tenantId/residences/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const existing = await storage.getCommunityResidence(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      // Clean up blobs for all photos
+      const photos = await storage.listResidencePhotos(id);
+      for (const photo of photos) {
+        try {
+          await azureBlobStorage.deleteFile(photo.containerName, photo.blobPath);
+        } catch (blobErr) {
+          console.warn(`[Residences] Failed to delete blob ${photo.blobPath}:`, blobErr);
+        }
+      }
+
+      await storage.deleteCommunityResidence(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[Residences] Delete error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload photos to a residence
+  app.post('/api/tenants/:tenantId/residences/:id/photos', isAuthenticated, upload.array('files', 5), async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const files = req.files as Express.Multer.File[];
+
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files provided' });
+      }
+
+      const existing = await storage.getCommunityResidence(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      // Enforce max 5 uploaded photos
+      const currentCount = await storage.countResidencePhotosByType(id, 'uploaded');
+      if (currentCount + files.length > 5) {
+        return res.status(400).json({ error: `Cannot exceed 5 uploaded photos. Currently ${currentCount}, trying to add ${files.length}.` });
+      }
+
+      const userId = req.session?.userId || req.user?.claims?.sub;
+      const uploadedPhotos: schema.ResidencePhoto[] = [];
+
+      for (const file of files) {
+        const ext = file.originalname.split('.').pop() || 'jpg';
+        const photoId = crypto.randomUUID();
+        const blobPath = `${tenantId}/residences/${id}/${photoId}.${ext}`;
+
+        await azureBlobStorage.uploadFile('residence-images', file.buffer, file.originalname, file.mimetype, blobPath);
+
+        const photo = await storage.createResidencePhoto({
+          residenceId: id,
+          photoType: 'uploaded',
+          sortOrder: currentCount + uploadedPhotos.length,
+          blobPath,
+          containerName: 'residence-images',
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          uploadedByUserId: userId,
+        });
+        uploadedPhotos.push(photo);
+      }
+
+      res.json(uploadedPhotos);
+    } catch (error: any) {
+      console.error('[Residences] Photo upload error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a photo
+  app.delete('/api/tenants/:tenantId/residences/:id/photos/:photoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { photoId } = req.params;
+      const photo = await storage.getResidencePhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ error: 'Photo not found' });
+      }
+
+      // Delete blob from Azure
+      try {
+        await azureBlobStorage.deleteFile(photo.containerName, photo.blobPath);
+      } catch (blobErr) {
+        console.warn(`[Residences] Failed to delete blob ${photo.blobPath}:`, blobErr);
+      }
+
+      await storage.deleteResidencePhoto(photoId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[Residences] Photo delete error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Serve a residence photo (proxy from Azure)
+  app.get('/api/tenants/:tenantId/residences/:id/photos/:photoId/view', async (req, res) => {
+    try {
+      const { photoId } = req.params;
+      const photo = await storage.getResidencePhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ error: 'Photo not found' });
+      }
+
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: 'Storage not configured' });
+      }
+
+      const imageBuffer = await azureBlobStorage.downloadFile(photo.containerName, photo.blobPath);
+      res.setHeader('Content-Type', photo.mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(imageBuffer);
+    } catch (error: any) {
+      console.error('[Residences] Photo view error:', error);
+      res.status(404).json({ error: 'Photo not found' });
+    }
+  });
+
+  // Generate AI mockup for a residence
+  app.post('/api/tenants/:tenantId/residences/:id/generate-mockup', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const residence = await storage.getCommunityResidence(id);
+      if (!residence) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      // Mark as generating
+      await storage.updateCommunityResidence(id, {
+        mockupStatus: 'generating',
+        mockupError: null,
+      });
+
+      try {
+        const { ImageGenerationService } = await import('./services/imageGenerationService');
+        const imageGenService = new ImageGenerationService();
+
+        // Get satellite image as context
+        let satelliteBase64: string | undefined;
+        if (residence.satelliteImageBlobPath) {
+          try {
+            const satBuffer = await azureBlobStorage.downloadFile('residence-images', residence.satelliteImageBlobPath);
+            satelliteBase64 = satBuffer.toString('base64');
+          } catch (err) {
+            console.warn('[Residences] Could not load satellite image for mockup:', err);
+          }
+        }
+
+        const result = await imageGenService.generateMockup({
+          projectType: 'residence-rendering',
+          projectDescription: `Architectural rendering of the residence at ${residence.propertyAddress}${residence.name ? ` (${residence.name})` : ''}. ${residence.description || 'Show a clean, professional rendering of this property.'}`,
+          propertyAddress: residence.propertyAddress,
+          formData: {},
+          satelliteImageBase64: satelliteBase64,
+        });
+
+        if (!result) {
+          await storage.updateCommunityResidence(id, {
+            mockupStatus: 'failed',
+            mockupError: 'Image generation service returned no result',
+          });
+          return res.status(500).json({ error: 'Mockup generation failed' });
+        }
+
+        // Upload mockup to Azure
+        const mockupBuffer = Buffer.from(result.base64, 'base64');
+        const mockupBlobPath = `${residence.tenantId}/residences/${id}/mockup.png`;
+        await azureBlobStorage.uploadFile('residence-images', mockupBuffer, 'mockup.png', result.mimeType, mockupBlobPath);
+
+        // Create photo record
+        const userId = req.session?.userId || req.user?.claims?.sub;
+        await storage.createResidencePhoto({
+          residenceId: id,
+          photoType: 'mockup',
+          caption: 'AI-generated mockup',
+          sortOrder: 200,
+          blobPath: mockupBlobPath,
+          containerName: 'residence-images',
+          fileName: 'mockup.png',
+          fileSize: mockupBuffer.length,
+          mimeType: result.mimeType,
+          uploadedByUserId: userId,
+        });
+
+        await storage.updateCommunityResidence(id, {
+          mockupBlobPath,
+          mockupGeneratedAt: new Date(),
+          mockupStatus: 'completed',
+          mockupError: null,
+        });
+
+        const updated = await storage.getCommunityResidence(id);
+        const photos = await storage.listResidencePhotos(id);
+        res.json({ ...updated, photos });
+      } catch (genErr: any) {
+        console.error('[Residences] Mockup generation error:', genErr);
+        await storage.updateCommunityResidence(id, {
+          mockupStatus: 'failed',
+          mockupError: genErr.message,
+        });
+        res.status(500).json({ error: genErr.message });
+      }
+    } catch (error: any) {
+      console.error('[Residences] Generate mockup error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Re-fetch satellite imagery for a residence
+  app.post('/api/tenants/:tenantId/residences/:id/fetch-satellite', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const residence = await storage.getCommunityResidence(id);
+      if (!residence) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      if (!residence.propertyCoordinates) {
+        return res.status(400).json({ error: 'No coordinates available for this residence. Try updating the address.' });
+      }
+
+      const coords = residence.propertyCoordinates as { lat: number; lng: number };
+      const { propertyBoundaryService } = await import('./services/propertyBoundaryService');
+      const images = await propertyBoundaryService.getEnhancedSatelliteImages(coords);
+
+      if (!images) {
+        return res.status(500).json({ error: 'Failed to fetch satellite imagery' });
+      }
+
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      if (images.propertyViewBase64) {
+        const satBuffer = Buffer.from(images.propertyViewBase64, 'base64');
+        const satBlobPath = `${tenantId}/residences/${id}/satellite.png`;
+        await azureBlobStorage.uploadFile('residence-images', satBuffer, 'satellite.png', 'image/png', satBlobPath);
+
+        // Remove old satellite photo records
+        const existingPhotos = await storage.listResidencePhotos(id);
+        for (const p of existingPhotos.filter(p => p.photoType === 'satellite')) {
+          await storage.deleteResidencePhoto(p.id);
+        }
+
+        await storage.createResidencePhoto({
+          residenceId: id,
+          photoType: 'satellite',
+          caption: 'Satellite view',
+          sortOrder: 100,
+          blobPath: satBlobPath,
+          containerName: 'residence-images',
+          fileName: 'satellite.png',
+          fileSize: satBuffer.length,
+          mimeType: 'image/png',
+          uploadedByUserId: userId,
+        });
+
+        await storage.updateCommunityResidence(id, { satelliteImageBlobPath: satBlobPath });
+      }
+
+      if (images.neighborhoodViewBase64) {
+        const nbBuffer = Buffer.from(images.neighborhoodViewBase64, 'base64');
+        const nbBlobPath = `${tenantId}/residences/${id}/neighborhood.png`;
+        await azureBlobStorage.uploadFile('residence-images', nbBuffer, 'neighborhood.png', 'image/png', nbBlobPath);
+
+        const existingPhotos = await storage.listResidencePhotos(id);
+        for (const p of existingPhotos.filter(p => p.photoType === 'neighborhood')) {
+          await storage.deleteResidencePhoto(p.id);
+        }
+
+        await storage.createResidencePhoto({
+          residenceId: id,
+          photoType: 'neighborhood',
+          caption: 'Neighborhood view',
+          sortOrder: 101,
+          blobPath: nbBlobPath,
+          containerName: 'residence-images',
+          fileName: 'neighborhood.png',
+          fileSize: nbBuffer.length,
+          mimeType: 'image/png',
+          uploadedByUserId: userId,
+        });
+
+        await storage.updateCommunityResidence(id, { neighborhoodImageBlobPath: nbBlobPath });
+      }
+
+      const updated = await storage.getCommunityResidence(id);
+      const photos = await storage.listResidencePhotos(id);
+      res.json({ ...updated, photos });
+    } catch (error: any) {
+      console.error('[Residences] Fetch satellite error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // RESIDENCE MOBILE UPLOAD (Token-based, public endpoints)
+  // ============================================
+
+  // Create upload token (authenticated - called from desktop)
+  app.post('/api/tenants/:tenantId/residences/:id/upload-token', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const userId = req.session?.userId || req.user?.claims?.sub;
+
+      const residence = await storage.getCommunityResidence(id);
+      if (!residence || residence.tenantId !== tenantId) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      const uploadToken = await storage.createResidenceUploadToken({
+        token,
+        residenceId: id,
+        tenantId,
+        expiresAt,
+        isUsed: false,
+        photosUploaded: 0,
+        createdByUserId: userId,
+      });
+
+      res.json({
+        token: uploadToken.token,
+        uploadUrl: `/residence-upload/${uploadToken.token}`,
+        expiresAt: uploadToken.expiresAt,
+        expiresInMs: 10 * 60 * 1000,
+      });
+    } catch (error: any) {
+      console.error('[Residences] Error creating upload token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Validate residence upload token (public - called from mobile)
+  app.get('/api/residence-upload/:token', async (req, res) => {
+    try {
+      const uploadToken = await storage.getResidenceUploadToken(req.params.token);
+
+      if (!uploadToken) {
+        return res.status(404).json({ error: 'Invalid upload link' });
+      }
+      if (new Date() > uploadToken.expiresAt) {
+        return res.status(410).json({ error: 'This upload link has expired' });
+      }
+      if (uploadToken.isUsed) {
+        return res.status(410).json({ error: 'This upload link has already been used' });
+      }
+
+      const residence = await storage.getCommunityResidence(uploadToken.residenceId);
+      if (!residence) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+
+      res.json({
+        residenceName: residence.name || residence.propertyAddress,
+        propertyAddress: residence.propertyAddress,
+        expiresAt: uploadToken.expiresAt,
+        isValid: true,
+      });
+    } catch (error: any) {
+      console.error('[Residences] Error validating upload token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload photos via token (public - called from mobile)
+  app.post('/api/residence-upload/:token', upload.array('files', 5), async (req: any, res) => {
+    try {
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: 'File storage is not configured' });
+      }
+
+      const uploadToken = await storage.getResidenceUploadToken(req.params.token);
+      if (!uploadToken) {
+        return res.status(404).json({ error: 'Invalid upload link' });
+      }
+      if (new Date() > uploadToken.expiresAt) {
+        return res.status(410).json({ error: 'This upload link has expired' });
+      }
+      if (uploadToken.isUsed) {
+        return res.status(410).json({ error: 'This upload link has already been used' });
+      }
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files provided' });
+      }
+
+      // Enforce max 5 uploaded photos total
+      const existingCount = await storage.countResidencePhotosByType(uploadToken.residenceId, 'uploaded');
+      if (existingCount + files.length > 5) {
+        return res.status(400).json({ error: `Can only have 5 uploaded photos total. Currently ${existingCount}, tried to add ${files.length}.` });
+      }
+
+      const uploaded = [];
+      for (const file of files) {
+        if (!file.mimetype.startsWith('image/')) continue;
+
+        const photoId = crypto.randomUUID();
+        const ext = file.originalname?.split('.').pop() || 'jpg';
+        const blobPath = `${uploadToken.tenantId}/residences/${uploadToken.residenceId}/${photoId}.${ext}`;
+
+        await azureBlobStorage.uploadFile(
+          'residence-images',
+          file.buffer,
+          file.originalname || `photo.${ext}`,
+          file.mimetype,
+          blobPath
+        );
+
+        const photo = await storage.createResidencePhoto({
+          residenceId: uploadToken.residenceId,
+          photoType: 'uploaded',
+          caption: null,
+          sortOrder: existingCount + uploaded.length,
+          blobPath,
+          containerName: 'residence-images',
+          fileName: file.originalname || `photo.${ext}`,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          uploadedByUserId: uploadToken.createdByUserId,
+        });
+        uploaded.push(photo);
+      }
+
+      // Mark token as used
+      await storage.markResidenceTokenAsUsed(req.params.token, uploaded.length);
+
+      res.json({ success: true, photosUploaded: uploaded.length });
+    } catch (error: any) {
+      console.error('[Residences] Error uploading via token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check residence upload token status (public - polled from desktop)
+  app.get('/api/residence-upload/:token/status', async (req, res) => {
+    try {
+      const uploadToken = await storage.getResidenceUploadToken(req.params.token);
+      if (!uploadToken) {
+        return res.status(404).json({ error: 'Invalid upload link' });
+      }
+
+      res.json({
+        isUsed: uploadToken.isUsed,
+        isExpired: new Date() > uploadToken.expiresAt,
+        photosUploaded: uploadToken.photosUploaded,
+        usedAt: uploadToken.usedAt,
+      });
+    } catch (error: any) {
+      console.error('[Residences] Error checking upload status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

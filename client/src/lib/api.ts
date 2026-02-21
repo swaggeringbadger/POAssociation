@@ -175,6 +175,51 @@ export interface AiOptionStats {
   averageCreditsPerAnalysis: number;
 }
 
+// Community Residences types
+export interface CommunityResidence {
+  id: string;
+  tenantId: string;
+  propertyAddress: string;
+  normalizedAddress: string;
+  propertyCoordinates: { lat: number; lng: number } | null;
+  name: string | null;
+  description: string | null;
+  satelliteImageBlobPath: string | null;
+  neighborhoodImageBlobPath: string | null;
+  mockupBlobPath: string | null;
+  mockupGeneratedAt: string | null;
+  mockupStatus: string | null;
+  mockupError: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResidencePhoto {
+  id: string;
+  residenceId: string;
+  photoType: 'uploaded' | 'satellite' | 'neighborhood' | 'mockup';
+  caption: string | null;
+  sortOrder: number;
+  blobPath: string;
+  containerName: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedByUserId: string | null;
+  createdAt: string;
+}
+
+export interface CommunityResidenceWithCount extends CommunityResidence {
+  photoCount: number;
+  thumbnailPhotoId: string | null;
+}
+
+export interface CommunityResidenceWithDetails extends CommunityResidence {
+  photos: ResidencePhoto[];
+  linkedApplications: Application[];
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -1059,6 +1104,153 @@ class ApiClient {
       const error = await response.json();
       throw new Error(error.error || 'Failed to get AI option stats');
     }
+    return response.json();
+  }
+
+  // ============================================
+  // Google Maps Configuration
+  // ============================================
+
+  async getGoogleMapsConfig(): Promise<{ apiKey: string; enabled: boolean }> {
+    const response = await fetch('/api/maps/config');
+    if (!response.ok) throw new Error('Failed to fetch maps config');
+    return response.json();
+  }
+
+  // ============================================
+  // Community Residences (Neighborhood Archive)
+  // ============================================
+
+  async getResidenceMapDetails(tenantId: string, ids: string[]): Promise<Record<string, { linkedApplications: Application[] }>> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residence-map-details?ids=${ids.join(',')}`);
+    if (!response.ok) throw new Error('Failed to fetch residence map details');
+    return response.json();
+  }
+
+  async listCommunityResidences(tenantId: string): Promise<CommunityResidenceWithCount[]> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences`);
+    if (!response.ok) throw new Error('Failed to fetch residences');
+    return response.json();
+  }
+
+  async getCommunityResidence(tenantId: string, id: string): Promise<CommunityResidenceWithDetails> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch residence');
+    return response.json();
+  }
+
+  async createCommunityResidence(tenantId: string, data: { propertyAddress: string; name?: string; description?: string; coordinates?: { lat: number; lng: number } }): Promise<CommunityResidenceWithDetails> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create residence');
+    }
+    return response.json();
+  }
+
+  async updateCommunityResidence(tenantId: string, id: string, data: { name?: string; description?: string }): Promise<CommunityResidence> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update residence');
+    return response.json();
+  }
+
+  async deleteCommunityResidence(tenantId: string, id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete residence');
+  }
+
+  async uploadResidencePhotos(tenantId: string, residenceId: string, files: File[]): Promise<ResidencePhoto[]> {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/photos`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to upload photos');
+    }
+    return response.json();
+  }
+
+  async deleteResidencePhoto(tenantId: string, residenceId: string, photoId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/photos/${photoId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete photo');
+  }
+
+  getResidencePhotoUrl(tenantId: string, residenceId: string, photoId: string): string {
+    return `${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/photos/${photoId}/view`;
+  }
+
+  async generateResidenceMockup(tenantId: string, residenceId: string): Promise<CommunityResidenceWithDetails> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/generate-mockup`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate mockup');
+    }
+    return response.json();
+  }
+
+  async fetchResidenceSatellite(tenantId: string, residenceId: string): Promise<CommunityResidenceWithDetails> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/fetch-satellite`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch satellite imagery');
+    }
+    return response.json();
+  }
+
+  // Residence mobile upload token methods
+  async createResidenceUploadToken(tenantId: string, residenceId: string): Promise<{ token: string; uploadUrl: string; expiresAt: string; expiresInMs: number }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/upload-token`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to create upload token');
+    return response.json();
+  }
+
+  async validateResidenceUploadToken(token: string): Promise<{ residenceName: string; propertyAddress: string; expiresAt: string; isValid: boolean }> {
+    const response = await fetch(`${this.baseUrl}/residence-upload/${token}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Invalid upload link');
+    }
+    return response.json();
+  }
+
+  async uploadViaResidenceToken(token: string, files: File[]): Promise<{ success: boolean; photosUploaded: number }> {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    const response = await fetch(`${this.baseUrl}/residence-upload/${token}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Upload failed');
+    }
+    return response.json();
+  }
+
+  async checkResidenceUploadStatus(token: string): Promise<{ isUsed: boolean; isExpired: boolean; photosUploaded: number; usedAt: string | null }> {
+    const response = await fetch(`${this.baseUrl}/residence-upload/${token}/status`);
+    if (!response.ok) throw new Error('Failed to check upload status');
     return response.json();
   }
 }
