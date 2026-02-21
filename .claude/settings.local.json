@@ -68,7 +68,14 @@
       "Bash(fi)",
       "Bash(done)",
       "Bash(ps:*)",
-      "Bash(time psql:*)"
+      "Bash(time psql:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:qpublic.schneidercorp.com)",
+      "WebFetch(domain:webapp.sjcfl.us)",
+      "WebFetch(domain:www.sjcpa.gov)",
+      "WebFetch(domain:www.zillow.com)",
+      "WebFetch(domain:www.redfin.com)",
+      "WebFetch(domain:fal.ai)"
     ],
     "deny": [],
     "ask": []

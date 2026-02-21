@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { CheckCircle2, Upload, AlertCircle, Image, Loader2, Clock, X } from 'lucide-react';
+import { CheckCircle2, Upload, AlertCircle, Image, Video, Loader2, Clock, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 export default function MobileResidenceUpload() {
@@ -60,7 +60,7 @@ export default function MobileResidenceUpload() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const newFiles = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+      const newFiles = Array.from(e.target.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
       setSelectedFiles(prev => [...prev, ...newFiles].slice(0, 5));
       setUploadError(null);
     }
@@ -149,13 +149,13 @@ export default function MobileResidenceUpload() {
               <CheckCircle2 className="h-6 w-6" />
               <CardTitle>Upload Successful!</CardTitle>
             </div>
-            <CardDescription>{selectedFiles.length} photo{selectedFiles.length !== 1 ? 's' : ''} uploaded</CardDescription>
+            <CardDescription>{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} uploaded</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Alert className="border-green-200 bg-green-50">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">
-                Your photos have been added to <strong>{uploadInfo.residenceName}</strong>.
+                Your files have been added to <strong>{uploadInfo.residenceName}</strong>.
               </AlertDescription>
             </Alert>
             <p className="text-sm text-center text-muted-foreground">
@@ -202,15 +202,14 @@ export default function MobileResidenceUpload() {
                 id="photo-upload"
                 className="hidden"
                 onChange={handleFileSelect}
-                accept="image/*"
+                accept="image/*,video/*"
                 multiple
-                capture="environment"
               />
               <label htmlFor="photo-upload" className="cursor-pointer">
                 <Image className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-sm font-medium">Tap to take or select photos</p>
+                <p className="text-sm font-medium">Tap to take or select photos & videos</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  JPG, PNG (up to 5 photos)
+                  JPG, PNG, MP4, MOV (up to 5 files)
                 </p>
               </label>
             </div>
@@ -220,7 +219,11 @@ export default function MobileResidenceUpload() {
               <div className="space-y-2">
                 {selectedFiles.map((file, idx) => (
                   <div key={idx} className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg">
-                    <Image className="h-6 w-6 text-primary shrink-0" />
+                    {file.type.startsWith('video/') ? (
+                      <Video className="h-6 w-6 text-primary shrink-0" />
+                    ) : (
+                      <Image className="h-6 w-6 text-primary shrink-0" />
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{file.name}</p>
                       <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
@@ -240,9 +243,8 @@ export default function MobileResidenceUpload() {
                     id="photo-upload-more"
                     className="hidden"
                     onChange={handleFileSelect}
-                    accept="image/*"
+                    accept="image/*,video/*"
                     multiple
-                    capture="environment"
                   />
                   <Button variant="outline" size="sm" asChild>
                     <label htmlFor="photo-upload-more" className="cursor-pointer">
@@ -293,7 +295,7 @@ export default function MobileResidenceUpload() {
                   ) : (
                     <>
                       <Upload className="h-4 w-4 mr-2" />
-                      Upload {selectedFiles.length} Photo{selectedFiles.length !== 1 ? 's' : ''}
+                      Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}
                     </>
                   )}
                 </Button>

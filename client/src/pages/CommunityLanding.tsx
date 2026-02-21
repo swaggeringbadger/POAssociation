@@ -9,11 +9,14 @@ import {
   Clock,
   ExternalLink,
   FileText,
+  Globe,
   Mail,
   MapPin,
   Phone,
   User
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { format } from "date-fns";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import defaultHeroImage from "@assets/generated_images/modern_suburban_homes_with_green_lawns_and_blue_sky.png";
@@ -42,6 +45,7 @@ interface PublicCommunityInfo {
       website?: string;
       heroImageFocusX?: number;
       heroImageFocusY?: number;
+      publicResources?: string;
     } | null;
   };
   nextEvent: {
@@ -368,6 +372,64 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
               </CardContent>
             </Card>
           </div>
+          {/* Public Records & Resources Section */}
+          {settings.publicResources && (
+            <div className="mt-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="h-5 w-5 text-primary" />
+                    Public Records & Resources
+                  </CardTitle>
+                  <CardDescription>
+                    Government services, property records, and local resources
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h2: ({ children }) => (
+                        <h3 className="text-base font-semibold text-foreground mt-6 mb-3 first:mt-0">
+                          {children}
+                        </h3>
+                      ),
+                      h3: ({ children }) => (
+                        <h4 className="text-sm font-semibold text-foreground mt-4 mb-2">
+                          {children}
+                        </h4>
+                      ),
+                      p: ({ children }) => (
+                        <p className="text-sm text-muted-foreground mb-2">{children}</p>
+                      ),
+                      ul: ({ children }) => (
+                        <ul className="space-y-2 mb-4">{children}</ul>
+                      ),
+                      li: ({ children }) => (
+                        <li className="text-sm text-muted-foreground flex items-start gap-2">
+                          <span className="text-primary mt-1.5 shrink-0">&#8226;</span>
+                          <span>{children}</span>
+                        </li>
+                      ),
+                      a: ({ href, children }) => (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {children}
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      ),
+                    }}
+                  >
+                    {settings.publicResources}
+                  </ReactMarkdown>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </section>
 

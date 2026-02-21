@@ -679,6 +679,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate public records & resources using AI
+  app.post("/api/tenants/:tenantId/generate-public-resources", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+
+      const physicalAddress = (tenant.communitySettings as any)?.physicalAddress;
+      if (!physicalAddress || (!physicalAddress.city && !physicalAddress.state && !physicalAddress.zip)) {
+        return res.status(400).json({ error: "Physical address (city/state/zip) must be configured in Community Settings before generating public resources." });
+      }
+
+      const addressParts = [physicalAddress.city, physicalAddress.state, physicalAddress.zip].filter(Boolean).join(', ');
+
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+        timeout: 2 * 60 * 1000,
+      });
+
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 4096,
+        temperature: 0.3,
+        messages: [{
+          role: 'user',
+          content: `Generate a comprehensive list of public records and government resource links for a property owners association located in: ${addressParts}
+
+Research the specific county, city, and state for this location and provide REAL, accurate URLs for government websites. Organize into these categories using markdown:
+
+## Property Records & Taxes
+- County Property Appraiser (search property values, ownership)
+- Tax Collector (pay property taxes, tax certificates)
+- Clerk of Court / Register of Deeds (recorded documents, liens)
+
+## Building & Development
+- Building permits / inspections department
+- Code enforcement
+- Zoning / planning department
+
+## Flood & Environmental
+- FEMA flood map lookup
+- Local/regional flood district or water management
+- Environmental services
+
+## Utilities & Services
+- Water/sewer provider
+- Trash/recycling collection
+- Electric utility
+
+## Emergency & Safety
+- County Sheriff / local police non-emergency
+- Fire department / rescue
+- Hurricane preparedness / emergency management
+
+## Other Government Services
+- County Clerk (official records)
+- Voter registration / Supervisor of Elections
+- Local municipality website
+
+Format each entry as a markdown link with a brief description. Example:
+- [Walton County Property Appraiser](https://www.waltonpa.com/) - Search property values, ownership records, and exemptions
+
+Only include links you are confident are real and accurate. If you're unsure about a specific URL, use the most likely official government domain. Prefer .gov, .us, and .org domains.`
+        }],
+      });
+
+      const content = message.content[0];
+      if (content.type !== 'text') {
+        return res.status(500).json({ error: "Unexpected AI response format" });
+      }
+
+      res.json({ content: content.text });
+    } catch (error: any) {
+      console.error('[PublicResources] Generation error:', error);
+      res.status(500).json({ error: error.message || "Failed to generate public resources" });
+    }
+  });
+
   // Management Company Settings - Protected routes
   app.get("/api/management-company/:id/settings", isAuthenticated, async (req: any, res) => {
     try {
@@ -9763,6 +9844,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.deleteResidencePhoto(photoId);
+
+      // If deleting a mockup photo, clear the residence mockup fields so it can be regenerated cleanly
+      if (photo.photoType === 'mockup') {
+        const { id } = req.params;
+        await storage.updateCommunityResidence(id, {
+          mockupBlobPath: null,
+          mockupGeneratedAt: null,
+          mockupStatus: null,
+          mockupError: null,
+        });
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       console.error('[Residences] Photo delete error:', error);
@@ -9810,25 +9903,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const { ImageGenerationService } = await import('./services/imageGenerationService');
+        type ReferenceImage = import('./services/imageGenerationService').ReferenceImage;
         const imageGenService = new ImageGenerationService();
 
-        // Get satellite image as context
-        let satelliteBase64: string | undefined;
-        if (residence.satelliteImageBlobPath) {
+        // Fetch all photos for this residence to use as reference images
+        const allPhotos = await storage.listResidencePhotos(id);
+        const referenceImages: ReferenceImage[] = [];
+
+        // Download uploaded photos (ground truth — highest priority, max 5)
+        const uploadedPhotos = allPhotos.filter(p => p.photoType === 'uploaded').slice(0, 5);
+        for (const photo of uploadedPhotos) {
           try {
-            const satBuffer = await azureBlobStorage.downloadFile('residence-images', residence.satelliteImageBlobPath);
-            satelliteBase64 = satBuffer.toString('base64');
+            const buffer = await azureBlobStorage.downloadFile(photo.containerName, photo.blobPath);
+            referenceImages.push({
+              base64: buffer.toString('base64'),
+              mimeType: photo.mimeType,
+              photoType: 'uploaded',
+              caption: photo.caption || undefined,
+            });
           } catch (err) {
-            console.warn('[Residences] Could not load satellite image for mockup:', err);
+            console.warn(`[Residences] Could not load uploaded photo ${photo.id} for mockup:`, err);
           }
         }
+
+        // Download satellite image
+        const satellitePhotos = allPhotos.filter(p => p.photoType === 'satellite').slice(0, 1);
+        for (const photo of satellitePhotos) {
+          try {
+            const buffer = await azureBlobStorage.downloadFile(photo.containerName, photo.blobPath);
+            referenceImages.push({
+              base64: buffer.toString('base64'),
+              mimeType: photo.mimeType,
+              photoType: 'satellite',
+            });
+          } catch (err) {
+            console.warn('[Residences] Could not load satellite photo for mockup:', err);
+          }
+        }
+
+        // Fallback: if no satellite photo record but residence has satelliteImageBlobPath
+        if (satellitePhotos.length === 0 && residence.satelliteImageBlobPath) {
+          try {
+            const satBuffer = await azureBlobStorage.downloadFile('residence-images', residence.satelliteImageBlobPath);
+            referenceImages.push({
+              base64: satBuffer.toString('base64'),
+              mimeType: 'image/png',
+              photoType: 'satellite',
+            });
+          } catch (err) {
+            console.warn('[Residences] Could not load satellite image from blob path for mockup:', err);
+          }
+        }
+
+        // Download neighborhood image
+        const neighborhoodPhotos = allPhotos.filter(p => p.photoType === 'neighborhood').slice(0, 1);
+        for (const photo of neighborhoodPhotos) {
+          try {
+            const buffer = await azureBlobStorage.downloadFile(photo.containerName, photo.blobPath);
+            referenceImages.push({
+              base64: buffer.toString('base64'),
+              mimeType: photo.mimeType,
+              photoType: 'neighborhood',
+            });
+          } catch (err) {
+            console.warn('[Residences] Could not load neighborhood photo for mockup:', err);
+          }
+        }
+
+        const uploadedCount = referenceImages.filter(r => r.photoType === 'uploaded').length;
+        const satCount = referenceImages.filter(r => r.photoType === 'satellite').length;
+        const neighCount = referenceImages.filter(r => r.photoType === 'neighborhood').length;
+        console.log(`[Residences] Generating mockup with ${referenceImages.length} reference images (${uploadedCount} uploaded, ${satCount} satellite, ${neighCount} neighborhood)`);
 
         const result = await imageGenService.generateMockup({
           projectType: 'residence-rendering',
           projectDescription: `Architectural rendering of the residence at ${residence.propertyAddress}${residence.name ? ` (${residence.name})` : ''}. ${residence.description || 'Show a clean, professional rendering of this property.'}`,
           propertyAddress: residence.propertyAddress,
           formData: {},
-          satelliteImageBase64: satelliteBase64,
+          referenceImages,
         });
 
         if (!result) {

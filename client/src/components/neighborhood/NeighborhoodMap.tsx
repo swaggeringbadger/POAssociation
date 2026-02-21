@@ -2,15 +2,34 @@ import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
-import { MapPin, AlertTriangle, Loader2 } from 'lucide-react';
+import { MapPin, AlertTriangle, Loader2, Filter } from 'lucide-react';
 import { api, type CommunityResidenceWithCount, type Application } from '@/lib/api';
 import { ResidenceMarker } from './ResidenceMarker';
 import { ResidenceInfoCard } from './ResidenceInfoCard';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  APPLICATION_TYPES,
+  APPLICATION_TYPE_LABELS,
+} from '@shared/formTypes';
 
 interface NeighborhoodMapProps {
   residences: CommunityResidenceWithCount[];
   tenantId: string;
 }
+
+type EmphasisFilter =
+  | { type: 'active-applications' }
+  | { type: 'modified-recently' }
+  | { type: 'project-type'; projectType: string };
+
+const TERMINATED_STATUSES = ['rejected', 'withdrawn'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -93,6 +112,8 @@ function NeighborhoodMapInner({
   const mapRef = useRef<google.maps.Map | null>(null);
   const [zoom, setZoom] = useState(15);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<EmphasisFilter>({ type: 'active-applications' });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
 
@@ -108,6 +129,16 @@ function NeighborhoodMapInner({
   );
 
   const unmappableCount = residences.length - mappableResidences.length;
+
+  // Stable options object so map type isn't reset on every re-render
+  const mapOptions = useMemo<google.maps.MapOptions>(() => ({
+    mapTypeControl: true,
+    mapTypeId: 'roadmap',
+    streetViewControl: true,
+    fullscreenControl: true,
+    gestureHandling: 'greedy',
+    styles: mapStyles,
+  }), []);
 
   // Compute visible residence IDs based on map bounds (debounced)
   const updateVisibleIds = useCallback(() => {
@@ -125,13 +156,42 @@ function NeighborhoodMapInner({
     setVisibleIds(ids);
   }, [mappableResidences]);
 
-  // Batch fetch linked applications for visible residences at high zoom
+  // Batch fetch linked applications for visible residences (enabled at all zoom levels for filters)
   const { data: mapDetails } = useQuery({
     queryKey: ['residence-map-details', tenantId, visibleIds.sort().join(',')],
     queryFn: () => api.getResidenceMapDetails(tenantId, visibleIds),
-    enabled: zoom >= 17 && visibleIds.length > 0,
+    enabled: visibleIds.length > 0,
     staleTime: 30 * 1000,
   });
+
+  // Compute which residence IDs are emphasized based on the active filter
+  const emphasizedIds = useMemo(() => {
+    if (!mapDetails) return new Set<string>();
+    const ids = new Set<string>();
+
+    if (filter.type === 'modified-recently') {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      mappableResidences.forEach((r) => {
+        if (new Date(r.updatedAt) > oneYearAgo) ids.add(r.id);
+      });
+      return ids;
+    }
+
+    for (const [resId, detail] of Object.entries(mapDetails)) {
+      const apps = detail.linkedApplications;
+      switch (filter.type) {
+        case 'active-applications':
+          if (apps.some((a) => !TERMINATED_STATUSES.includes(a.status))) ids.add(resId);
+          break;
+        case 'project-type':
+          if (apps.some((a) => a.projectType === filter.projectType)) ids.add(resId);
+          break;
+      }
+    }
+
+    return ids;
+  }, [mapDetails, filter, mappableResidences]);
 
   // Fit bounds on load
   const onMapLoad = useCallback(
@@ -223,17 +283,61 @@ function NeighborhoodMapInner({
           coordinates)
         </div>
       )}
+
+      {/* Emphasis Filter Bar */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <span className="text-sm text-muted-foreground mr-1">Emphasize:</span>
+        <Button
+          size="sm"
+          variant={filter.type === 'active-applications' ? 'default' : 'outline'}
+          className="h-7 text-xs"
+          onClick={() => setFilter({ type: 'active-applications' })}
+        >
+          Active Apps
+          {filter.type === 'active-applications' && (
+            <span className="ml-1 text-[10px] opacity-70">({emphasizedIds.size})</span>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant={filter.type === 'modified-recently' ? 'default' : 'outline'}
+          className="h-7 text-xs"
+          onClick={() => setFilter({ type: 'modified-recently' })}
+        >
+          Modified Recently
+          {filter.type === 'modified-recently' && (
+            <span className="ml-1 text-[10px] opacity-70">({emphasizedIds.size})</span>
+          )}
+        </Button>
+        <Select
+          value={filter.type === 'project-type' ? filter.projectType : ''}
+          onValueChange={(val) => setFilter({ type: 'project-type', projectType: val })}
+        >
+          <SelectTrigger
+            className={`h-7 text-xs w-auto min-w-[140px] ${
+              filter.type === 'project-type'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : ''
+            }`}
+          >
+            <SelectValue placeholder="By Project Type" />
+          </SelectTrigger>
+          <SelectContent>
+            {APPLICATION_TYPES.map((type) => (
+              <SelectItem key={type} value={type} className="text-xs">
+                {APPLICATION_TYPE_LABELS[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="h-[600px] rounded-lg border overflow-hidden shadow-sm">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           zoom={15}
-          options={{
-            mapTypeControl: true,
-            mapTypeId: 'roadmap',
-            streetViewControl: false,
-            fullscreenControl: true,
-            styles: mapStyles,
-          }}
+          options={mapOptions}
           onLoad={onMapLoad}
           onZoomChanged={onZoomChanged}
           onBoundsChanged={onBoundsChanged}
@@ -245,8 +349,13 @@ function NeighborhoodMapInner({
               residence={residence}
               zoom={zoom}
               isSelected={selectedId === residence.id}
+              isEmphasized={emphasizedIds.has(residence.id)}
+              isHovered={hoveredId === residence.id}
               photoUrl={getPhotoUrl(residence)}
+              linkedApplications={mapDetails?.[residence.id]?.linkedApplications || []}
               onClick={() => setSelectedId(residence.id)}
+              onMouseEnter={() => setHoveredId(residence.id)}
+              onMouseLeave={() => setHoveredId(null)}
             />
           ))}
 

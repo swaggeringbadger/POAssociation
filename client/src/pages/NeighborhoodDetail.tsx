@@ -4,6 +4,7 @@ import { useParams, useLocation } from 'wouter';
 import {
   Home, ArrowLeft, Edit2, Trash2, Upload, RefreshCw, Sparkles,
   MapPin, Image, FileText, Loader2, X, AlertCircle, Check, Smartphone, Clock,
+  ChevronLeft, ChevronRight, ZoomIn,
 } from 'lucide-react';
 import { api, type CommunityResidenceWithDetails, type ResidencePhoto } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
@@ -67,6 +68,7 @@ export default function NeighborhoodDetail() {
   const [mobileUploadGenerating, setMobileUploadGenerating] = useState(false);
   const [mobileTimeRemaining, setMobileTimeRemaining] = useState(600);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const { data: residence, isLoading } = useQuery({
     queryKey: ['residence', currentTenant?.id, id],
@@ -254,6 +256,23 @@ export default function NeighborhoodDetail() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const openLightbox = (photo: ResidencePhoto) => {
+    const idx = allPhotos.findIndex((p) => p.id === photo.id);
+    if (idx !== -1) setLightboxIndex(idx);
+  };
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') setLightboxIndex((i) => (i !== null && i < allPhotos.length - 1 ? i + 1 : i));
+      if (e.key === 'ArrowLeft') setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i));
+      if (e.key === 'Escape') setLightboxIndex(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [lightboxIndex, allPhotos.length]);
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -361,13 +380,16 @@ export default function NeighborhoodDetail() {
               <CarouselContent>
                 {allPhotos.map((photo) => (
                   <CarouselItem key={photo.id} className="md:basis-1/2 lg:basis-1/3">
-                    <div className="relative group">
+                    <div className="relative group cursor-pointer" onClick={() => openLightbox(photo)}>
                       <img
                         src={getPhotoUrl(photo)}
                         alt={photo.caption || photo.fileName}
                         className="w-full h-48 object-cover rounded-lg"
                         loading="lazy"
                       />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+                        <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-70 transition-opacity" />
+                      </div>
                       <div className="absolute top-2 left-2">
                         <Badge variant="secondary" className="text-xs capitalize">
                           {photo.photoType}
@@ -466,13 +488,16 @@ export default function NeighborhoodDetail() {
           {satellitePhotos.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {satellitePhotos.map((photo) => (
-                <div key={photo.id} className="relative">
+                <div key={photo.id} className="relative group cursor-pointer" onClick={() => openLightbox(photo)}>
                   <img
                     src={getPhotoUrl(photo)}
                     alt={photo.caption || 'Satellite view'}
                     className="w-full h-48 object-cover rounded-lg"
                     loading="lazy"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+                    <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-70 transition-opacity" />
+                  </div>
                   <Badge variant="secondary" className="absolute top-2 left-2 text-xs capitalize">
                     {photo.photoType === 'satellite' ? 'Property' : 'Neighborhood'}
                   </Badge>
@@ -489,63 +514,7 @@ export default function NeighborhoodDetail() {
         </CardContent>
       </Card>
 
-      {/* AI Mockup */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              AI Mockup
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => mockupMutation.mutate()}
-              disabled={mockupMutation.isPending || residence.mockupStatus === 'generating'}
-            >
-              {mockupMutation.isPending || residence.mockupStatus === 'generating' ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <Sparkles className="h-4 w-4 mr-1" />
-              )}
-              {mockupPhotos.length > 0 ? 'Regenerate' : 'Generate'} Mockup
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {residence.mockupStatus === 'generating' && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Generating AI mockup...
-            </div>
-          )}
-          {residence.mockupStatus === 'failed' && residence.mockupError && (
-            <div className="flex items-center gap-2 text-sm text-destructive mb-4">
-              <AlertCircle className="h-4 w-4" />
-              {residence.mockupError}
-            </div>
-          )}
-          {mockupPhotos.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4">
-              {mockupPhotos.map((photo) => (
-                <img
-                  key={photo.id}
-                  src={getPhotoUrl(photo)}
-                  alt="AI Mockup"
-                  className="w-full max-h-96 object-contain rounded-lg"
-                  loading="lazy"
-                />
-              ))}
-            </div>
-          ) : (
-            !residence.mockupStatus && (
-              <p className="text-sm text-muted-foreground">
-                Generate an AI rendering of this property using satellite imagery and uploaded photos as context.
-              </p>
-            )
-          )}
-        </CardContent>
-      </Card>
+      {/* AI Mockup — hidden for now, re-enable when generation quality improves */}
 
       {/* Linked Applications */}
       <Card>
@@ -748,6 +717,55 @@ export default function NeighborhoodDetail() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Lightbox */}
+      <Dialog open={lightboxIndex !== null} onOpenChange={() => setLightboxIndex(null)}>
+        <DialogContent className="max-w-4xl w-[95vw] p-0 bg-black/95 border-none [&>button]:text-white [&>button]:hover:bg-white/20">
+          {lightboxIndex !== null && allPhotos[lightboxIndex] && (
+            <div className="relative flex flex-col items-center justify-center min-h-[60vh] max-h-[90vh]">
+              {/* Image */}
+              <img
+                src={getPhotoUrl(allPhotos[lightboxIndex])}
+                alt={allPhotos[lightboxIndex].caption || allPhotos[lightboxIndex].fileName}
+                className="max-w-full max-h-[80vh] object-contain"
+              />
+
+              {/* Caption / type badge */}
+              <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3 px-4">
+                <Badge variant="secondary" className="capitalize">
+                  {allPhotos[lightboxIndex].photoType}
+                </Badge>
+                {allPhotos[lightboxIndex].caption && (
+                  <span className="text-white text-sm">{allPhotos[lightboxIndex].caption}</span>
+                )}
+                <span className="text-white/60 text-sm">
+                  {lightboxIndex + 1} / {allPhotos.length}
+                </span>
+              </div>
+
+              {/* Previous */}
+              {lightboxIndex > 0 && (
+                <button
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex - 1); }}
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              )}
+
+              {/* Next */}
+              {lightboxIndex < allPhotos.length - 1 && (
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1); }}
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

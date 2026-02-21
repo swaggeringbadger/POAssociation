@@ -121,6 +121,9 @@ export const communitySettingsSchema = z.object({
   // Hero image focus point (percentages 0-100, default 50/50 = center)
   heroImageFocusX: z.number().optional(),
   heroImageFocusY: z.number().optional(),
+
+  // Public records & resources (AI-generated markdown, editable by admins)
+  publicResources: z.string().optional(),
 });
 
 export type CommunitySettings = z.infer<typeof communitySettingsSchema>;

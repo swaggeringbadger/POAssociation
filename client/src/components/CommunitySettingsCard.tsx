@@ -64,6 +64,7 @@ export default function CommunitySettingsCard() {
   const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
   const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
   const [sharpenImage, setSharpenImage] = useState(true); // Default checked
+  const [isGeneratingResources, setIsGeneratingResources] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<FormData>({
     designGuidelinesUrl: "",
@@ -84,6 +85,7 @@ export default function CommunitySettingsCard() {
       website: "",
       yearEstablished: undefined,
       numberOfLots: undefined,
+      publicResources: "",
     },
   });
 
@@ -109,6 +111,7 @@ export default function CommunitySettingsCard() {
           website: (currentTenant as any).communitySettings?.website || "",
           yearEstablished: (currentTenant as any).communitySettings?.yearEstablished,
           numberOfLots: (currentTenant as any).communitySettings?.numberOfLots,
+          publicResources: (currentTenant as any).communitySettings?.publicResources || "",
         },
       });
     }
@@ -443,6 +446,23 @@ export default function CommunitySettingsCard() {
                       <p className="text-sm">{formData.communitySettings.stateOfIncorporation}</p>
                     </div>
                   )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Public Records & Resources */}
+          {formData.communitySettings.publicResources && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Public Records & Resources
+                </h4>
+                <div className="pl-6 text-sm text-muted-foreground whitespace-pre-wrap">
+                  {formData.communitySettings.publicResources.substring(0, 200)}
+                  {formData.communitySettings.publicResources.length > 200 ? '...' : ''}
                 </div>
               </div>
             </>
@@ -813,6 +833,75 @@ export default function CommunitySettingsCard() {
               />
             </div>
           </div>
+        </div>
+
+        <Separator />
+
+        {/* Public Records & Resources */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            Public Records & Resources
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Links to county property records, building permits, tax info, and other government services relevant to your community. Displayed on the public landing page.
+          </p>
+
+          <Textarea
+            id="publicResources"
+            className="font-mono text-xs"
+            rows={12}
+            placeholder="## Property Records & Taxes&#10;- [County Property Appraiser](https://...) - Search property values&#10;&#10;## Building & Development&#10;- [Building Permits](https://...) - Apply for permits"
+            value={formData.communitySettings.publicResources || ""}
+            onChange={(e) => updateCommunitySettings("publicResources", e.target.value)}
+          />
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isGeneratingResources}
+            onClick={async () => {
+              if (!currentTenant) return;
+              setIsGeneratingResources(true);
+              try {
+                const response = await fetch(`/api/tenants/${currentTenant.id}/generate-public-resources`, {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                });
+                if (!response.ok) {
+                  const err = await response.json();
+                  throw new Error(err.error || 'Failed to generate resources');
+                }
+                const data = await response.json();
+                updateCommunitySettings("publicResources", data.content);
+                toast({
+                  title: "Resources generated",
+                  description: "Review and edit the content below, then click Save Changes.",
+                });
+              } catch (err: any) {
+                toast({
+                  title: "Generation failed",
+                  description: err.message,
+                  variant: "destructive",
+                });
+              } finally {
+                setIsGeneratingResources(false);
+              }
+            }}
+          >
+            {isGeneratingResources ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Generate with AI
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Action Buttons */}

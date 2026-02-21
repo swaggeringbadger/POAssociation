@@ -3,15 +3,16 @@
  *
  * Provider-agnostic AI image generation for architectural mockups.
  * Currently supports:
+ * - Flux Kontext Pro (fal.ai — best for reference-faithful image editing)
+ * - Gemini 3 Pro Image (Google's multimodal image generation)
  * - Stability AI (SD3)
- * - Gemini 3 Pro Image (Google's latest multimodal image generation)
  *
  * Generates AI mockups showing proposed improvements on properties
  * based on application details and satellite imagery.
  */
 
 // Provider types
-export type ImageProvider = 'stability_ai' | 'gemini3pro';
+export type ImageProvider = 'stability_ai' | 'gemini3pro' | 'flux_kontext';
 
 export interface ImageGenerationOptions {
   provider?: ImageProvider;
@@ -31,21 +32,31 @@ export interface GeneratedImage {
   seed?: number;
 }
 
+export interface ReferenceImage {
+  base64: string;
+  mimeType: string;
+  photoType: 'uploaded' | 'satellite' | 'neighborhood';
+  caption?: string;
+}
+
 export interface MockupContext {
   projectType: string;
   projectDescription: string;
   propertyAddress: string;
   formData: Record<string, unknown>;
-  satelliteImageBase64?: string;
+  referenceImages?: ReferenceImage[];
+  satelliteImageBase64?: string; // backward compat for other callers
 }
 
 // Stability AI configuration
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/sd3';
 
 // Gemini 3 Pro Image configuration (Google's latest multimodal image generation)
-// Supports image-to-image generation with satellite imagery as reference
 const GEMINI3PRO_MODEL = 'gemini-3-pro-image-preview';
 const GEMINI3PRO_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI3PRO_MODEL}:generateContent`;
+
+// Flux Kontext Pro configuration (fal.ai — reference-faithful image editing)
+const FLUX_KONTEXT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 
 // Helper to get API keys dynamically (allows hot-reload of env vars)
 function getStabilityApiKey(): string {
@@ -56,8 +67,12 @@ function getGeminiApiKey(): string {
   return process.env.GEMINI_API_KEY || '';
 }
 
+function getFalApiKey(): string {
+  return process.env.FAL_AI_API_KEY || '';
+}
+
 export class ImageGenerationService {
-  private defaultProvider: ImageProvider = 'gemini3pro';
+  private defaultProvider: ImageProvider = 'flux_kontext';
 
   /**
    * Check if a provider is configured
@@ -67,12 +82,9 @@ export class ImageGenerationService {
       case 'stability_ai':
         return !!getStabilityApiKey();
       case 'gemini3pro':
-        // Gemini 3 Pro uses Google AI API - needs GEMINI_API_KEY
-        const hasKey = !!getGeminiApiKey();
-        if (!hasKey) {
-          console.log('[ImageGen] Gemini 3 Pro API key check: GEMINI_API_KEY not found in environment');
-        }
-        return hasKey;
+        return !!getGeminiApiKey();
+      case 'flux_kontext':
+        return !!getFalApiKey();
       default:
         return false;
     }
@@ -92,7 +104,13 @@ export class ImageGenerationService {
       return null;
     }
 
-    // Build the prompt from context
+    // Flux Kontext uses a simpler edit-style prompt since it preserves the reference image
+    if (provider === 'flux_kontext') {
+      const fluxPrompt = this.buildFluxKontextPrompt(context);
+      return this.generateWithFluxKontext(fluxPrompt, context, options);
+    }
+
+    // Other providers use the full descriptive prompt
     const prompt = this.buildMockupPrompt(context);
 
     switch (provider) {
@@ -107,74 +125,134 @@ export class ImageGenerationService {
   }
 
   /**
+   * Build a concise edit-style prompt for Flux Kontext
+   * Kontext preserves the reference image identity — we just describe the desired enhancement
+   */
+  private buildFluxKontextPrompt(context: MockupContext): string {
+    const refs = context.referenceImages || [];
+    const hasUploaded = refs.some(r => r.photoType === 'uploaded');
+
+    if (hasUploaded) {
+      // We're editing an actual house photo — enhance it like a real estate listing
+      return `Professional real estate listing photo of this exact house. Keep the house exactly as it is — same structure, colors, materials, windows, doors, roof, and proportions. Correct the perspective so the image is straight and level as if taken by a professional photographer standing at the curb. Enhance to look like a professional photograph: clear blue sky, bright natural daylight, green well-maintained lawn, clean and fresh appearance. Straight-on, level, street-level front view from the curb. Single photo, no collage, no text, no labels.`;
+    }
+
+    // We're working from a satellite/aerial image — create a street view interpretation
+    return `Convert this aerial/satellite view into a realistic street-level photograph of the house as seen from the curb. Interpret the roof shape and lot layout into a plausible front view. Use typical suburban exterior finishes. Clear blue sky, bright natural daylight, green lawn. Single photo, no collage, no text, no labels.`;
+  }
+
+  /**
    * Build a descriptive prompt for mockup generation
-   * Creates a comprehensive presentation board with blueprint and drone views
-   * When satellite image is provided, it should be used as the primary reference
+   * Three-tier strategy based on available reference imagery:
+   *   Case 1: User-uploaded photos available (best quality — photos are ground truth)
+   *   Case 2: Satellite image only (conservative interpretation)
+   *   Case 3: No images at all (text-only fallback)
    */
   private buildMockupPrompt(context: MockupContext): string {
-    const { projectType, projectDescription, formData, satelliteImageBase64 } = context;
+    const { projectType, projectDescription, propertyAddress } = context;
+    const refs = context.referenceImages || [];
 
-    // Extract relevant details from form data for context
-    const details: string[] = [];
-    const colorFields = ['color', 'colors', 'paint_color', 'exterior_color', 'material_color'];
-    const materialFields = ['material', 'materials', 'roofing_material', 'siding_material'];
-    const dimensionFields = ['height', 'width', 'length', 'size', 'dimensions', 'square_feet'];
+    const uploadedCount = refs.filter(r => r.photoType === 'uploaded').length;
+    const hasSatellite = refs.some(r => r.photoType === 'satellite') || !!context.satelliteImageBase64;
+    const hasNeighborhood = refs.some(r => r.photoType === 'neighborhood');
 
-    for (const [key, value] of Object.entries(formData)) {
-      const keyLower = key.toLowerCase();
-      if (colorFields.some(f => keyLower.includes(f)) && value) {
-        details.push(`${value} color`);
+    // Case 1: User photos available — highest fidelity
+    if (uploadedCount > 0) {
+      let prompt = `I am providing ${uploadedCount} photograph(s) of a real house at ${propertyAddress}. Generate a clean, enhanced version of this house as it would appear in a Google Street View photo taken from the street on a nice day.`;
+
+      if (hasSatellite) {
+        prompt += ` I am also providing a satellite/aerial view — use it only to understand the lot shape and driveway layout.`;
       }
-      if (materialFields.some(f => keyLower.includes(f)) && value) {
-        details.push(`${value} material`);
+      if (hasNeighborhood) {
+        prompt += ` I am also providing a neighborhood context image for surrounding area reference.`;
       }
-      if (dimensionFields.some(f => keyLower.includes(f)) && value) {
-        details.push(`${key}: ${value}`);
-      }
-    }
 
-    const projectContext = this.getProjectTypePrompt(projectType);
-    const detailsStr = details.length > 0 ? `Project details: ${details.join(', ')}. ` : '';
+      prompt += `
 
-    // Different prompt based on whether we have satellite imagery
-    if (satelliteImageBase64) {
-      // Satellite image is provided - create property-specific presentation
-      return `CRITICAL INSTRUCTION: The attached satellite image shows the ACTUAL PROPERTY. You MUST use this satellite image as your sole reference. Do NOT create a generic or imaginary house.
+WHAT TO PRESERVE (match the reference photos exactly):
+- The house's exact shape, size, and proportions
+- Exact exterior colors, siding material, and textures
+- Exact roof shape and material
+- Exact window and door placement
+- Garage style and position
+- Front yard landscaping, driveway, walkways as they actually appear
 
-TASK: Create a presentation board with TWO sections:
+WHAT TO ENHANCE (subtle improvements only):
+- Nice weather: clear blue sky, good natural daylight
+- Lawn looks green and mowed
+- Clean, well-maintained appearance
+- Good exposure and color balance like a real estate listing photo
 
-SECTION 1 - SITE PLAN/BLUEPRINT (Top half of image):
-- Trace the EXACT roof outline/building footprint you see in the satellite image
-- Trace the EXACT driveway shape and location from the satellite image
-- Trace any walkways, patios, pools, or hardscape visible in the satellite image
-- Show the neighboring houses' roof outlines as they appear in the satellite image
-- Mark property boundaries (estimate based on lawn edges/fences visible)
-- Add cardinal directions (N/S/E/W) and estimated dimensions
-- Style: Clean architectural line drawing, blue lines on white background
+CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture or a real estate listing photo. Show ONLY the front of the house.
 
-SECTION 2 - DRONE PERSPECTIVE VIEWS (Bottom half of image, 4 panels):
-- Create 4 ground-level perspective views of THIS EXACT HOUSE from the satellite image
-- Camera position: 10 feet high, 75 feet from the center of the house
-- Views: Front, Back, Left Side, Right Side
-- IMPORTANT: The house shape, roof style, and overall form MUST match what you see from above in the satellite image
-- Include the ACTUAL neighboring houses visible in the satellite image in the background
-- Include the ACTUAL landscaping, trees, driveway, and yard layout from the satellite image
-- Make it photorealistic but based on interpreting the satellite view into ground-level perspectives
-- The neighborhood context (adjacent houses, streets, trees) should match the satellite image
+DO NOT:
+- Show the side yard, backyard, or any view other than the front
+- Add any features not visible in the reference photos (no extra windows, dormers, chimneys, porches, or extensions)
+- Change the house's colors, materials, shape, or size
+- Add text, labels, measurements, watermarks, or borders
+- Create multiple panels, split views, or collages
+- Add people, vehicles, or animals
+- Create a blueprint, diagram, or floor plan
+- Make it look like a 3D render or architectural visualization — it should look like a real photograph
 
-DO NOT invent or imagine features. Only render what is actually visible or can be reasonably inferred from the satellite image.
-
-Project context: ${projectType}. ${projectContext}
 ${projectDescription}
-${detailsStr}`;
-    } else {
-      // No satellite image - generic presentation board
-      return `Create presentation board using this building design. Create a stunning blueprint of the property. Add measurements and distances of which you're highly confident. Label only streets that you're highly confident of and relevant cardinal directions. Provide 4 different drone views for each of the 4 sides of the house. The drones should all be 10 feet off the ground and positioned 75 feet from the center of the house. Avoid putting any window or door details on the sides of the house but do illustrate any landscaping, sidewalks, driveways, paths, etc. that you have a high confidence of. The drone photos should be hyper realistic. Make the presentation board cohesive and appealing with proper composition.
 
-Project type: ${projectType}. ${projectContext}
-Project description: ${projectDescription}
-${detailsStr}`;
+Generate one realistic street-view photograph of this house.`;
+
+      return prompt;
     }
+
+    // Case 2: Satellite only — conservative, street-view style
+    if (hasSatellite) {
+      let prompt = `I am providing a satellite/aerial view of a house at ${propertyAddress}. Based on the roof shape, lot layout, and driveway visible from above, generate a realistic street-view photograph of what this house likely looks like from the street.`;
+
+      if (hasNeighborhood) {
+        prompt += ` I am also providing a neighborhood context image for surrounding area reference.`;
+      }
+
+      prompt += `
+
+FROM THE SATELLITE IMAGE:
+- Match the roof shape and building footprint
+- Match the driveway position and shape
+- Match the yard layout and tree positions
+- Since you cannot see wall colors or details from above, use simple, neutral, typical suburban exterior finishes
+
+CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture. Show ONLY the front of the house.
+
+STYLE: A realistic photograph on a clear day. Not an architectural rendering — a real-looking photo like you'd see on Google Maps or a real estate listing.
+
+DO NOT:
+- Show the side yard, backyard, or any view other than the front
+- Invent elaborate architectural details not inferable from the aerial view
+- Add text, labels, measurements, watermarks, or borders
+- Create multiple panels, split views, or collages
+- Add people, vehicles, or animals
+- Create a blueprint or diagram
+
+${projectDescription}
+
+Generate one realistic street-view photograph of this house.`;
+
+      return prompt;
+    }
+
+    // Case 3: No images — text-only fallback
+    return `Generate a realistic street-view photograph of a typical suburban house at ${propertyAddress}.
+
+${projectDescription}
+
+CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture. Show ONLY the front of the house.
+
+STYLE: A realistic photograph on a clear day with a blue sky. Should look like a real estate listing photo or Google Street View — not an architectural rendering or 3D visualization.
+
+DO NOT:
+- Show the side yard, backyard, or any view other than the front
+- Add text, labels, measurements, watermarks, or borders
+- Create multiple panels, split views, or collages
+- Add people, vehicles, or animals
+
+Generate one realistic street-view photograph.`;
   }
 
   /**
@@ -266,8 +344,106 @@ ${detailsStr}`;
   }
 
   /**
-   * Generate image using Gemini 3 Pro Image (Google's latest multimodal image generation)
-   * Supports image-to-image generation - can use satellite imagery as reference
+   * Generate image using Flux Kontext Pro via fal.ai
+   * Purpose-built for reference-faithful image editing — preserves identity of input images
+   */
+  private async generateWithFluxKontext(
+    prompt: string,
+    context: MockupContext,
+    options: ImageGenerationOptions
+  ): Promise<GeneratedImage | null> {
+    const apiKey = getFalApiKey();
+    if (!apiKey) {
+      console.error('[ImageGen] fal.ai API key not configured. Set FAL_AI_API_KEY environment variable.');
+      return null;
+    }
+
+    // Pick the best reference image: prefer uploaded (ground truth), then satellite, then neighborhood
+    const refs = context.referenceImages ? [...context.referenceImages] : [];
+    if (refs.length === 0 && context.satelliteImageBase64) {
+      refs.push({ base64: context.satelliteImageBase64, mimeType: 'image/png', photoType: 'satellite' });
+    }
+
+    const bestRef = refs.find(r => r.photoType === 'uploaded')
+      || refs.find(r => r.photoType === 'satellite')
+      || refs.find(r => r.photoType === 'neighborhood');
+
+    if (!bestRef) {
+      console.warn('[ImageGen] Flux Kontext requires a reference image but none available. Falling back to Gemini.');
+      return this.generateWithGemini3Pro(prompt, context, options);
+    }
+
+    // Convert to data URI for fal.ai
+    const mimeType = bestRef.mimeType || 'image/jpeg';
+    const imageDataUri = `data:${mimeType};base64,${bestRef.base64}`;
+
+    console.log(`[ImageGen] Generating with Flux Kontext Pro: reference=${bestRef.photoType}, prompt=${prompt.substring(0, 100)}...`);
+
+    try {
+      const requestBody = {
+        prompt,
+        image_url: imageDataUri,
+        output_format: 'png' as const,
+        guidance_scale: 3.5,
+        safety_tolerance: '6',
+      };
+
+      const response = await fetch(FLUX_KONTEXT_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[ImageGen] Flux Kontext error:', response.status, errorText);
+        return null;
+      }
+
+      const data = await response.json() as {
+        images?: Array<{ url: string; width: number; height: number; content_type?: string }>;
+        prompt?: string;
+        seed?: number;
+        detail?: string;
+      };
+
+      if (!data.images || data.images.length === 0) {
+        console.error('[ImageGen] Flux Kontext returned no images:', data.detail || 'unknown error');
+        return null;
+      }
+
+      // Download the generated image from the returned URL
+      const imageUrl = data.images[0].url;
+      console.log(`[ImageGen] Flux Kontext image generated, downloading from ${imageUrl.substring(0, 60)}...`);
+
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        console.error('[ImageGen] Failed to download Flux Kontext result:', imageResponse.status);
+        return null;
+      }
+
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const base64 = Buffer.from(imageBuffer).toString('base64');
+
+      console.log('[ImageGen] Flux Kontext image downloaded successfully');
+      return {
+        base64,
+        mimeType: data.images[0].content_type || 'image/png',
+        provider: 'flux_kontext',
+        seed: data.seed,
+      };
+    } catch (error) {
+      console.error('[ImageGen] Flux Kontext generation error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate image using Gemini 3 Pro Image (Google's multimodal image generation)
+   * Supports multi-image input — sends labeled reference photos for faithful rendering
    */
   private async generateWithGemini3Pro(
     prompt: string,
@@ -280,28 +456,68 @@ ${detailsStr}`;
       return null;
     }
 
-    console.log(`[ImageGen] Generating with Gemini 3 Pro (${GEMINI3PRO_MODEL}): ${prompt.substring(0, 100)}...`);
+    // Build reference images list — merge referenceImages[] with legacy satelliteImageBase64
+    const refs = context.referenceImages ? [...context.referenceImages] : [];
+    if (refs.length === 0 && context.satelliteImageBase64) {
+      // Backward compat: convert legacy field into a reference image
+      refs.push({
+        base64: context.satelliteImageBase64,
+        mimeType: 'image/png',
+        photoType: 'satellite',
+      });
+    }
+
+    const uploadedRefs = refs.filter(r => r.photoType === 'uploaded');
+    const satelliteRefs = refs.filter(r => r.photoType === 'satellite');
+    const neighborhoodRefs = refs.filter(r => r.photoType === 'neighborhood');
+
+    console.log(`[ImageGen] Generating with Gemini 3 Pro (${GEMINI3PRO_MODEL}): ${uploadedRefs.length} uploaded, ${satelliteRefs.length} satellite, ${neighborhoodRefs.length} neighborhood reference images`);
 
     try {
-      // Build the request parts
+      // Build the request parts — text prompt FIRST, then images with labels
       const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
 
-      // Add satellite image as reference if available (image-to-image)
-      if (context.satelliteImageBase64) {
+      // Text prompt first (Gemini processes sequentially — instructions before images)
+      parts.push({ text: prompt });
+
+      // Add uploaded photos (ground truth — highest priority)
+      uploadedRefs.forEach((ref, i) => {
+        parts.push({
+          text: `[Reference Photo ${i + 1} of ${uploadedRefs.length}: Ground-level photograph of the actual house${ref.caption ? ` — ${ref.caption}` : ''}]`,
+        });
         parts.push({
           inlineData: {
-            mimeType: 'image/png',
-            data: context.satelliteImageBase64,
+            mimeType: ref.mimeType || 'image/jpeg',
+            data: ref.base64,
           },
         });
-        // Modify prompt to reference the input image
+      });
+
+      // Add satellite image (layout context)
+      satelliteRefs.forEach((ref) => {
         parts.push({
-          text: `Using the satellite image of the property as reference, ${prompt}`,
+          text: '[Satellite/Aerial View: Use for property layout context only]',
         });
-        console.log(`[ImageGen] Including satellite image as reference for property-specific generation`);
-      } else {
-        parts.push({ text: prompt });
-      }
+        parts.push({
+          inlineData: {
+            mimeType: ref.mimeType || 'image/png',
+            data: ref.base64,
+          },
+        });
+      });
+
+      // Add neighborhood context
+      neighborhoodRefs.forEach((ref) => {
+        parts.push({
+          text: '[Neighborhood Context: Wider area view for surrounding context]',
+        });
+        parts.push({
+          inlineData: {
+            mimeType: ref.mimeType || 'image/png',
+            data: ref.base64,
+          },
+        });
+      });
 
       const requestBody = {
         contents: [{
@@ -666,6 +882,7 @@ Style: Photorealistic, beautiful lighting, well-maintained landscaping.`;
       return this.defaultProvider;
     }
     // Fallback to any configured provider
+    if (this.isProviderConfigured('flux_kontext')) return 'flux_kontext';
     if (this.isProviderConfigured('gemini3pro')) return 'gemini3pro';
     if (this.isProviderConfigured('stability_ai')) return 'stability_ai';
     return null;

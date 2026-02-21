@@ -54,6 +54,7 @@ export interface Application {
   id: string;
   applicationNumber?: string;
   tenantId: string;
+  projectType?: string;
   formTemplateId: string;
   submittedByUserId: string;
   title?: string;

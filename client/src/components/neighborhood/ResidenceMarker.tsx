@@ -1,23 +1,31 @@
 import { useMemo } from 'react';
 import { OverlayViewF } from '@react-google-maps/api';
 import { Home } from 'lucide-react';
-import type { CommunityResidenceWithCount } from '@/lib/api';
+import type { CommunityResidenceWithCount, Application } from '@/lib/api';
 
 interface ResidenceMarkerProps {
   residence: CommunityResidenceWithCount;
   zoom: number;
   isSelected: boolean;
+  isEmphasized: boolean;
+  isHovered: boolean;
   photoUrl: string | null;
+  linkedApplications: Application[];
   onClick: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }
 
-type ZoomTier = 'dot' | 'pill' | 'card';
-
-function getZoomTier(zoom: number): ZoomTier {
-  if (zoom <= 14) return 'dot';
-  if (zoom <= 16) return 'pill';
-  return 'card';
-}
+const statusDotColors: Record<string, string> = {
+  pending: 'bg-gray-400',
+  submitted: 'bg-blue-500',
+  in_review: 'bg-yellow-500',
+  approved: 'bg-green-500',
+  rejected: 'bg-red-500',
+  needs_revision: 'bg-orange-500',
+  conditional: 'bg-purple-500',
+  withdrawn: 'bg-gray-400',
+};
 
 function getStreetNumber(address: string): string {
   const match = address.match(/^(\d+)/);
@@ -25,7 +33,6 @@ function getStreetNumber(address: string): string {
 }
 
 function getShortAddress(address: string): string {
-  // Take just "123 Oak St" style from "123 Oak Street, City, ST 12345"
   const parts = address.split(',');
   return parts[0]?.trim() || address;
 }
@@ -34,15 +41,23 @@ export function ResidenceMarker({
   residence,
   zoom,
   isSelected,
+  isEmphasized,
+  isHovered,
   photoUrl,
+  linkedApplications,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
 }: ResidenceMarkerProps) {
   const coords = residence.propertyCoordinates;
   if (!coords) return null;
 
-  const tier = getZoomTier(zoom);
   const streetNumber = useMemo(() => getStreetNumber(residence.propertyAddress), [residence.propertyAddress]);
   const shortAddress = useMemo(() => getShortAddress(residence.propertyAddress), [residence.propertyAddress]);
+
+  const showCard = isEmphasized || isHovered;
+  // At very low zoom, even emphasized residences collapse to dots
+  const forceCollapse = zoom <= 13;
 
   return (
     <OverlayViewF
@@ -58,27 +73,25 @@ export function ResidenceMarker({
           e.stopPropagation();
           onClick();
         }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
         className="cursor-pointer select-none"
         style={{ transition: 'all 0.2s ease-out' }}
       >
-        {tier === 'dot' && (
+        {forceCollapse || !showCard ? (
           <DotMarker
             streetNumber={streetNumber}
             isSelected={isSelected}
+            isEmphasized={isEmphasized}
+            zoom={zoom}
           />
-        )}
-        {tier === 'pill' && (
-          <PillMarker
-            shortAddress={shortAddress}
-            isSelected={isSelected}
-          />
-        )}
-        {tier === 'card' && (
+        ) : (
           <CardMarker
             residence={residence}
             shortAddress={shortAddress}
             photoUrl={photoUrl}
             isSelected={isSelected}
+            linkedApplications={linkedApplications}
           />
         )}
         {/* Pointer triangle */}
@@ -88,7 +101,7 @@ export function ResidenceMarker({
             style={{
               borderLeft: '6px solid transparent',
               borderRight: '6px solid transparent',
-              borderTop: `6px solid ${isSelected ? '#2563eb' : '#1f2937'}`,
+              borderTop: `6px solid ${isSelected ? '#2563eb' : isEmphasized ? '#059669' : '#1f2937'}`,
             }}
           />
         </div>
@@ -97,38 +110,36 @@ export function ResidenceMarker({
   );
 }
 
-function DotMarker({ streetNumber, isSelected }: { streetNumber: string; isSelected: boolean }) {
+function DotMarker({
+  streetNumber,
+  isSelected,
+  isEmphasized,
+  zoom,
+}: {
+  streetNumber: string;
+  isSelected: boolean;
+  isEmphasized: boolean;
+  zoom: number;
+}) {
+  const size = zoom <= 12 ? 22 : 28;
+  const fontSize = zoom <= 12 ? 9 : 11;
+
   return (
     <div
       className={`
         flex items-center justify-center rounded-full
-        text-white text-[11px] font-bold leading-none
+        text-white font-bold leading-none
         shadow-md border-2 border-white
-        ${isSelected ? 'bg-blue-600 ring-2 ring-blue-300' : 'bg-gray-800'}
+        ${isSelected ? 'bg-blue-600 ring-2 ring-blue-300' : isEmphasized ? 'bg-emerald-600 ring-1 ring-emerald-300' : 'bg-gray-800'}
       `}
       style={{
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
+        fontSize,
         transition: 'all 0.2s ease-out',
       }}
     >
       {streetNumber}
-    </div>
-  );
-}
-
-function PillMarker({ shortAddress, isSelected }: { shortAddress: string; isSelected: boolean }) {
-  return (
-    <div
-      className={`
-        inline-flex items-center px-2.5 py-1 rounded-full
-        text-white text-xs font-medium whitespace-nowrap
-        shadow-md border-2 border-white
-        ${isSelected ? 'bg-blue-600 ring-2 ring-blue-300' : 'bg-gray-800'}
-      `}
-      style={{ transition: 'all 0.2s ease-out' }}
-    >
-      {shortAddress}
     </div>
   );
 }
@@ -138,12 +149,30 @@ function CardMarker({
   shortAddress,
   photoUrl,
   isSelected,
+  linkedApplications,
 }: {
   residence: CommunityResidenceWithCount;
   shortAddress: string;
   photoUrl: string | null;
   isSelected: boolean;
+  linkedApplications: Application[];
 }) {
+  // Show up to 4 unique status dots
+  const statusDots = useMemo(() => {
+    const seen = new Set<string>();
+    const dots: { status: string; color: string }[] = [];
+    for (const app of linkedApplications) {
+      if (!seen.has(app.status) && dots.length < 4) {
+        seen.add(app.status);
+        dots.push({
+          status: app.status,
+          color: statusDotColors[app.status] || 'bg-gray-400',
+        });
+      }
+    }
+    return dots;
+  }, [linkedApplications]);
+
   return (
     <div
       className={`
@@ -177,9 +206,25 @@ function CardMarker({
           {residence.name && (
             <p className="text-[10px] text-gray-500 truncate">{shortAddress}</p>
           )}
-          <p className="text-[10px] text-gray-400 mt-0.5">
-            {residence.photoCount} photo{residence.photoCount !== 1 ? 's' : ''}
-          </p>
+          {/* Application status dots */}
+          {statusDots.length > 0 ? (
+            <div className="flex items-center gap-1 mt-1">
+              {statusDots.map((dot) => (
+                <div
+                  key={dot.status}
+                  className={`w-2 h-2 rounded-full ${dot.color}`}
+                  title={dot.status.replace(/_/g, ' ')}
+                />
+              ))}
+              <span className="text-[9px] text-gray-400 ml-0.5">
+                {linkedApplications.length} app{linkedApplications.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          ) : (
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {residence.photoCount} photo{residence.photoCount !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       </div>
     </div>
