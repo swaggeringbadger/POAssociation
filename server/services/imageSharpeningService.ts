@@ -7,6 +7,8 @@
  * Costs 1 AI credit per image enhancement.
  */
 
+import { promptRegistry } from '../prompts/promptRegistry';
+
 const GEMINI_MODEL = 'gemini-3-pro-image-preview';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
@@ -62,23 +64,7 @@ export class ImageSharpeningService {
       const apiKey = getGeminiApiKey();
       const base64Data = imageBuffer.toString('base64');
 
-      const prompt = `You are an expert image enhancement AI. I am providing you with a hero image for a community website.
-
-TASK: Enhance this image by:
-1. Improving sharpness and clarity
-2. Enhancing colors to make them more vibrant but natural
-3. Reducing any noise or compression artifacts
-4. Improving contrast for better visual appeal
-5. Maintaining the original composition and content
-
-CRITICAL REQUIREMENTS:
-- Generate an ENHANCED version of the EXACT SAME image
-- Do NOT change the subject matter or composition
-- Do NOT add or remove any elements
-- The output should look like a professionally edited version of the input
-- Keep the same aspect ratio
-
-Generate the enhanced image.`;
+      const prompt = promptRegistry.getPrompt('image-sharpening');
 
       const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
         method: 'POST',

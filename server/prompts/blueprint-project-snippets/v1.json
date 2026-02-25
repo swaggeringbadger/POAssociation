@@ -1,0 +1,12 @@
+{
+  "fence": "Show proposed fence line location, gate locations if applicable.",
+  "deck": "Show deck footprint location, connection to main structure.",
+  "roof": "Show roof plan view, existing structure outline, surrounding context.",
+  "solar": "Show roof plan with potential solar panel placement areas.",
+  "landscaping": "Show landscape plan with plant locations, hardscape areas.",
+  "addition": "Show building footprint with addition area highlighted.",
+  "shed": "Show shed placement relative to property lines and structures.",
+  "pool": "Show pool location if visible, equipment pad area.",
+  "driveway": "Show driveway layout, connection to street.",
+  "_default": "Show proposed improvement location relative to property boundaries."
+}

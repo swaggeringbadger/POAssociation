@@ -14,6 +14,7 @@ import * as schema from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import multer from "multer";
 import crypto from "crypto";
+import { promptRegistry } from "./prompts/promptRegistry";
 
 // Configure multer for in-memory file uploads
 const upload = multer({
@@ -704,50 +705,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeout: 2 * 60 * 1000,
       });
 
+      const promptContent = promptRegistry.getPrompt('public-resources-generation', {
+        ADDRESS_PARTS: addressParts,
+      });
+
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
           role: 'user',
-          content: `Generate a comprehensive list of public records and government resource links for a property owners association located in: ${addressParts}
-
-Research the specific county, city, and state for this location and provide REAL, accurate URLs for government websites. Organize into these categories using markdown:
-
-## Property Records & Taxes
-- County Property Appraiser (search property values, ownership)
-- Tax Collector (pay property taxes, tax certificates)
-- Clerk of Court / Register of Deeds (recorded documents, liens)
-
-## Building & Development
-- Building permits / inspections department
-- Code enforcement
-- Zoning / planning department
-
-## Flood & Environmental
-- FEMA flood map lookup
-- Local/regional flood district or water management
-- Environmental services
-
-## Utilities & Services
-- Water/sewer provider
-- Trash/recycling collection
-- Electric utility
-
-## Emergency & Safety
-- County Sheriff / local police non-emergency
-- Fire department / rescue
-- Hurricane preparedness / emergency management
-
-## Other Government Services
-- County Clerk (official records)
-- Voter registration / Supervisor of Elections
-- Local municipality website
-
-Format each entry as a markdown link with a brief description. Example:
-- [Walton County Property Appraiser](https://www.waltonpa.com/) - Search property values, ownership records, and exemptions
-
-Only include links you are confident are real and accurate. If you're unsure about a specific URL, use the most likely official government domain. Prefer .gov, .us, and .org domains.`
+          content: promptContent,
         }],
       });
 

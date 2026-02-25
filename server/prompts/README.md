@@ -1,125 +1,143 @@
-# AI Prompt Library
+# AI Prompt Library — Versioned
 
-This folder contains all prompt templates used for AI-powered features in the POA Association platform.
+This folder contains all 21 prompt templates used for AI-powered features in the POA Association platform, organized into a versioned directory structure.
+
+## Architecture
+
+Each prompt lives in its own directory with numbered version files:
+
+```
+server/prompts/
+├── registry.json                         # Maps prompt keys → active version numbers
+├── promptRegistry.ts                     # Centralized loader (singleton)
+├── README.md                             # This file
+├── form-generation-system/v1.md          # System prompt for AI form generation
+├── form-generation-user/v1.md            # User prompt for AI form generation
+├── analysis-system/v1.md                 # System prompt for compliance analysis
+├── analysis-user/v1.md                   # User prompt for compliance analysis
+├── breakdown-report-system/v1.md         # System prompt for breakdown report
+├── breakdown-report-user/v1.md           # User prompt for breakdown report
+├── property-research-system/v1.md        # System prompt for property research
+├── property-research-user/v1.md          # User prompt for property research
+├── public-resources-generation/v1.md     # Public government resource links
+├── flux-kontext-uploaded-photo/v1.md     # Flux Kontext: uploaded photo enhancement
+├── flux-kontext-satellite/v1.md          # Flux Kontext: satellite-to-street-view
+├── mockup-with-photos/v1.md              # Mockup with user-uploaded photos
+├── mockup-satellite-only/v1.md           # Mockup with only satellite imagery
+├── mockup-no-images/v1.md                # Mockup text-only fallback
+├── project-type-snippets/v1.json         # Project-type prompt snippets (JSON map)
+├── blueprint-with-satellite/v1.md        # Blueprint/site plan with satellite
+├── blueprint-no-satellite/v1.md          # Blueprint/site plan without satellite
+├── blueprint-project-snippets/v1.json    # Blueprint project-type snippets (JSON map)
+├── landscape-mockup-with-satellite/v1.md # Landscape mockup with satellite
+├── landscape-mockup-no-satellite/v1.md   # Landscape mockup without satellite
+└── image-sharpening/v1.md                # Image enhancement/sharpening
+```
+
+## Usage
+
+```typescript
+import { promptRegistry } from './prompts/promptRegistry';
+
+// Load a prompt with variable interpolation
+const prompt = promptRegistry.getPrompt('analysis-system');
+const prompt = promptRegistry.getPrompt('analysis-user', {
+  COMMUNITY_NAME: 'Markland Woods',
+  PROJECT_TYPE: 'fence',
+});
+
+// Load a JSON prompt (for key→value maps)
+const snippets = promptRegistry.getPromptJson('project-type-snippets');
+
+// List available versions
+promptRegistry.listVersions('analysis-system'); // [1]
+
+// Switch active version (updates registry.json on disk)
+promptRegistry.setActiveVersion('analysis-system', 2);
+
+// Reload registry after manual edits
+promptRegistry.reload();
+```
+
+## Creating a New Version
+
+1. Copy the current version file to a new version:
+   ```bash
+   cp server/prompts/analysis-system/v1.md server/prompts/analysis-system/v2.md
+   ```
+2. Edit `v2.md` with your changes
+3. Update `registry.json` to set `"activeVersion": 2` for that prompt
+4. Restart the server
+
+## Rolling Back
+
+Edit `registry.json` and change `"activeVersion"` back to the previous number, then restart.
 
 ## Prompt Categories
 
-### 1. Form Generation Prompts
+### Form Generation (2 prompts)
+- `form-generation-system` — System prompt defining Claude's role, JSON structure, field types
+- `form-generation-user` — User prompt with lot type extraction instructions
 
-Used when AI generates application forms from design guidelines.
+**Placeholders:** `{APPLICATION_TYPE}`, `{REFERENCE_ARCHITECTURE}`, `{EXAMPLE_FORM}`, `{DESIGN_GUIDELINES_CONTENT}`
 
-#### system-prompt.md
-The system prompt that defines Claude's role and the structure requirements for generated forms.
+### Application Analysis (2 prompts)
+- `analysis-system` — Compliance analyst role, scoring guidelines
+- `analysis-user` — Application context with form data and bylaws
 
-**Placeholders:**
-- `{APPLICATION_TYPE}` - The type of application (e.g., "exterior-modifications", "landscaping")
-- `{REFERENCE_ARCHITECTURE}` - The complete reference architecture documentation
-- `{EXAMPLE_FORM}` - An example form JSON for reference
+**Placeholders:** `{COMMUNITY_NAME}`, `{COMMUNITY_TYPE}`, `{APPLICATION_NUMBER}`, `{PROJECT_TYPE}`, `{PROJECT_TITLE}`, `{PROJECT_DESCRIPTION}`, `{PROPERTY_ADDRESS}`, `{SUBMITTED_DATE}`, `{FORM_DATA}`, `{FORM_SCHEMA}`, `{RELEVANT_BYLAWS}`, `{DESIGN_GUIDELINES_CONTENT}`, `{PROPERTY_RESEARCH_SUMMARY}`
 
-#### user-prompt.md
-The user prompt that instructs Claude how to process the design guidelines and extract lot types.
+### Breakdown Report (2 prompts)
+- `breakdown-report-system` — Comprehensive analysis with four score types
+- `breakdown-report-user` — Detailed application context with uploaded documents
 
-**Placeholders:**
-- `{APPLICATION_TYPE}` - The type of application
-- `{DESIGN_GUIDELINES_CONTENT}` - The actual design guidelines content (only used for HTML/text, not PDFs)
+**Additional placeholders:** `{COUNTY_JURISDICTION}`, `{LOT_TYPE}`, `{APPLICANT_NAME}`, `{UPLOADED_DOCUMENTS}`
 
----
+### Property Research (2 prompts)
+- `property-research-system` — Property research analyst role
+- `property-research-user` — Property info with research focus areas
 
-### 2. Application Analysis Prompts
+**Additional placeholders:** `{STATE_CODE}`, `{PARCEL_ID}`, `{SUBDIVISION}`, `{LOT_NUMBER}`, `{BLOCK_NUMBER}`, `{SPECIAL_CONSIDERATIONS}`
 
-Used for quick compliance analysis of submitted applications.
+### Public Resources (1 prompt)
+- `public-resources-generation` — Generates government resource links by location
 
-#### analysis-system-prompt.md
-Defines the compliance analyst role and JSON output structure for basic analysis.
+**Placeholders:** `{ADDRESS_PARTS}`
 
-**Output includes:**
-- Compliance score (0-100)
-- Risk level assessment
-- Bylaw compliance details
-- Risk assessment by category
-- Questions/concerns for committee
-- Approval recommendations
+### Image Generation — Mockups (5 prompts + 1 JSON)
+- `flux-kontext-uploaded-photo` — Edit-style prompt for uploaded photo enhancement
+- `flux-kontext-satellite` — Edit-style prompt for satellite-to-street-view
+- `mockup-with-photos` — Full descriptive mockup with user photos
+- `mockup-satellite-only` — Conservative mockup from satellite only
+- `mockup-no-images` — Text-only fallback mockup
+- `project-type-snippets` — JSON map of project-type prompt additions
 
-#### analysis-user-prompt.md
-Provides application context for analysis.
+**Placeholders:** `{UPLOADED_COUNT}`, `{PROPERTY_ADDRESS}`, `{SATELLITE_BLOCK}`, `{NEIGHBORHOOD_BLOCK}`, `{PROJECT_DESCRIPTION}`
 
-**Placeholders:**
-- `{COMMUNITY_NAME}`, `{COMMUNITY_TYPE}`
-- `{APPLICATION_NUMBER}`, `{PROJECT_TYPE}`, `{PROJECT_TITLE}`
-- `{PROJECT_DESCRIPTION}`, `{PROPERTY_ADDRESS}`
-- `{SUBMITTED_DATE}`
-- `{FORM_DATA}`, `{FORM_SCHEMA}`, `{RELEVANT_BYLAWS}`
-- `{DESIGN_GUIDELINES_CONTENT}`
+### Image Generation — Blueprints (2 prompts + 1 JSON)
+- `blueprint-with-satellite` — Site plan tracing satellite image
+- `blueprint-no-satellite` — Generic site plan
+- `blueprint-project-snippets` — JSON map of blueprint project additions
 
----
+**Placeholders:** `{BLUEPRINT_PROJECT_PROMPT}`, `{PROJECT_DESCRIPTION}`, `{LANDSCAPE_ELEMENTS}`
 
-### 3. Breakdown Report Prompts (Comprehensive Analysis)
+### Image Generation — Landscape (2 prompts)
+- `landscape-mockup-with-satellite` — Landscape visualization with satellite
+- `landscape-mockup-no-satellite` — Landscape visualization without satellite
 
-Used for detailed application breakdown reports with issue categorization.
+**Placeholders:** `{PROPERTY_ADDRESS}`, `{PROJECT_TYPE}`, `{PROJECT_CONTEXT}`, `{PROJECT_DESCRIPTION}`
 
-#### breakdown-report-system-prompt.md
-Defines comprehensive analysis role with detailed scoring criteria.
+### Image Enhancement (1 prompt)
+- `image-sharpening` — Hero image enhancement prompt
 
-**Output includes:**
-- **Report Summary**: Overall scores for completeness, correctness, community compliance, regulatory compliance
-- **Completeness Analysis**: Required/optional items provided and missing
-- **Correctness Analysis**: Verified information and inconsistencies
-- **Community Compliance Analysis**: Compliant, non-compliant, and unclear areas
-- **Regulatory Compliance Analysis**: Applicable regulations, permits, inspections
-- **Issues**: Categorized as Critical, Moderate, or Low with resolution steps
-- **Questions for Homeowner**: Clarifications, elaborations, document requests
-- **Recommendations**: Primary recommendation with conditions and next steps
+## PDF Support
 
-#### breakdown-report-user-prompt.md
-Provides detailed application context for comprehensive analysis.
-
-**Placeholders:**
-- `{COMMUNITY_NAME}`, `{COMMUNITY_TYPE}`, `{COUNTY_JURISDICTION}`
-- `{APPLICATION_NUMBER}`, `{PROJECT_TYPE}`, `{PROJECT_TITLE}`
-- `{PROJECT_DESCRIPTION}`, `{PROPERTY_ADDRESS}`, `{LOT_TYPE}`
-- `{SUBMITTED_DATE}`, `{APPLICANT_NAME}`
-- `{FORM_DATA}`, `{FORM_SCHEMA}`, `{RELEVANT_BYLAWS}`
-- `{UPLOADED_DOCUMENTS}`
-- `{DESIGN_GUIDELINES_CONTENT}`
-
----
-
-## How PDF Support Works
-
-When the design guidelines URL points to a PDF:
-1. The service downloads the PDF as a binary buffer
-2. The PDF is sent to Claude as a `document` source (base64-encoded)
-3. Claude natively reads and analyzes the PDF content
-4. The `{DESIGN_GUIDELINES_CONTENT}` placeholder is NOT used (PDF sent separately)
-
-When the design guidelines URL points to HTML/text:
-1. The service downloads and strips HTML tags
-2. The text content is inserted into the `{DESIGN_GUIDELINES_CONTENT}` placeholder
-3. The complete prompt is sent to Claude as text
-
----
-
-## Editing Prompts
-
-You can edit these prompts directly without modifying code:
-1. Edit the `.md` files in this folder
-2. Save your changes
-3. Restart the server (or let it hot-reload if watching)
-4. New AI operations will use the updated prompts
-
-## Testing Changes
-
-To test prompt changes:
-1. Edit the prompt files
-2. Trigger the relevant AI feature (form generation, analysis, breakdown report)
-3. Review the output to see if your changes had the desired effect
-4. Check server logs for any JSON parsing errors
+When design guidelines are PDF documents, they are sent to Claude as base64-encoded document blocks rather than being inserted into the `{DESIGN_GUIDELINES_CONTENT}` placeholder.
 
 ## Important Notes
 
-- All prompts should produce valid JSON output
-- The prompts emphasize NOT inventing information - only extracting what's explicitly provided
+- All analysis prompts produce valid JSON output
+- Prompts emphasize NOT inventing information — only extract what's explicitly provided
 - Always include specific section/page references when citing bylaws
-- Lot types are critical for communities where requirements vary by lot type
-- Issue severity levels (critical/moderate/low) have specific definitions - follow them
-- Critical issues should block approval; moderate and low should not
+- Issue severity levels (critical/moderate/low) have specific definitions
+- The in-memory cache in promptRegistry clears when versions change

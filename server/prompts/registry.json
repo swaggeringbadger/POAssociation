@@ -1,0 +1,25 @@
+{
+  "prompts": {
+    "form-generation-system": { "activeVersion": 1, "description": "System prompt for AI form generation" },
+    "form-generation-user": { "activeVersion": 1, "description": "User prompt for AI form generation" },
+    "analysis-system": { "activeVersion": 1, "description": "System prompt for compliance analysis" },
+    "analysis-user": { "activeVersion": 1, "description": "User prompt for compliance analysis" },
+    "breakdown-report-system": { "activeVersion": 1, "description": "System prompt for breakdown report" },
+    "breakdown-report-user": { "activeVersion": 1, "description": "User prompt for breakdown report" },
+    "property-research-system": { "activeVersion": 1, "description": "System prompt for property research" },
+    "property-research-user": { "activeVersion": 1, "description": "User prompt for property research" },
+    "public-resources-generation": { "activeVersion": 1, "description": "Prompt for generating public government resource links" },
+    "flux-kontext-uploaded-photo": { "activeVersion": 1, "description": "Flux Kontext prompt for uploaded photo enhancement" },
+    "flux-kontext-satellite": { "activeVersion": 1, "description": "Flux Kontext prompt for satellite-to-street-view conversion" },
+    "mockup-with-photos": { "activeVersion": 1, "description": "Mockup prompt when user photos are available" },
+    "mockup-satellite-only": { "activeVersion": 1, "description": "Mockup prompt with only satellite imagery" },
+    "mockup-no-images": { "activeVersion": 1, "description": "Mockup prompt with no reference images (text-only)" },
+    "project-type-snippets": { "activeVersion": 1, "description": "Project-type-specific prompt snippets for mockups" },
+    "blueprint-with-satellite": { "activeVersion": 1, "description": "Blueprint/site plan prompt with satellite reference" },
+    "blueprint-no-satellite": { "activeVersion": 1, "description": "Blueprint/site plan prompt without satellite" },
+    "blueprint-project-snippets": { "activeVersion": 1, "description": "Project-type-specific blueprint prompt snippets" },
+    "landscape-mockup-with-satellite": { "activeVersion": 1, "description": "Landscape mockup prompt with satellite reference" },
+    "landscape-mockup-no-satellite": { "activeVersion": 1, "description": "Landscape mockup prompt without satellite" },
+    "image-sharpening": { "activeVersion": 1, "description": "Image enhancement/sharpening prompt" }
+  }
+}

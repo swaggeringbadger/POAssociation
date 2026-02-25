@@ -11,6 +11,8 @@
  * based on application details and satellite imagery.
  */
 
+import { promptRegistry } from '../prompts/promptRegistry';
+
 // Provider types
 export type ImageProvider = 'stability_ai' | 'gemini3pro' | 'flux_kontext';
 
@@ -133,12 +135,10 @@ export class ImageGenerationService {
     const hasUploaded = refs.some(r => r.photoType === 'uploaded');
 
     if (hasUploaded) {
-      // We're editing an actual house photo — enhance it like a real estate listing
-      return `Professional real estate listing photo of this exact house. Keep the house exactly as it is — same structure, colors, materials, windows, doors, roof, and proportions. Correct the perspective so the image is straight and level as if taken by a professional photographer standing at the curb. Enhance to look like a professional photograph: clear blue sky, bright natural daylight, green well-maintained lawn, clean and fresh appearance. Straight-on, level, street-level front view from the curb. Single photo, no collage, no text, no labels.`;
+      return promptRegistry.getPrompt('flux-kontext-uploaded-photo');
     }
 
-    // We're working from a satellite/aerial image — create a street view interpretation
-    return `Convert this aerial/satellite view into a realistic street-level photograph of the house as seen from the curb. Interpret the roof shape and lot layout into a plausible front view. Use typical suburban exterior finishes. Clear blue sky, bright natural daylight, green lawn. Single photo, no collage, no text, no labels.`;
+    return promptRegistry.getPrompt('flux-kontext-satellite');
   }
 
   /**
@@ -149,7 +149,7 @@ export class ImageGenerationService {
    *   Case 3: No images at all (text-only fallback)
    */
   private buildMockupPrompt(context: MockupContext): string {
-    const { projectType, projectDescription, propertyAddress } = context;
+    const { projectDescription, propertyAddress } = context;
     const refs = context.referenceImages || [];
 
     const uploadedCount = refs.filter(r => r.photoType === 'uploaded').length;
@@ -158,130 +158,55 @@ export class ImageGenerationService {
 
     // Case 1: User photos available — highest fidelity
     if (uploadedCount > 0) {
-      let prompt = `I am providing ${uploadedCount} photograph(s) of a real house at ${propertyAddress}. Generate a clean, enhanced version of this house as it would appear in a Google Street View photo taken from the street on a nice day.`;
+      const satelliteBlock = hasSatellite
+        ? ` I am also providing a satellite/aerial view — use it only to understand the lot shape and driveway layout.`
+        : '';
+      const neighborhoodBlock = hasNeighborhood
+        ? ` I am also providing a neighborhood context image for surrounding area reference.`
+        : '';
 
-      if (hasSatellite) {
-        prompt += ` I am also providing a satellite/aerial view — use it only to understand the lot shape and driveway layout.`;
-      }
-      if (hasNeighborhood) {
-        prompt += ` I am also providing a neighborhood context image for surrounding area reference.`;
-      }
-
-      prompt += `
-
-WHAT TO PRESERVE (match the reference photos exactly):
-- The house's exact shape, size, and proportions
-- Exact exterior colors, siding material, and textures
-- Exact roof shape and material
-- Exact window and door placement
-- Garage style and position
-- Front yard landscaping, driveway, walkways as they actually appear
-
-WHAT TO ENHANCE (subtle improvements only):
-- Nice weather: clear blue sky, good natural daylight
-- Lawn looks green and mowed
-- Clean, well-maintained appearance
-- Good exposure and color balance like a real estate listing photo
-
-CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture or a real estate listing photo. Show ONLY the front of the house.
-
-DO NOT:
-- Show the side yard, backyard, or any view other than the front
-- Add any features not visible in the reference photos (no extra windows, dormers, chimneys, porches, or extensions)
-- Change the house's colors, materials, shape, or size
-- Add text, labels, measurements, watermarks, or borders
-- Create multiple panels, split views, or collages
-- Add people, vehicles, or animals
-- Create a blueprint, diagram, or floor plan
-- Make it look like a 3D render or architectural visualization — it should look like a real photograph
-
-${projectDescription}
-
-Generate one realistic street-view photograph of this house.`;
-
-      return prompt;
+      return promptRegistry.getPrompt('mockup-with-photos', {
+        UPLOADED_COUNT: String(uploadedCount),
+        PROPERTY_ADDRESS: propertyAddress,
+        SATELLITE_BLOCK: satelliteBlock,
+        NEIGHBORHOOD_BLOCK: neighborhoodBlock,
+        PROJECT_DESCRIPTION: projectDescription,
+      });
     }
 
     // Case 2: Satellite only — conservative, street-view style
     if (hasSatellite) {
-      let prompt = `I am providing a satellite/aerial view of a house at ${propertyAddress}. Based on the roof shape, lot layout, and driveway visible from above, generate a realistic street-view photograph of what this house likely looks like from the street.`;
+      const neighborhoodBlock = hasNeighborhood
+        ? ` I am also providing a neighborhood context image for surrounding area reference.`
+        : '';
 
-      if (hasNeighborhood) {
-        prompt += ` I am also providing a neighborhood context image for surrounding area reference.`;
-      }
-
-      prompt += `
-
-FROM THE SATELLITE IMAGE:
-- Match the roof shape and building footprint
-- Match the driveway position and shape
-- Match the yard layout and tree positions
-- Since you cannot see wall colors or details from above, use simple, neutral, typical suburban exterior finishes
-
-CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture. Show ONLY the front of the house.
-
-STYLE: A realistic photograph on a clear day. Not an architectural rendering — a real-looking photo like you'd see on Google Maps or a real estate listing.
-
-DO NOT:
-- Show the side yard, backyard, or any view other than the front
-- Invent elaborate architectural details not inferable from the aerial view
-- Add text, labels, measurements, watermarks, or borders
-- Create multiple panels, split views, or collages
-- Add people, vehicles, or animals
-- Create a blueprint or diagram
-
-${projectDescription}
-
-Generate one realistic street-view photograph of this house.`;
-
-      return prompt;
+      return promptRegistry.getPrompt('mockup-satellite-only', {
+        PROPERTY_ADDRESS: propertyAddress,
+        NEIGHBORHOOD_BLOCK: neighborhoodBlock,
+        PROJECT_DESCRIPTION: projectDescription,
+      });
     }
 
     // Case 3: No images — text-only fallback
-    return `Generate a realistic street-view photograph of a typical suburban house at ${propertyAddress}.
-
-${projectDescription}
-
-CAMERA: Standing on the street or sidewalk directly in front of the house, looking at the front. Eye level. Like a Google Street View capture. Show ONLY the front of the house.
-
-STYLE: A realistic photograph on a clear day with a blue sky. Should look like a real estate listing photo or Google Street View — not an architectural rendering or 3D visualization.
-
-DO NOT:
-- Show the side yard, backyard, or any view other than the front
-- Add text, labels, measurements, watermarks, or borders
-- Create multiple panels, split views, or collages
-- Add people, vehicles, or animals
-
-Generate one realistic street-view photograph.`;
+    return promptRegistry.getPrompt('mockup-no-images', {
+      PROPERTY_ADDRESS: propertyAddress,
+      PROJECT_DESCRIPTION: projectDescription,
+    });
   }
 
   /**
    * Get project-type-specific prompt additions
    */
   private getProjectTypePrompt(projectType: string): string {
-    const prompts: Record<string, string> = {
-      fence: 'New residential fence installation, property boundary visible, well-maintained lawn.',
-      deck: 'Outdoor deck or patio addition, connected to house, deck furniture visible.',
-      roof: 'Roofing project showing house with new roof, aerial angle view.',
-      solar: 'Solar panel installation on residential roof, modern clean energy aesthetic.',
-      landscaping: 'Landscape design, garden beds, trees, and hardscape elements visible.',
-      exterior_paint: 'House exterior paint, fresh paint job, curb appeal view.',
-      addition: 'Home addition or extension, seamlessly integrated with existing structure.',
-      shed: 'Backyard storage shed or outbuilding, matching home style.',
-      pool: 'Swimming pool installation, backyard view, pool deck and landscaping.',
-      driveway: 'Driveway paving or resurfacing, front of house view.',
-      window: 'Window replacement or installation, visible from exterior.',
-      door: 'Door replacement, entry door or garage door view.',
-    };
+    const snippets = promptRegistry.getPromptJson<Record<string, string>>('project-type-snippets');
 
-    // Find matching project type or return generic
-    for (const [key, prompt] of Object.entries(prompts)) {
-      if (projectType.toLowerCase().includes(key)) {
-        return prompt;
+    for (const [key, snippet] of Object.entries(snippets)) {
+      if (key !== '_default' && projectType.toLowerCase().includes(key)) {
+        return snippet;
       }
     }
 
-    return 'Home improvement project, residential property exterior view.';
+    return snippets._default || 'Home improvement project, residential property exterior view.';
   }
 
   /**
@@ -651,41 +576,12 @@ Generate one realistic street-view photograph.`;
 
     const projectSpecific = this.getBlueprintProjectPrompt(projectType);
 
-    if (satelliteImageBase64) {
-      // Satellite image provided - trace the actual property
-      return `CRITICAL: The attached satellite image shows the ACTUAL PROPERTY. Create a site plan by TRACING what you see.
-
-Create a professional site plan of THIS EXACT PROPERTY by carefully analyzing the satellite image:
-
-REQUIRED - Trace these elements EXACTLY as they appear in the satellite image:
-1. The EXACT roof/building outline - trace the actual shape you see from above
-2. The EXACT driveway - trace its actual shape, curves, and position
-3. Any visible walkways, patios, decks, or concrete areas
-4. Fences or property line indicators if visible
-5. Trees and major landscape features (show as circles where you see tree canopies)
-6. The neighboring houses' outlines (trace them too for context)
-
-ADD these elements:
-- Compass rose showing North (estimate based on shadow direction if visible)
-- Property boundary lines (estimate from lawn edges, fences, or driveways)
-
-IMPORTANT: Do NOT add any measurements, dimensions, or scale bars. Do NOT invent or imagine features that are not clearly visible in the satellite image (e.g., don't add a pool unless you can clearly see one).
-
-${projectSpecific}
-${projectDescription}
-${landscapeStr}
-
-Style: Clean architectural site plan - blue/dark lines on white background, professional CAD-style.
-This must be a traced representation of the ACTUAL property in the satellite image, NOT a generic house plan.`;
-    } else {
-      return `Professional architectural site plan drawing. Clean technical drawing with property layout.
-${projectSpecific}
-${projectDescription}
-${landscapeStr}
-Include: property boundaries, building footprint, existing structures, compass rose indicating north.
-Do NOT include any measurements, dimensions, or scale bars.
-Style: Clean blue and white technical drawing, architectural site plan aesthetic, clear line work, professional presentation.`;
-    }
+    const promptKey = satelliteImageBase64 ? 'blueprint-with-satellite' : 'blueprint-no-satellite';
+    return promptRegistry.getPrompt(promptKey, {
+      BLUEPRINT_PROJECT_PROMPT: projectSpecific,
+      PROJECT_DESCRIPTION: projectDescription,
+      LANDSCAPE_ELEMENTS: landscapeStr,
+    });
   }
 
   /**
@@ -693,25 +589,15 @@ Style: Clean blue and white technical drawing, architectural site plan aesthetic
    * NOTE: No dimensions/measurements - they were often inaccurate
    */
   private getBlueprintProjectPrompt(projectType: string): string {
-    const prompts: Record<string, string> = {
-      fence: 'Show proposed fence line location, gate locations if applicable.',
-      deck: 'Show deck footprint location, connection to main structure.',
-      roof: 'Show roof plan view, existing structure outline, surrounding context.',
-      solar: 'Show roof plan with potential solar panel placement areas.',
-      landscaping: 'Show landscape plan with plant locations, hardscape areas.',
-      addition: 'Show building footprint with addition area highlighted.',
-      shed: 'Show shed placement relative to property lines and structures.',
-      pool: 'Show pool location if visible, equipment pad area.',
-      driveway: 'Show driveway layout, connection to street.',
-    };
+    const snippets = promptRegistry.getPromptJson<Record<string, string>>('blueprint-project-snippets');
 
-    for (const [key, prompt] of Object.entries(prompts)) {
-      if (projectType.toLowerCase().includes(key)) {
-        return prompt;
+    for (const [key, snippet] of Object.entries(snippets)) {
+      if (key !== '_default' && projectType.toLowerCase().includes(key)) {
+        return snippet;
       }
     }
 
-    return 'Show proposed improvement location relative to property boundaries.';
+    return snippets._default || 'Show proposed improvement location relative to property boundaries.';
   }
 
   /**
@@ -757,43 +643,13 @@ Style: Clean blue and white technical drawing, architectural site plan aesthetic
 
     const projectContext = this.getProjectTypePrompt(projectType);
 
-    if (satelliteImageBase64) {
-      return `CRITICAL: The attached satellite image shows the ACTUAL PROPERTY at ${propertyAddress}. Use this as your reference.
-
-Create a stunning landscape mockup visualization of THIS EXACT PROPERTY:
-
-REQUIREMENTS:
-1. Study the satellite image carefully - note the exact house shape, roof style, driveway position, yard layout
-2. Create a beautiful ground-level perspective view of the property as if photographed from the street
-3. The house structure, landscaping, and layout MUST match what you see in the satellite image
-4. Add measurements and distances ONLY where you are highly confident (based on typical residential dimensions)
-5. Label any visible streets if you can identify them with high confidence
-6. Include cardinal directions (N/S/E/W) based on the satellite image orientation
-
-STYLE:
-- Photorealistic rendering
-- Beautiful lighting (golden hour preferred)
-- Well-maintained landscaping appearance
-- Professional real estate photography aesthetic
-
-Project context: ${projectType}. ${projectContext}
-${projectDescription}
-
-IMPORTANT: Base the visualization on the ACTUAL property in the satellite image, not a generic house.`;
-    } else {
-      return `Create a stunning landscape mockup visualization of a residential property.
-
-REQUIREMENTS:
-1. Create a beautiful ground-level perspective view as if photographed from the street
-2. Add measurements and distances where you are highly confident
-3. Label streets and include relevant cardinal directions
-4. Professional real estate photography aesthetic
-
-Project type: ${projectType}. ${projectContext}
-${projectDescription}
-
-Style: Photorealistic, beautiful lighting, well-maintained landscaping.`;
-    }
+    const promptKey = satelliteImageBase64 ? 'landscape-mockup-with-satellite' : 'landscape-mockup-no-satellite';
+    return promptRegistry.getPrompt(promptKey, {
+      PROPERTY_ADDRESS: propertyAddress,
+      PROJECT_TYPE: projectType,
+      PROJECT_CONTEXT: projectContext,
+      PROJECT_DESCRIPTION: projectDescription,
+    });
   }
 
   /**

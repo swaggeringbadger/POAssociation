@@ -12,9 +12,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { storage } from '../storage';
+import { promptRegistry } from '../prompts/promptRegistry';
 import { aiContextService, type AggregatedContext } from './aiContextService';
 import {
   AiAnalysisResultSchema,
@@ -103,7 +102,7 @@ export class AiAnalysisService {
 
     // Step 4: Build prompts
     console.log(`[AiAnalysis] Building prompts for ${analysisRecord.id}`);
-    const systemPrompt = this.loadPromptTemplate('analysis-system-prompt.md');
+    const systemPrompt = promptRegistry.getPrompt('analysis-system');
     const userPrompt = this.buildUserPrompt(context, designGuidelines, propertyResearchSummary);
 
     // Step 5: Call Anthropic API (with PDF documents if available)
@@ -370,23 +369,10 @@ export class AiAnalysisService {
   }
 
   /**
-   * Load prompt template from file
-   */
-  private loadPromptTemplate(filename: string): string {
-    try {
-      const promptPath = join(process.cwd(), 'server', 'prompts', filename);
-      return readFileSync(promptPath, 'utf-8');
-    } catch (error) {
-      console.error(`[AiAnalysis] Error loading prompt ${filename}:`, error);
-      throw new Error(`Failed to load prompt template: ${filename}`);
-    }
-  }
-
-  /**
    * Build the user prompt with all context data
    */
   private buildUserPrompt(context: AnalysisContext, designGuidelines: string, propertyResearchSummary?: string): string {
-    const template = this.loadPromptTemplate('analysis-user-prompt.md');
+    const template = promptRegistry.getPrompt('analysis-user');
 
     // Format form data for display
     const formDataFormatted = this.formatFormData(context.application.formData);
@@ -729,7 +715,7 @@ export class AiAnalysisService {
 
     // Step 3: Build breakdown report prompts
     console.log(`[AiAnalysis] Building breakdown prompts for ${analysisRecord.id}`);
-    const systemPrompt = this.loadPromptTemplate('breakdown-report-system-prompt.md');
+    const systemPrompt = promptRegistry.getPrompt('breakdown-report-system');
     const userPrompt = this.buildBreakdownUserPrompt(context, designGuidelines);
 
     // Step 4: Call Anthropic API
@@ -806,7 +792,7 @@ export class AiAnalysisService {
    * Build the user prompt for breakdown report
    */
   private buildBreakdownUserPrompt(context: BreakdownAnalysisContext, designGuidelines: string): string {
-    const template = this.loadPromptTemplate('breakdown-report-user-prompt.md');
+    const template = promptRegistry.getPrompt('breakdown-report-user');
 
     // Format form data for display
     const formDataFormatted = this.formatFormData(context.application.formData);
@@ -928,7 +914,7 @@ export class AiAnalysisService {
 
     // Step 2: Build property research prompts
     console.log(`[AiAnalysis] Building property research prompts for ${analysisRecord.id}`);
-    const systemPrompt = this.loadPromptTemplate('property-research-system-prompt.md');
+    const systemPrompt = promptRegistry.getPrompt('property-research-system');
     const userPrompt = this.buildPropertyResearchUserPrompt(context);
 
     // Step 3: Call Anthropic API
@@ -1007,7 +993,7 @@ export class AiAnalysisService {
    * Build the user prompt for property research
    */
   private buildPropertyResearchUserPrompt(context: PropertyResearchContext): string {
-    const template = this.loadPromptTemplate('property-research-user-prompt.md');
+    const template = promptRegistry.getPrompt('property-research-user');
 
     // Format form data for display
     const formDataFormatted = this.formatFormData(context.application.formData);

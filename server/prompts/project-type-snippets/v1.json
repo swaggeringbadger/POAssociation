@@ -1,0 +1,15 @@
+{
+  "fence": "New residential fence installation, property boundary visible, well-maintained lawn.",
+  "deck": "Outdoor deck or patio addition, connected to house, deck furniture visible.",
+  "roof": "Roofing project showing house with new roof, aerial angle view.",
+  "solar": "Solar panel installation on residential roof, modern clean energy aesthetic.",
+  "landscaping": "Landscape design, garden beds, trees, and hardscape elements visible.",
+  "exterior_paint": "House exterior paint, fresh paint job, curb appeal view.",
+  "addition": "Home addition or extension, seamlessly integrated with existing structure.",
+  "shed": "Backyard storage shed or outbuilding, matching home style.",
+  "pool": "Swimming pool installation, backyard view, pool deck and landscaping.",
+  "driveway": "Driveway paving or resurfacing, front of house view.",
+  "window": "Window replacement or installation, visible from exterior.",
+  "door": "Door replacement, entry door or garage door view.",
+  "_default": "Home improvement project, residential property exterior view."
+}

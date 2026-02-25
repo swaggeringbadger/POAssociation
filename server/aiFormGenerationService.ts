@@ -19,6 +19,7 @@ import type {
   FormValidationResult,
 } from '../shared/formTypes';
 import { aiContextService, type AggregatedContext } from './services/aiContextService';
+import { promptRegistry } from './prompts/promptRegistry';
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -102,18 +103,6 @@ export class AIFormGenerationService {
     }
   }
 
-  /**
-   * Load prompt template from file
-   */
-  private loadPromptTemplate(filename: string): string {
-    try {
-      const promptPath = join(process.cwd(), 'server', 'prompts', filename);
-      return readFileSync(promptPath, 'utf-8');
-    } catch (error) {
-      console.error(`Error loading prompt template ${filename}:`, error);
-      throw new Error(`Failed to load prompt template: ${filename}`);
-    }
-  }
 
   /**
    * Escape unescaped newlines inside JSON strings
@@ -172,21 +161,20 @@ export class AIFormGenerationService {
     referenceArchitecture: string,
     exampleForm: string
   ): string {
-    const template = this.loadPromptTemplate('system-prompt.md');
-
-    return template
-      .replace(/{APPLICATION_TYPE}/g, applicationType)
-      .replace(/{REFERENCE_ARCHITECTURE}/g, referenceArchitecture)
-      .replace(/{EXAMPLE_FORM}/g, exampleForm);
+    return promptRegistry.getPrompt('form-generation-system', {
+      APPLICATION_TYPE: applicationType,
+      REFERENCE_ARCHITECTURE: referenceArchitecture,
+      EXAMPLE_FORM: exampleForm,
+    });
   }
 
   /**
    * Build the user prompt with design guidelines
    */
   private buildUserPrompt(applicationType: ApplicationType): string {
-    const template = this.loadPromptTemplate('user-prompt.md');
-
-    return template.replace(/{APPLICATION_TYPE}/g, applicationType);
+    return promptRegistry.getPrompt('form-generation-user', {
+      APPLICATION_TYPE: applicationType,
+    });
   }
 
   /**
