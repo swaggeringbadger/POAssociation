@@ -11,8 +11,13 @@ import { useEffect, useState } from "react";
 export default function MarklandExample() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const { currentTenant } = useAppStore();
+  const { currentTenant, setCurrentPageTitle } = useAppStore();
   const [formTemplateId, setFormTemplateId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentPageTitle("Demo Application");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   const { data: tenants } = useQuery({
     queryKey: ["tenants"],

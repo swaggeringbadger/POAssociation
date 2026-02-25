@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { useAppStore } from "@/lib/store";
 import {
   getEvent,
   getEventAgenda,
@@ -91,6 +92,7 @@ export default function MeetingAgenda() {
   const { eventId } = useParams<{ eventId: string }>();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { setCurrentPageTitle } = useAppStore();
 
   // Dialog states
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
@@ -114,6 +116,14 @@ export default function MeetingAgenda() {
     queryFn: () => getEvent(eventId!),
     enabled: !!eventId,
   });
+
+  // Set page title from event name
+  useEffect(() => {
+    if (event) {
+      setCurrentPageTitle(`${event.title} — Agenda`);
+    }
+    return () => setCurrentPageTitle(null);
+  }, [event?.title, setCurrentPageTitle]);
 
   // Fetch agenda
   const { data: agenda, isLoading: agendaLoading } = useQuery({

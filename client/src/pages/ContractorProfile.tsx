@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import {
   Loader2, Building2, Wrench, Phone, Mail, Globe,
   FileText, Copy, QrCode, RefreshCw, Share2, CheckCircle
@@ -56,7 +57,13 @@ export default function ContractorProfile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { setCurrentPageTitle } = useAppStore();
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    setCurrentPageTitle("Business Profile");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [copied, setCopied] = useState(false);
 
   // Form state

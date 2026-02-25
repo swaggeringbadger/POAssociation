@@ -406,6 +406,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : `[Contact Form] ${name}`,
         html,
         replyTo: email,
+      }, {
+        templateId: 'contactForm',
+        templateParameters: { name, email, mode: mode || 'contact', phone: phone || '', company: company || '', communitySize: communitySize || '', message: message || '', preferredTime: preferredTime || '' },
       });
 
       if (!result.success) {
@@ -1460,7 +1463,7 @@ Only include links you are confident are real and accurate. If you're unsure abo
         // Only send email if we have a valid email address (skip demo users without email)
         if (user && tenant && user.email) {
           const { emailService } = await import('./emailService');
-          const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${application.id}`;
+          const applicationLink = `${process.env.APP_URL || ''}/applications/${application.id}`;
           const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
           
           console.log(`[Email] SENDING to: ${user.email}, app: ${req.body.title}`);
@@ -1469,7 +1472,14 @@ Only include links you are confident are real and accurate. If you're unsure abo
             req.body.title || 'Modification Application',
             applicantName,
             tenant.name,
-            applicationLink
+            applicationLink,
+            {
+              tenantId: application.tenantId,
+              applicationId: application.id,
+              templateId: 'applicationSubmitted',
+              templateParameters: { recipientName: applicantName, applicationTitle: req.body.title || 'Modification Application', communityName: tenant.name, applicationLink },
+              triggeredByUserId: userId,
+            }
           );
           console.log(`[Email] Email send result:`, emailResult);
         } else {
@@ -1673,7 +1683,7 @@ Only include links you are confident are real and accurate. If you're unsure abo
 
             if (owner?.email && editor && tenant) {
               const { emailService } = await import('./emailService');
-              const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
+              const applicationLink = `${process.env.APP_URL || ''}/applications/${applicationId}`;
               const ownerName = `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Valued Resident';
               const editorName = `${editor.firstName || ''} ${editor.lastName || ''}`.trim() || 'A representative';
               const changedFieldLabels = changes.map(c => c.fieldLabel || c.fieldPath);
@@ -1687,7 +1697,14 @@ Only include links you are confident are real and accurate. If you're unsure abo
                 changedFieldLabels,
                 editReason,
                 applicationLink,
-                tenant.name
+                tenant.name,
+                {
+                  tenantId: application.tenantId,
+                  applicationId: applicationId,
+                  templateId: 'delegatedEditNotification',
+                  templateParameters: { recipientName: ownerName, applicationTitle: application.title, editorName, editorRole: actingRole || 'Representative', changedFields: changedFieldLabels.join(', '), editReason: editReason || '', communityName: tenant.name, applicationLink },
+                  triggeredByUserId: userId,
+                }
               );
             }
           } catch (emailError) {
@@ -1736,7 +1753,7 @@ Only include links you are confident are real and accurate. If you're unsure abo
 
             if (user && tenant && user.email) {
               const { emailService } = await import('./emailService');
-              const applicationLink = `https://${tenant.subdomain}.poassociation.com/applications/${applicationId}`;
+              const applicationLink = `${process.env.APP_URL || ''}/applications/${applicationId}`;
               const applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Resident';
 
               await emailService.sendApplicationSubmitted(
@@ -1744,7 +1761,14 @@ Only include links you are confident are real and accurate. If you're unsure abo
                 title || application.title,
                 applicantName,
                 tenant.name,
-                applicationLink
+                applicationLink,
+                {
+                  tenantId: application.tenantId,
+                  applicationId: applicationId,
+                  templateId: 'applicationSubmitted',
+                  templateParameters: { recipientName: applicantName, applicationTitle: title || application.title, communityName: tenant.name, applicationLink },
+                  triggeredByUserId: userId,
+                }
               );
             }
           }
@@ -2356,6 +2380,25 @@ Only include links you are confident are real and accurate. If you're unsure abo
     }
   });
 
+  // Get account admin community assignments for team members
+  app.get("/api/tenants/:tenantId/users/account-admin-communities", isAuthenticated, async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant || tenant.type !== 'management_company') {
+        return res.status(400).json({ error: "Only available for management company tenants" });
+      }
+      const managedCommunities = await storage.getTenantsByManagementCompany(tenantId);
+      const adminMap = await storage.getAccountAdminCommunities(tenantId);
+      res.json({
+        communities: managedCommunities.map(c => ({ id: c.id, name: c.name })),
+        adminMap,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Invite/add new user to tenant with role(s)
   app.post("/api/tenants/:tenantId/users", isAuthenticated, async (req, res) => {
     try {
@@ -2742,6 +2785,10 @@ Only include links you are confident are real and accurate. If you're unsure abo
         to: user.email,
         subject: `[TEST] ${preview.subject}`,
         html: preview.html,
+      }, {
+        templateId: templateId,
+        templateParameters: sampleData || {},
+        triggeredByUserId: userId,
       });
 
       if (result.success) {
@@ -3338,6 +3385,11 @@ Only include links you are confident are real and accurate. If you're unsure abo
             to: recipient.email,
             subject: `Workflow Updated for ${property.name}`,
             html,
+          }, {
+            tenantId: propertyId,
+            templateId: 'workflowChanged',
+            templateParameters: { recipientName: recipient.firstName || 'Team Member', communityName: property.name, previousWorkflowName: previousWorkflowName || 'None', newWorkflowName, changedByName: changerName, settingsLink },
+            triggeredByUserId: userId,
           }).catch(err => {
             console.error(`Failed to send workflow change notification to ${recipient.email}:`, err);
           });
@@ -5464,6 +5516,59 @@ Only include links you are confident are real and accurate. If you're unsure abo
     }
   });
 
+  // Get combined directory members for roll call (community + management company)
+  app.get('/api/events/:eventId/attendance/directory', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      const event = await storage.getEvent(req.params.eventId);
+      if (!event) return res.status(404).json({ error: 'Event not found' });
+
+      // Get community members
+      const communityMembers = await storage.getTenantUsers(event.tenantId);
+
+      // Get management company members if this is a community tenant
+      const tenant = await storage.getTenant(event.tenantId);
+      let mgmtMembers: (typeof communityMembers[number])[] = [];
+      if (tenant?.managementCompanyId) {
+        mgmtMembers = await storage.getTenantUsers(tenant.managementCompanyId);
+      }
+
+      // Merge, deduplicating by user ID (community roles take precedence)
+      const userMap = new Map<string, typeof communityMembers[number]>();
+      for (const member of communityMembers) {
+        userMap.set(member.id, member);
+      }
+      for (const member of mgmtMembers) {
+        if (userMap.has(member.id)) {
+          // Merge roles
+          const existing = userMap.get(member.id)!;
+          const combinedRoles = [...new Set([...existing.roles, ...member.roles])];
+          userMap.set(member.id, { ...existing, roles: combinedRoles });
+        } else {
+          userMap.set(member.id, member);
+        }
+      }
+
+      res.json(Array.from(userMap.values()));
+    } catch (error: any) {
+      console.error('Error getting attendance directory:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove attendee from roll call
+  app.delete('/api/events/:eventId/attendance/:userId', isAuthenticated, requireEventsAccess, async (req: any, res) => {
+    try {
+      if (req.eventsAccess !== 'full') {
+        return res.status(403).json({ error: 'Full access required' });
+      }
+      await storage.removeAttendee(req.params.eventId, req.params.userId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error removing attendee:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get full presentation data for a meeting
   app.get('/api/events/:eventId/present', isAuthenticated, requireEventsAccess, async (req: any, res) => {
     try {
@@ -6952,7 +7057,12 @@ Only include links you are confident are real and accurate. If you're unsure abo
         invoiceAmount,
         `${periodStart} - ${periodEnd}`,
         dueDate,
-        `https://poassociation.com/billing?invoice=${invoiceId}`
+        `${process.env.APP_URL || ''}/billing?invoice=${invoiceId}`,
+        {
+          tenantId: invoice.billedToTenantId,
+          templateId: 'invoice',
+          templateParameters: { recipientName: billingEntity.name, billingEntityName: billingEntity.name, invoiceNumber: invoice.invoiceNumber, invoiceAmount, billingPeriod: `${periodStart} - ${periodEnd}`, dueDate, invoiceLink: `${process.env.APP_URL || ''}/billing?invoice=${invoiceId}` },
+        }
       );
 
       if (!result.success) {
@@ -7397,6 +7507,11 @@ Only include links you are confident are real and accurate. If you're unsure abo
           <p>Amount Due: $${invoice.totalAmount.toFixed(2)}</p>
           <p>Please contact your management company for payment details.</p>
         `,
+      }, {
+        tenantId: communityId,
+        templateId: 'invoiceCustom',
+        templateParameters: { invoiceNumber: invoice.invoiceNumber, communityName: community.name, amount: `$${invoice.totalAmount.toFixed(2)}` },
+        triggeredByUserId: userId,
       });
 
       // Mark invoice as sent
@@ -8217,7 +8332,13 @@ Only include links you are confident are real and accurate. If you're unsure abo
                 newMember.displayName || newMember.email || 'Family member',
                 newMember.email || '',
                 tenant.name,
-                dashboardLink
+                dashboardLink,
+                {
+                  tenantId: invitation.tenantId,
+                  templateId: 'householdMemberJoined',
+                  templateParameters: { recipientName: primaryUser.displayName || 'Homeowner', memberName: newMember.displayName || newMember.email || 'Family member', memberEmail: newMember.email || '', communityName: tenant.name, dashboardLink },
+                  triggeredByUserId: userId,
+                }
               );
             }
           }
@@ -8279,7 +8400,14 @@ Only include links you are confident are real and accurate. If you're unsure abo
                 contractor?.companyName || undefined,
                 application.title || 'Architectural Application',
                 tenant.name,
-                applicationLink
+                applicationLink,
+                {
+                  tenantId: application.tenantId,
+                  applicationId: application.id,
+                  templateId: 'contractorInviteAccepted',
+                  templateParameters: { recipientName: homeowner.displayName || 'Homeowner', contractorName: contractorUser.displayName || contractorUser.email || 'Contractor', contractorCompany: contractor?.companyName || '', applicationTitle: application.title || 'Architectural Application', communityName: tenant.name, applicationLink },
+                  triggeredByUserId: userId,
+                }
               );
             }
           }
@@ -8464,7 +8592,13 @@ Only include links you are confident are real and accurate. If you're unsure abo
           inviter.displayName || inviter.email || 'A homeowner',
           tenant.name,
           relationship || 'family member',
-          inviteUrl
+          inviteUrl,
+          {
+            tenantId,
+            templateId: 'householdMemberInvite',
+            templateParameters: { recipientName: name || 'there', inviterName: inviter.displayName || inviter.email || 'A homeowner', communityName: tenant.name, relationship: relationship || 'family member', inviteLink: inviteUrl },
+            triggeredByUserId: userId,
+          }
         );
       }
 
@@ -8713,7 +8847,12 @@ Only include links you are confident are real and accurate. If you're unsure abo
           contractorUser.displayName || 'Contractor',
           code,
           referralUrl,
-          dashboardLink
+          dashboardLink,
+          {
+            templateId: 'contractorReferral',
+            templateParameters: { recipientName: contractorUser.displayName || 'Contractor', referralCode: code, referralLink: referralUrl, dashboardLink },
+            triggeredByUserId: userId,
+          }
         );
       }
 
@@ -8904,7 +9043,14 @@ Only include links you are confident are real and accurate. If you're unsure abo
             application.title || 'Architectural Application',
             tenant.name,
             inviteUrl,
-            application.description || undefined
+            application.description || undefined,
+            {
+              tenantId: application.tenantId,
+              applicationId: id,
+              templateId: 'contractorInvite',
+              templateParameters: { recipientName: name || 'Contractor', inviterName: inviter.displayName || inviter.email || 'A homeowner', applicationTitle: application.title || 'Architectural Application', communityName: tenant.name, inviteLink: inviteUrl, projectDescription: application.description || '' },
+              triggeredByUserId: userId,
+            }
           );
         }
       }
@@ -9017,7 +9163,12 @@ Only include links you are confident are real and accurate. If you're unsure abo
           contractorUser.displayName || 'Contractor',
           tenant.name,
           code.toUpperCase(),
-          dashboardLink
+          dashboardLink,
+          {
+            tenantId,
+            templateId: 'contractorReferralSignup',
+            templateParameters: { recipientName: contractorUser.displayName || 'Contractor', communityName: tenant.name, referralCode: code.toUpperCase(), dashboardLink },
+          }
         );
       }
 
@@ -9605,6 +9756,127 @@ Only include links you are confident are real and accurate. If you're unsure abo
       res.json({ ...residence, photos, linkedApplications });
     } catch (error: any) {
       console.error('[Residences] Get error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get email log preview (reconstructs the email from template + stored parameters)
+  app.get('/api/email-logs/:id/preview', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const emailLog = await storage.getEmailLogById(id);
+      if (!emailLog) {
+        return res.status(404).json({ error: 'Email log not found' });
+      }
+
+      let html: string | null = null;
+      let subject = emailLog.subject;
+      let templateName: string | null = null;
+
+      if (emailLog.templateId) {
+        const { generatePreview, getTemplate } = await import('./emailTemplateRegistry');
+        const template = getTemplate(emailLog.templateId);
+        templateName = template?.name || null;
+        const preview = generatePreview(emailLog.templateId, (emailLog.templateParameters as Record<string, string>) || {});
+        if (preview) {
+          subject = preview.subject;
+          html = preview.html;
+        }
+      }
+
+      if (!html) {
+        html = `<div style="padding: 24px; font-family: sans-serif; color: #666;"><p>Email preview is not available for this template.</p><p><strong>Subject:</strong> ${emailLog.subject}</p><p><strong>To:</strong> ${emailLog.recipientEmail}</p></div>`;
+      }
+
+      res.json({
+        id: emailLog.id,
+        subject,
+        recipientEmail: emailLog.recipientEmail,
+        sentAt: emailLog.sentAt,
+        status: emailLog.status,
+        templateId: emailLog.templateId,
+        templateName,
+        html,
+        deliveredAt: emailLog.deliveredAt,
+        bouncedAt: emailLog.bouncedAt,
+        openedAt: emailLog.openedAt,
+        bounceType: emailLog.bounceType,
+        bounceReason: emailLog.bounceReason,
+      });
+    } catch (error: any) {
+      console.error('[Email Preview] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // SMTP2GO Webhook — delivery status updates (no auth middleware, validated by bearer token)
+  app.post('/api/webhooks/smtp2go', async (req, res) => {
+    try {
+      const webhookSecret = process.env.SMTP2GO_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || authHeader !== `Bearer ${webhookSecret}`) {
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+      }
+
+      console.log('[Webhook] SMTP2GO payload:', JSON.stringify(req.body, null, 2));
+
+      const { event, email_id, message, bounce, time } = req.body || {};
+      if (!event || !email_id) {
+        console.log('[Webhook] Skipped - missing event or email_id. Keys received:', Object.keys(req.body || {}));
+        return res.status(200).json({ ok: true, skipped: 'missing event or email_id' });
+      }
+
+      const eventTime = time ? new Date(time) : new Date();
+
+      const statusMap: Record<string, { status: string; updates: Record<string, any> }> = {
+        delivered: { status: 'delivered', updates: { deliveredAt: eventTime } },
+        bounce: { status: bounce === 'soft' ? 'soft_bounced' : 'bounced', updates: { bouncedAt: eventTime, bounceType: bounce || 'hard', bounceReason: message || null } },
+        open: { status: 'opened', updates: { openedAt: eventTime } },
+        spam: { status: 'spam_complaint', updates: {} },
+        reject: { status: 'bounced', updates: { bouncedAt: eventTime, bounceType: 'hard', bounceReason: message || 'Previously bounced/spam/unsubscribed' } },
+      };
+
+      const mapping = statusMap[event];
+      if (!mapping) {
+        console.log(`[Webhook] Ignoring unhandled SMTP2GO event: ${event}`);
+        return res.status(200).json({ ok: true, skipped: `unhandled event: ${event}` });
+      }
+
+      const updated = await storage.updateEmailLogByMessageId(email_id, {
+        status: mapping.status,
+        ...mapping.updates,
+      });
+
+      if (updated) {
+        console.log(`[Webhook] Email ${email_id} status updated to ${mapping.status}`);
+      } else {
+        console.log(`[Webhook] No email log found for messageId: ${email_id}`);
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (error: any) {
+      console.error('[Webhook] SMTP2GO error:', error);
+      res.status(200).json({ ok: true, error: 'internal' });
+    }
+  });
+
+  // Get residence timeline
+  app.get('/api/tenants/:tenantId/residences/:id/timeline', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+      const residence = await storage.getCommunityResidence(id);
+      if (!residence) {
+        return res.status(404).json({ error: 'Residence not found' });
+      }
+      if (residence.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Residence does not belong to this tenant' });
+      }
+      const timeline = await storage.getResidenceTimeline(id, tenantId, residence.normalizedAddress);
+      res.json(timeline);
+    } catch (error: any) {
+      console.error('[Residences] Timeline error:', error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -1148,6 +1148,7 @@ export const eventAgendaItems = pgTable("event_agenda_items", {
 
   // Meeting preparation
   presenterNotes: text("presenter_notes"),
+  discussionNotes: text("discussion_notes"), // Live discussion notes captured during meeting
   estimatedMinutes: integer("estimated_minutes"),
 
   // Post-meeting outcomes
@@ -2319,3 +2320,36 @@ export const insertResidenceUploadTokenSchema = createInsertSchema(residenceUplo
 });
 export type InsertResidenceUploadToken = z.infer<typeof insertResidenceUploadTokenSchema>;
 export type ResidenceUploadToken = typeof residenceUploadTokens.$inferSelect;
+
+// Email Logs - persistent record of all transactional emails sent
+export const emailLogs = pgTable("email_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  applicationId: varchar("application_id").references(() => applications.id, { onDelete: "set null" }),
+  templateId: text("template_id"),
+  templateParameters: jsonb("template_parameters").$type<Record<string, string>>(),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  status: text("status").notNull().default("sent"),
+  messageId: text("message_id"),
+  errorMessage: text("error_message"),
+  triggeredByUserId: varchar("triggered_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  bouncedAt: timestamp("bounced_at"),
+  openedAt: timestamp("opened_at"),
+  bounceType: text("bounce_type"),
+  bounceReason: text("bounce_reason"),
+}, (table) => ({
+  tenantIdx: index("email_logs_tenant_idx").on(table.tenantId),
+  applicationIdx: index("email_logs_application_idx").on(table.applicationId),
+  sentAtIdx: index("email_logs_sent_at_idx").on(table.sentAt),
+  messageIdIdx: index("email_logs_message_id_idx").on(table.messageId),
+}));
+
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  sentAt: true,
+});
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+export type EmailLog = typeof emailLogs.$inferSelect;

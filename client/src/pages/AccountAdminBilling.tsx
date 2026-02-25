@@ -5,8 +5,10 @@
  * Allows drill-down to property detail.
  */
 
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
+import { useAppStore } from '@/lib/store';
 import {
   Receipt,
   Building2,
@@ -37,6 +39,13 @@ import {
 } from '@/lib/api';
 
 export default function AccountAdminBilling() {
+  const { setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("Billing Overview");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
+
   const { data, isLoading, error } = useQuery<AccountAdminBillingSummary>({
     queryKey: ['account-admin-billing-summary'],
     queryFn: getAccountAdminBillingSummary,

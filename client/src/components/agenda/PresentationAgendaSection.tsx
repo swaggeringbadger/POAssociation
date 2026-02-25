@@ -9,20 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import {
-  Gavel,
-  Users,
-  FileCheck,
   Clock,
   MessageSquare,
-  AlertCircle,
-  Vote,
-  Flag,
   CheckCircle2,
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { markSectionComplete, unmarkSectionComplete } from '@/lib/api';
 import type { AgendaSection, EventAgendaItemWithDetails, MeetingSectionCompletion } from '@/lib/api';
 import { PresentationAgendaItem } from './PresentationAgendaItem';
+import { sectionIcons, sectionColors } from '@/lib/agendaConstants';
 import { toast } from 'sonner';
 
 interface PresentationAgendaSectionProps {
@@ -31,34 +26,10 @@ interface PresentationAgendaSectionProps {
   completion?: MeetingSectionCompletion;
   eventId: string;
   canEdit?: boolean;
+  focusedItemId?: string | null;
+  onFocusItem?: (itemId: string) => void;
   className?: string;
 }
-
-// Icon mapping for section slugs
-const sectionIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  call_to_order: Gavel,
-  roll_call: Users,
-  approval_of_minutes: FileCheck,
-  old_business: Clock,
-  new_business: MessageSquare,
-  committee_reports: AlertCircle,
-  final_approvals: Vote,
-  open_forum: MessageSquare,
-  adjournment: Flag,
-};
-
-// Color mapping for section slugs
-const sectionColors: Record<string, string> = {
-  call_to_order: 'border-l-purple-500',
-  roll_call: 'border-l-blue-500',
-  approval_of_minutes: 'border-l-green-500',
-  old_business: 'border-l-amber-500',
-  new_business: 'border-l-orange-500',
-  committee_reports: 'border-l-cyan-500',
-  final_approvals: 'border-l-emerald-500',
-  open_forum: 'border-l-pink-500',
-  adjournment: 'border-l-gray-500',
-};
 
 export function PresentationAgendaSection({
   section,
@@ -66,6 +37,8 @@ export function PresentationAgendaSection({
   completion,
   eventId,
   canEdit = false,
+  focusedItemId,
+  onFocusItem,
   className = '',
 }: PresentationAgendaSectionProps) {
   const queryClient = useQueryClient();
@@ -95,7 +68,7 @@ export function PresentationAgendaSection({
           eventId,
           sectionId: section.id,
           completedAt: new Date().toISOString(),
-          completedByUserId: null,
+          completedByUserId: '',
           notes: null,
         };
         return {
@@ -166,7 +139,7 @@ export function PresentationAgendaSection({
 
   return (
     <div className={`space-y-4 print:break-inside-avoid ${className}`}>
-      <Card className={`border-l-4 ${borderColor} ${isCompleted ? 'bg-muted/30' : ''}`}>
+      <Card className={`border-l-4 ${borderColor} transition-all duration-200 ${isCompleted ? 'bg-muted/30' : ''}`}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -224,7 +197,15 @@ export function PresentationAgendaSection({
       {items.length > 0 && (
         <div className="space-y-4 pl-4 sm:pl-6">
           {items.map((item) => (
-            <PresentationAgendaItem key={item.id} item={item} />
+            <PresentationAgendaItem
+              key={item.id}
+              item={item}
+              eventId={eventId}
+              canEdit={canEdit}
+              isFocused={focusedItemId === item.id}
+              hasFocusedItem={!!focusedItemId}
+              onFocus={() => onFocusItem?.(item.id)}
+            />
           ))}
         </div>
       )}

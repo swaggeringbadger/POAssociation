@@ -1,15 +1,18 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import { ArrowLeft, Users, Activity, Clock, TrendingUp, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function DemoCodeStats() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const { setCurrentPageTitle } = useAppStore();
 
   // Fetch demo code details
   const { data: demoCodes, isLoading: isLoadingCodes } = useQuery({
@@ -18,6 +21,15 @@ export default function DemoCodeStats() {
   });
 
   const demoCode = demoCodes?.find((c: any) => c.id === id);
+
+  useEffect(() => {
+    if (demoCode) {
+      setCurrentPageTitle(`${demoCode.label} — Stats`);
+    } else {
+      setCurrentPageTitle("Demo Code Stats");
+    }
+    return () => setCurrentPageTitle(null);
+  }, [demoCode?.label, setCurrentPageTitle]);
 
   // Fetch stats
   const { data: stats, isLoading: isLoadingStats } = useQuery({

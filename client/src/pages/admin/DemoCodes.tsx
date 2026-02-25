@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import { useLocation } from 'wouter';
 import {
   Table,
@@ -53,7 +54,13 @@ export default function DemoCodes() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { setCurrentPageTitle } = useAppStore();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentPageTitle("Demo Codes");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [codeToDelete, setCodeToDelete] = useState<DemoCode | null>(null);
 
   // Fetch demo codes

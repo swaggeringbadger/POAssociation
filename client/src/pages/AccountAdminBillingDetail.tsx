@@ -4,7 +4,7 @@
  * Shows detailed billing activity and invoice management for a specific property.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'wouter';
 import {
@@ -57,6 +57,7 @@ import {
   type AccountAdminBillingDetail,
   type BillingActivity,
 } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 
 type PeriodType = 'month' | 'lastMonth' | 'quarter' | 'year';
 
@@ -65,12 +66,21 @@ export default function AccountAdminBillingDetailPage() {
   const [period, setPeriod] = useState<PeriodType>('month');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { setCurrentPageTitle } = useAppStore();
 
   const { data, isLoading, error } = useQuery<AccountAdminBillingDetail>({
     queryKey: ['account-admin-billing-detail', communityId, period],
     queryFn: () => getAccountAdminBillingDetail(communityId!, period),
     enabled: !!communityId,
   });
+
+  // Set page title from community name
+  useEffect(() => {
+    if (data?.community?.name) {
+      setCurrentPageTitle(`${data.community.name} — Billing`);
+    }
+    return () => setCurrentPageTitle(null);
+  }, [data?.community?.name, setCurrentPageTitle]);
 
   // Generate invoice mutation
   const generateInvoiceMutation = useMutation({

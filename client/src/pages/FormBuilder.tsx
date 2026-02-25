@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,8 +7,15 @@ import { Loader2, Sparkles, Save } from "lucide-react";
 import DynamicForm from "@/components/DynamicForm";
 import { ARCH_REQUEST_FORM_SCHEMA } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
+import { useAppStore } from "@/lib/store";
 
 export default function FormBuilder() {
+  const { setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("AI Form Builder");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedSchema, setGeneratedSchema] = useState<any>(null);

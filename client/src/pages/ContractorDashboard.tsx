@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import {
   Loader2, Wrench, Building2, FileText, Calendar, User,
   ExternalLink, Clock, CheckCircle, AlertCircle
@@ -33,6 +35,12 @@ interface ContractorDashboardData {
 
 export default function ContractorDashboard() {
   const [, setLocation] = useLocation();
+  const { setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("Contractor Dashboard");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   // Fetch contractor dashboard data
   const { data: profile } = useQuery({

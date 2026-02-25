@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -31,7 +32,13 @@ export default function DemoCodeForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { setCurrentPageTitle } = useAppStore();
   const isEditMode = Boolean(id && id !== 'new');
+
+  useEffect(() => {
+    setCurrentPageTitle(isEditMode ? "Edit Demo Code" : "New Demo Code");
+    return () => setCurrentPageTitle(null);
+  }, [isEditMode, setCurrentPageTitle]);
 
   // Fetch existing demo code if editing
   const { data: existingCode, isLoading: isLoadingCode } = useQuery({

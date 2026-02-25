@@ -8,4 +8,7 @@ export { default as RollCallAttendance } from "./RollCallAttendance";
 export { default as MeetingControls } from "./MeetingControls";
 export { default as PresentationAgendaItem } from "./PresentationAgendaItem";
 export { default as PresentationAgendaSection } from "./PresentationAgendaSection";
+export { default as SectionNavigator } from "./SectionNavigator";
+export { default as MeetingSummary } from "./MeetingSummary";
 export { AgendaPdfDocument } from "./AgendaPdfDocument";
+export { MinutesPdfDocument } from "./MinutesPdfDocument";

@@ -4,14 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle, Brain, XCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowUpRight, Clock, FileCheck, Plus, Sparkles, Building, Home, ShieldCheck, Users, CheckCircle, AlertCircle, Brain, XCircle, AlertTriangle, CheckCircle2, CalendarDays, MapPin } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDashboard";
 import RepContactCard from "@/components/RepContactCard";
 import { SuperAdminDashboard } from "@/components/SuperAdminDashboard";
 import { HomeHubCard } from "@/components/HomeHubCard";
-import { api } from "@/lib/api";
+import { api, getCalendarEvents } from "@/lib/api";
+import type { CalendarEvent } from "@/lib/api";
 
 // Type for applications with AI analysis data
 type ApplicationWithAiAnalysis = {
@@ -339,6 +340,18 @@ function BoardMemberDashboard() {
   const { currentTenant } = useAppStore();
   const { user } = useAuth();
 
+  // Fetch upcoming events for board member (45-day window, expands recurring events)
+  const { data: upcomingEvents = [] } = useQuery<CalendarEvent[]>({
+    queryKey: ['board-upcoming-events', currentTenant?.id],
+    queryFn: async () => {
+      const now = new Date();
+      const fortyFiveDaysLater = new Date(now);
+      fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
+      return getCalendarEvents(now.toISOString(), fortyFiveDaysLater.toISOString());
+    },
+    enabled: !!currentTenant?.id,
+  });
+
   // Fetch applications for board member view
   const { data: applications = [] } = useQuery<ApplicationWithAiAnalysis[]>({
     queryKey: ['board-applications', currentTenant?.id, user?.id],
@@ -486,18 +499,54 @@ function BoardMemberDashboard() {
 
           <Card className="shadow-sm bg-primary/5 border-primary/20">
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5 text-primary" />
+                  Upcoming Events
+                </CardTitle>
+                <Link href="/calendar">
+                  <Button variant="ghost" size="sm">View Calendar</Button>
+                </Link>
+              </div>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-4">
-              <Link href="/applications">
-                <Button>
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                  Review Applications
-                </Button>
-              </Link>
-              <Link href="/apply">
-                <Button variant="outline">Submit New Request</Button>
-              </Link>
+            <CardContent>
+              {upcomingEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No upcoming events scheduled.</p>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingEvents
+                    .sort((a, b) => new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime())
+                    .slice(0, 5)
+                    .map(event => {
+                      const start = new Date(event.startDatetime);
+                      const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                      const timeStr = event.allDay ? 'All day' : start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                      return (
+                        <Link key={event.id} href={`/calendar`}>
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer">
+                            <div className="flex flex-col items-center min-w-[44px] rounded-md bg-primary/10 px-2 py-1">
+                              <span className="text-[10px] font-medium uppercase text-primary">{start.toLocaleDateString('en-US', { month: 'short' })}</span>
+                              <span className="text-lg font-bold leading-tight text-primary">{start.getDate()}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{event.title}</p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                <Clock className="h-3 w-3" />
+                                <span>{dateStr} &middot; {timeStr}</span>
+                              </div>
+                              {event.location && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                  <MapPin className="h-3 w-3" />
+                                  <span className="truncate">{event.location}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +53,13 @@ import { useToast } from "@/hooks/use-toast";
 export default function ManagementCompanies() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { setCurrentPageTitle } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setCurrentPageTitle("Management Companies");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);

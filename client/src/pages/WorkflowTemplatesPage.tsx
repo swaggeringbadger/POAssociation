@@ -2,7 +2,7 @@
  * WorkflowTemplatesPage - List and manage workflow templates
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,7 +47,12 @@ export default function WorkflowTemplatesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const { selectedPropertyFilter, currentTenant, currentUserRole } = useAppStore();
+  const { selectedPropertyFilter, currentTenant, currentUserRole, setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("Workflows");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   // For account_admins on a community (not management company), use the current tenant as the target
   // This handles the case where there's no property filter dropdown because they're already on a community

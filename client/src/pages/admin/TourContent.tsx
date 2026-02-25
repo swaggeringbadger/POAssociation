@@ -5,9 +5,10 @@
  * Tour defaults remain in TypeScript files; database stores overrides only.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -44,7 +45,13 @@ interface MergedTour {
 export default function TourContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { setCurrentPageTitle } = useAppStore();
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setCurrentPageTitle("Tour Content");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedTour, setSelectedTour] = useState<MergedTour | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);

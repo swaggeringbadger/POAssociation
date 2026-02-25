@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import {
   Loader2, Share2, Building2, Copy, CheckCircle, Clock,
   DollarSign, TrendingUp, Users, AlertCircle, QrCode
@@ -32,7 +34,13 @@ interface ReferralStats {
 
 export default function ContractorReferrals() {
   const [, setLocation] = useLocation();
+  const { setCurrentPageTitle } = useAppStore();
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setCurrentPageTitle("Referrals");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   // Fetch contractor profile
   const { data: profile, isLoading: profileLoading } = useQuery({

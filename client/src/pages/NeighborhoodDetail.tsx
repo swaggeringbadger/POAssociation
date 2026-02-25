@@ -4,10 +4,12 @@ import { useParams, useLocation } from 'wouter';
 import {
   Home, ArrowLeft, Edit2, Trash2, Upload, RefreshCw, Sparkles,
   MapPin, Image, FileText, Loader2, X, AlertCircle, Check, Smartphone, Clock,
-  ChevronLeft, ChevronRight, ZoomIn,
+  ChevronLeft, ChevronRight, ZoomIn, History,
 } from 'lucide-react';
 import { api, type CommunityResidenceWithDetails, type ResidencePhoto } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ResidenceTimeline from '@/components/ResidenceTimeline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -50,6 +52,7 @@ export default function NeighborhoodDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const currentTenant = useAppStore((state) => state.currentTenant);
+  const setCurrentPageTitle = useAppStore((state) => state.setCurrentPageTitle);
   const isMobile = useIsMobile();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -75,6 +78,14 @@ export default function NeighborhoodDetail() {
     queryFn: () => api.getCommunityResidence(currentTenant!.id, id!),
     enabled: !!currentTenant?.id && !!id,
   });
+
+  // Set page title from residence data
+  useEffect(() => {
+    if (residence) {
+      setCurrentPageTitle(residence.name || residence.propertyAddress || 'Residence');
+    }
+    return () => setCurrentPageTitle(null);
+  }, [residence?.name, residence?.propertyAddress, setCurrentPageTitle]);
 
   const updateMutation = useMutation({
     mutationFn: (data: { name?: string; description?: string }) =>
@@ -366,6 +377,16 @@ export default function NeighborhoodDetail() {
         )}
       </div>
 
+      <Tabs defaultValue="overview" className="mt-2">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="timeline" className="gap-1.5">
+            <History className="h-3.5 w-3.5" />
+            Timeline
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4 space-y-0">
       {/* Photo Gallery */}
       {allPhotos.length > 0 && (
         <Card className="mb-6">
@@ -560,6 +581,12 @@ export default function NeighborhoodDetail() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="timeline" className="mt-4">
+          <ResidenceTimeline residenceId={id!} tenantId={currentTenant!.id} />
+        </TabsContent>
+      </Tabs>
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>

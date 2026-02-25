@@ -512,8 +512,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <SidebarTrigger />
               <h1 className="text-xl font-semibold tracking-tight text-foreground">
                 {currentPageTitle ? currentPageTitle :
-                 location === '/dashboard' ? 'Dashboard' : 
-                 location.substring(1).charAt(0).toUpperCase() + location.substring(2)}
+                 (() => {
+                   // Extract the last meaningful segment of the path (ignore UUIDs)
+                   const segments = location.substring(1).split('/').filter(Boolean);
+                   const meaningful = segments.filter(s => !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s));
+                   const last = meaningful[meaningful.length - 1] || segments[0] || 'Dashboard';
+                   // Convert kebab-case to Title Case
+                   return last.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                 })()}
               </h1>
             </div>
             <div className="flex items-center gap-4">

@@ -53,8 +53,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Search, UserPlus, MoreVertical, Mail, Shield, Trash2, Building2, Briefcase } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Search, UserPlus, MoreVertical, Mail, Shield, Trash2, Building2, Briefcase, Crown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Management company roles that can be assigned on the Team page
@@ -85,10 +92,38 @@ const formatRole = (role: string) => {
 };
 
 const getRoleBadgeVariant = (role: string): "default" | "secondary" | "outline" => {
-  if (role === 'management_manager' || role === 'account_admin') return 'default';
+  if (role === 'management_manager') return 'default';
   if (role === 'management_rep') return 'secondary';
   return 'outline';
 };
+
+// Account Admin badge component with tooltip showing communities
+function AccountAdminBadge({ communities, totalCommunities }: {
+  communities: { id: string; name: string }[];
+  totalCommunities: number;
+}) {
+  const isAllCommunities = communities.length >= totalCommunities && totalCommunities > 0;
+  const label = "Account Admin";
+  const subtitle = isAllCommunities
+    ? "All communities"
+    : communities.map(c => c.name).join(", ");
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs gap-1">
+            <Crown className="h-3 w-3" />
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[300px]">
+          <p className="text-xs">{subtitle}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export default function Team() {
   const { currentTenant, currentUserRole } = useAppStore();
@@ -99,6 +134,8 @@ export default function Team() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [editMemberOpen, setEditMemberOpen] = useState(false);
   const [removeMemberOpen, setRemoveMemberOpen] = useState(false);
+  const [manageAdminOpen, setManageAdminOpen] = useState(false);
+  const [removeAdminConfirm, setRemoveAdminConfirm] = useState<{ userId: string; userName: string; communityId: string; communityName: string } | null>(null);
   const [selectedMember, setSelectedMember] = useState<any>(null);
 
   // Form state for adding team member
@@ -135,6 +172,13 @@ export default function Team() {
     enabled: !!teamMembers && teamMembers.length > 0,
   });
 
+  // Fetch account admin community assignments
+  const { data: accountAdminData } = useQuery({
+    queryKey: ["accountAdminCommunities", currentTenant?.id],
+    queryFn: () => api.getAccountAdminCommunities(currentTenant!.id),
+    enabled: !!currentTenant?.id && currentTenant?.type === 'management_company',
+  });
+
   // Mutation for adding team member
   const addMemberMutation = useMutation({
     mutationFn: (data: typeof newMember) =>
@@ -161,11 +205,10 @@ export default function Team() {
     },
   });
 
-  // Mutation for changing role
+  // Mutation for changing role (only swaps management role, never touches account_admin)
   const changeRoleMutation = useMutation({
     mutationFn: async ({ userId, oldRole, newRole }: { userId: string; oldRole: string; newRole: string }) => {
-      // Remove old role and add new role
-      if (oldRole) {
+      if (oldRole && oldRole !== 'account_admin') {
         await api.removeUserRole(userId, currentTenant!.id, oldRole);
       }
       return api.assignUserRole(userId, currentTenant!.id, newRole);
@@ -177,6 +220,31 @@ export default function Team() {
       toast({
         title: "Role updated",
         description: "The team member's role has been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for toggling account_admin on a community
+  const toggleAdminMutation = useMutation({
+    mutationFn: async ({ userId, communityId, assign }: { userId: string; communityId: string; assign: boolean }) => {
+      if (assign) {
+        return api.assignUserRole(userId, communityId, 'account_admin');
+      } else {
+        return api.removeUserRole(userId, communityId, 'account_admin');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accountAdminCommunities", currentTenant?.id] });
+      toast({
+        title: "Account Admin updated",
+        description: "Account Admin access has been updated.",
       });
     },
     onError: (error: Error) => {
@@ -226,9 +294,9 @@ export default function Team() {
     );
   });
 
-  // Get the primary management role for a user
+  // Get the primary management role for a user (skip account_admin overlay)
   const getPrimaryRole = (roles: string[]) => {
-    const priority = ['account_admin', 'management_manager', 'management_rep', 'management_auxiliary'];
+    const priority = ['management_manager', 'management_rep', 'management_auxiliary'];
     for (const p of priority) {
       if (roles.includes(p)) return p;
     }
@@ -255,6 +323,41 @@ export default function Team() {
   // Check if current user can manage team
   const canManageTeam = currentUserRole === 'super_admin' ||
                         currentUserRole === 'management_manager';
+
+  const isSuperAdmin = currentUserRole === 'super_admin';
+
+  // Helper to check if a member has account_admin at any community
+  const memberHasAccountAdmin = (memberId: string) => {
+    return accountAdminData?.adminMap?.[memberId] && accountAdminData.adminMap[memberId].length > 0;
+  };
+
+  // Helper to get the account admin communities for a member
+  const getMemberAdminCommunities = (memberId: string) => {
+    return accountAdminData?.adminMap?.[memberId] || [];
+  };
+
+  const totalManagedCommunities = accountAdminData?.communities?.length || 0;
+
+  // Role badges component used in both mobile and desktop views
+  const RoleBadges = ({ member }: { member: any }) => {
+    const primaryRole = getPrimaryRole(member.roles);
+    const hasAdmin = memberHasAccountAdmin(member.id);
+    const adminCommunities = getMemberAdminCommunities(member.id);
+
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant={getRoleBadgeVariant(primaryRole)}>
+          {formatRole(primaryRole)}
+        </Badge>
+        {hasAdmin && (
+          <AccountAdminBadge
+            communities={adminCommunities}
+            totalCommunities={totalManagedCommunities}
+          />
+        )}
+      </div>
+    );
+  };
 
   if (!currentTenant || currentTenant.type !== 'management_company') {
     return (
@@ -345,6 +448,15 @@ export default function Team() {
                                 Change Role
                               </DropdownMenuItem>
                             )}
+                            {isSuperAdmin && (
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedMember(member);
+                                setManageAdminOpen(true);
+                              }}>
+                                <Crown className="mr-2 h-4 w-4" />
+                                Manage Account Admin
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => {
@@ -362,9 +474,7 @@ export default function Team() {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <Badge variant={getRoleBadgeVariant(primaryRole)}>
-                        {formatRole(primaryRole)}
-                      </Badge>
+                      <RoleBadges member={member} />
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Briefcase className="h-3 w-3" />
                         <span>{assignments.length} {assignments.length === 1 ? 'property' : 'properties'}</span>
@@ -418,9 +528,7 @@ export default function Team() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getRoleBadgeVariant(primaryRole)}>
-                          {formatRole(primaryRole)}
-                        </Badge>
+                        <RoleBadges member={member} />
                       </TableCell>
                       <TableCell>
                         {assignments.length > 0 ? (
@@ -450,6 +558,15 @@ export default function Team() {
                                 }}>
                                   <Shield className="mr-2 h-4 w-4" />
                                   Change Role
+                                </DropdownMenuItem>
+                              )}
+                              {isSuperAdmin && (
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedMember(member);
+                                  setManageAdminOpen(true);
+                                }}>
+                                  <Crown className="mr-2 h-4 w-4" />
+                                  Manage Account Admin
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
@@ -599,6 +716,94 @@ export default function Team() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Manage Account Admin Dialog */}
+      <Dialog open={manageAdminOpen} onOpenChange={setManageAdminOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Manage Account Admin</DialogTitle>
+            <DialogDescription>
+              Toggle Account Admin access for {selectedMember?.firstName} {selectedMember?.lastName} at each community managed by {currentTenant.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {accountAdminData?.communities?.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No managed communities found.</p>
+            ) : (
+              accountAdminData?.communities?.map((community) => {
+                const memberAdminCommunities = getMemberAdminCommunities(selectedMember?.id || '');
+                const isAdmin = memberAdminCommunities.some(c => c.id === community.id);
+
+                return (
+                  <div key={community.id} className="flex items-center justify-between border rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{community.name}</span>
+                    </div>
+                    <Checkbox
+                      checked={isAdmin}
+                      disabled={toggleAdminMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        if (!selectedMember) return;
+                        if (!checked && isAdmin) {
+                          // Show confirmation before removing
+                          setRemoveAdminConfirm({
+                            userId: selectedMember.id,
+                            userName: `${selectedMember.firstName} ${selectedMember.lastName}`,
+                            communityId: community.id,
+                            communityName: community.name,
+                          });
+                        } else if (checked) {
+                          toggleAdminMutation.mutate({
+                            userId: selectedMember.id,
+                            communityId: community.id,
+                            assign: true,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageAdminOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Account Admin Confirmation */}
+      <AlertDialog open={!!removeAdminConfirm} onOpenChange={(open) => { if (!open) setRemoveAdminConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Account Admin Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove Account Admin access for {removeAdminConfirm?.userName} at {removeAdminConfirm?.communityName}? They will lose billing and admin capabilities for this community.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (removeAdminConfirm) {
+                  toggleAdminMutation.mutate({
+                    userId: removeAdminConfirm.userId,
+                    communityId: removeAdminConfirm.communityId,
+                    assign: false,
+                  });
+                  setRemoveAdminConfirm(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Access
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Remove Team Member Confirmation */}
       <AlertDialog open={removeMemberOpen} onOpenChange={setRemoveMemberOpen}>

@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { useAppStore } from "@/lib/store";
 import {
   Home,
   Hammer,
@@ -87,6 +89,12 @@ const APPLICATION_TYPES = [
 
 export default function ApplicationTypeSelect() {
   const [, navigate] = useLocation();
+  const { setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("New Application");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   const handleTypeSelect = (typeId: string) => {
     navigate(`/applications/submit/${typeId}`);

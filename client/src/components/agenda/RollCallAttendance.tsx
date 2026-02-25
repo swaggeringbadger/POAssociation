@@ -1,118 +1,259 @@
 /**
  * RollCallAttendance Component
  *
- * Checkbox list of expected attendees for roll call during meetings.
- * Groups attendees by role (Board Members, Management).
+ * Before agenda finalization: dynamically shows directory members (board, management,
+ * delegated reps) plus any manually added people. Attendance statuses are persisted.
+ * After finalization: the snapshot is locked in, but people can still be added/removed.
  */
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Users, UserCheck, UserX, Clock, CheckCircle2 } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { markAttendance, initializeMeetingAttendance } from '@/lib/api';
-import type { MeetingAttendance, AttendanceStatus } from '@/lib/api';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Users, UserCheck, UserX, Clock, CheckCircle2, UserPlus, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { markAttendance, initializeMeetingAttendance, addAttendee, removeAttendee, getAttendanceDirectory } from '@/lib/api';
+import type { MeetingAttendance, AttendanceStatus, User } from '@/lib/api';
 import { toast } from 'sonner';
+
+/** Roles that are auto-populated in roll call */
+const AUTO_POPULATE_ROLES = [
+  'poa_board_member',
+  'poa_board_contributor',
+  'delegated_rep',
+  'management_rep',
+  'management_manager',
+];
 
 interface RollCallAttendanceProps {
   eventId: string;
+  tenantId: string;
   attendance: MeetingAttendance[];
+  isFinalized?: boolean;
   canEdit?: boolean;
   className?: string;
 }
 
 export function RollCallAttendance({
   eventId,
+  tenantId,
   attendance,
+  isFinalized = false,
   canEdit = false,
   className = '',
 }: RollCallAttendanceProps) {
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [addPersonOpen, setAddPersonOpen] = useState(false);
+
+  // Fetch directory members (community + management company) for roll call
+  const { data: directoryMembers } = useQuery({
+    queryKey: ['attendanceDirectory', eventId],
+    queryFn: () => getAttendanceDirectory(eventId),
+    enabled: !!eventId,
+  });
+
+  // Build the effective attendance list:
+  // Before finalization: merge directory auto-members with any persisted attendance records
+  // After finalization: just use persisted attendance records
+  const effectiveAttendance = useMemo(() => {
+    if (isFinalized || !directoryMembers) {
+      return attendance;
+    }
+
+    // Get directory members that should be auto-populated
+    const autoMembers = directoryMembers.filter(m =>
+      m.roles.some((r: string) => AUTO_POPULATE_ROLES.includes(r))
+    );
+
+    // Index existing attendance by userId
+    const attendanceByUserId = new Map(attendance.map(a => [a.userId, a]));
+
+    // Start with auto-populated members (merged with any existing status)
+    const merged: MeetingAttendance[] = autoMembers.map(member => {
+      const existing = attendanceByUserId.get(member.id);
+      if (existing) return existing;
+
+      // Synthesize a virtual attendance record (not yet persisted)
+      return {
+        id: `virtual-${member.id}`,
+        eventId,
+        userId: member.id,
+        status: 'expected' as AttendanceStatus,
+        attendeeRole: getAttendeeRoleFromUserRoles(member.roles),
+        markedAt: null,
+        markedByUserId: null,
+        notes: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        user: member as any,
+      };
+    });
+
+    // Add any manually-added attendance records that aren't in the auto list
+    const autoUserIds = new Set(autoMembers.map(m => m.id));
+    for (const record of attendance) {
+      if (!autoUserIds.has(record.userId)) {
+        merged.push(record);
+      }
+    }
+
+    return merged;
+  }, [attendance, directoryMembers, isFinalized, eventId]);
+
+  // Users already shown in the attendance list
+  const attendeeUserIds = useMemo(
+    () => new Set(effectiveAttendance.map(a => a.userId)),
+    [effectiveAttendance]
+  );
+
+  // Available members for the "Add Person" picker (not already on the list)
+  const availableMembers = useMemo(
+    () => (directoryMembers || []).filter(m => !attendeeUserIds.has(m.id)),
+    [directoryMembers, attendeeUserIds]
+  );
 
   // Group attendance by role
-  const boardMembers = attendance.filter(a => a.attendeeRole === 'board_member');
-  const management = attendance.filter(a => a.attendeeRole === 'management');
-  const others = attendance.filter(a => !a.attendeeRole || !['board_member', 'management'].includes(a.attendeeRole));
+  const boardMembers = effectiveAttendance.filter(a => a.attendeeRole === 'board_member');
+  const management = effectiveAttendance.filter(a => a.attendeeRole === 'management');
+  const homeowners = effectiveAttendance.filter(a => a.attendeeRole === 'homeowner');
+  const guests = effectiveAttendance.filter(a => a.attendeeRole === 'guest');
+  const others = effectiveAttendance.filter(a => !a.attendeeRole || !['board_member', 'management', 'homeowner', 'guest'].includes(a.attendeeRole));
 
   // Calculate attendance stats
-  const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
-  const totalCount = attendance.length;
+  const presentCount = effectiveAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
+  const totalCount = effectiveAttendance.length;
 
-  // Initialize attendance mutation
+  // Auto-initialize persisted records when agenda is finalized and attendance is empty
+  const hasAutoInitialized = useRef(false);
   const initializeMutation = useMutation({
     mutationFn: () => initializeMeetingAttendance(eventId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['presentation-data', eventId] });
-      toast.success('Attendance list initialized');
     },
     onError: (error: Error) => {
       toast.error(`Failed to initialize attendance: ${error.message}`);
     },
   });
 
-  // Mark attendance mutation with optimistic updates
+  useEffect(() => {
+    // When finalized and no persisted records yet, snapshot the directory
+    if (isFinalized && attendance.length === 0 && canEdit && !hasAutoInitialized.current && !initializeMutation.isPending) {
+      hasAutoInitialized.current = true;
+      initializeMutation.mutate();
+    }
+  }, [isFinalized, attendance.length, canEdit]);
+
+  // Mark attendance mutation — for virtual records, this will also create the DB row
   const markMutation = useMutation({
-    mutationFn: ({ userId, status, notes }: { userId: string; status: AttendanceStatus; notes?: string }) =>
-      markAttendance(eventId, userId, status, notes),
+    mutationFn: ({ userId, status, attendeeRole, notes }: { userId: string; status: AttendanceStatus; attendeeRole?: string; notes?: string }) => {
+      // Check if this is a virtual record (not yet in DB)
+      const existingRecord = attendance.find(a => a.userId === userId);
+      if (!existingRecord) {
+        // Create the record first via addAttendee, then it'll be in the DB
+        return addAttendee(eventId, { userId, attendeeRole, status, notes });
+      }
+      return markAttendance(eventId, userId, status, notes);
+    },
     onMutate: async ({ userId, status }) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['presentation-data', eventId] });
-
-      // Snapshot previous value
       const previousData = queryClient.getQueryData(['presentation-data', eventId]);
-
-      // Optimistically update the cache
       queryClient.setQueryData(['presentation-data', eventId], (old: any) => {
         if (!old) return old;
-        return {
-          ...old,
-          attendance: old.attendance.map((a: MeetingAttendance) =>
-            a.userId === userId ? { ...a, status } : a
-          ),
-        };
+        const exists = old.attendance.some((a: MeetingAttendance) => a.userId === userId);
+        if (exists) {
+          return {
+            ...old,
+            attendance: old.attendance.map((a: MeetingAttendance) =>
+              a.userId === userId ? { ...a, status } : a
+            ),
+          };
+        }
+        return old;
       });
-
       return { previousData };
     },
     onError: (error: Error, _variables, context) => {
-      // Roll back on error
       if (context?.previousData) {
         queryClient.setQueryData(['presentation-data', eventId], context.previousData);
       }
       toast.error(`Failed to update attendance: ${error.message}`);
     },
     onSettled: () => {
-      // Refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: ['presentation-data', eventId] });
     },
   });
 
-  const handleStatusChange = (userId: string, currentStatus: AttendanceStatus) => {
-    if (!canEdit) return;
+  // Add attendee mutation
+  const addMutation = useMutation({
+    mutationFn: (member: User & { roles: string[] }) => {
+      const attendeeRole = getAttendeeRoleFromUserRoles(member.roles);
+      return addAttendee(eventId, { userId: member.id, attendeeRole, status: 'expected' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['presentation-data', eventId] });
+      setAddPersonOpen(false);
+      toast.success('Attendee added');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add attendee: ${error.message}`);
+    },
+  });
 
-    // Cycle through statuses: expected -> present -> absent -> late -> excused -> expected
+  // Remove attendee mutation
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) => removeAttendee(eventId, userId),
+    onMutate: async (userId) => {
+      await queryClient.cancelQueries({ queryKey: ['presentation-data', eventId] });
+      const previousData = queryClient.getQueryData(['presentation-data', eventId]);
+      queryClient.setQueryData(['presentation-data', eventId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          attendance: old.attendance.filter((a: MeetingAttendance) => a.userId !== userId),
+        };
+      });
+      return { previousData };
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(['presentation-data', eventId], context.previousData);
+      }
+      toast.error(`Failed to remove attendee: ${error.message}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['presentation-data', eventId] });
+    },
+  });
+
+  const handleStatusChange = (userId: string, currentStatus: AttendanceStatus, attendeeRole?: string | null) => {
+    if (!canEdit) return;
     const statusCycle: AttendanceStatus[] = ['expected', 'present', 'absent', 'late', 'excused'];
     const currentIndex = statusCycle.indexOf(currentStatus);
     const nextStatus = statusCycle[(currentIndex + 1) % statusCycle.length];
-
-    markMutation.mutate({
-      userId,
-      status: nextStatus,
-      notes: notes[userId],
-    });
+    markMutation.mutate({ userId, status: nextStatus, attendeeRole: attendeeRole || undefined, notes: notes[userId] });
   };
 
   const markAllPresent = () => {
     if (!canEdit) return;
-
-    attendance
+    effectiveAttendance
       .filter(a => a.status === 'expected')
       .forEach(a => {
-        markMutation.mutate({ userId: a.userId, status: 'present' });
+        markMutation.mutate({ userId: a.userId, status: 'present', attendeeRole: a.attendeeRole || undefined });
       });
   };
 
@@ -146,19 +287,22 @@ export function RollCallAttendance({
     }
   };
 
+  const isVirtualRecord = (record: MeetingAttendance) => record.id.startsWith('virtual-');
+
   const renderAttendeeRow = (record: MeetingAttendance) => (
     <div
       key={record.id}
-      className={`flex items-center justify-between py-2 px-3 rounded-md ${
+      className={`flex items-center justify-between min-h-12 py-2 px-3 rounded-md group ${
         canEdit ? 'hover:bg-muted cursor-pointer' : ''
       }`}
-      onClick={() => canEdit && handleStatusChange(record.userId, record.status)}
+      onClick={() => canEdit && handleStatusChange(record.userId, record.status, record.attendeeRole)}
     >
       <div className="flex items-center gap-3">
         {canEdit ? (
           <Checkbox
             checked={record.status === 'present' || record.status === 'late'}
-            onCheckedChange={() => handleStatusChange(record.userId, record.status)}
+            onCheckedChange={() => handleStatusChange(record.userId, record.status, record.attendeeRole)}
+            className="h-5 w-5"
           />
         ) : (
           getStatusIcon(record.status)
@@ -172,13 +316,28 @@ export function RollCallAttendance({
           )}
         </div>
       </div>
-      {getStatusBadge(record.status)}
+      <div className="flex items-center gap-2">
+        {getStatusBadge(record.status)}
+        {canEdit && !isVirtualRecord(record) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity print:hidden"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeMutation.mutate(record.userId);
+            }}
+            title="Remove from roll call"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 
   const renderGroup = (title: string, records: MeetingAttendance[]) => {
     if (records.length === 0) return null;
-
     return (
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-muted-foreground">{title}</h4>
@@ -189,7 +348,7 @@ export function RollCallAttendance({
     );
   };
 
-  if (attendance.length === 0) {
+  if (effectiveAttendance.length === 0) {
     return (
       <Card className={className}>
         <CardHeader>
@@ -200,16 +359,45 @@ export function RollCallAttendance({
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-center py-4">
-            No attendance records yet.
+            No directory members found for this community.
           </p>
           {canEdit && (
-            <Button
-              onClick={() => initializeMutation.mutate()}
-              disabled={initializeMutation.isPending}
-              className="w-full"
-            >
-              Initialize Attendance List
-            </Button>
+            <Popover open={addPersonOpen} onOpenChange={setAddPersonOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Person
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-72" align="start">
+                <Command>
+                  <CommandInput placeholder="Search directory..." />
+                  <CommandList>
+                    <CommandEmpty>No members found.</CommandEmpty>
+                    {availableMembers.length > 0 && (
+                      <CommandGroup heading="Directory Members">
+                        {availableMembers.map((member) => (
+                          <CommandItem
+                            key={member.id}
+                            onSelect={() => addMutation.mutate(member)}
+                            className="cursor-pointer"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {member.firstName} {member.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {formatRoles(member.roles)}
+                              </p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           )}
         </CardContent>
       </Card>
@@ -241,12 +429,51 @@ export function RollCallAttendance({
               <UserCheck className="h-4 w-4 mr-2" />
               Mark All Present
             </Button>
+
+            <Popover open={addPersonOpen} onOpenChange={setAddPersonOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Person
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-72" align="start">
+                <Command>
+                  <CommandInput placeholder="Search directory..." />
+                  <CommandList>
+                    <CommandEmpty>No members found.</CommandEmpty>
+                    {availableMembers.length > 0 && (
+                      <CommandGroup heading="Directory Members">
+                        {availableMembers.map((member) => (
+                          <CommandItem
+                            key={member.id}
+                            onSelect={() => addMutation.mutate(member)}
+                            className="cursor-pointer"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {member.firstName} {member.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {formatRoles(member.roles)}
+                              </p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
         <div className="space-y-4">
           {renderGroup('Board Members', boardMembers)}
           {renderGroup('Management', management)}
+          {renderGroup('Homeowners', homeowners)}
+          {renderGroup('Guests / Contractors', guests)}
           {renderGroup('Other Attendees', others)}
         </div>
 
@@ -268,6 +495,33 @@ export function RollCallAttendance({
       </CardContent>
     </Card>
   );
+}
+
+/** Map user directory roles to meeting attendee role */
+function getAttendeeRoleFromUserRoles(roles: string[]): string {
+  if (roles.some(r => r.startsWith('poa_') || r === 'delegated_rep')) return 'board_member';
+  if (roles.some(r => r.startsWith('management_') || r === 'account_admin' || r === 'super_admin')) return 'management';
+  if (roles.some(r => r === 'homeowner' || r === 'household_member')) return 'homeowner';
+  if (roles.some(r => r === 'contractor')) return 'guest';
+  return 'guest';
+}
+
+/** Format role names for display */
+function formatRoles(roles: string[]): string {
+  const roleLabels: Record<string, string> = {
+    poa_board_member: 'Board Member',
+    poa_board_contributor: 'Board Contributor',
+    delegated_rep: 'Delegated Rep',
+    management_manager: 'Manager',
+    management_rep: 'Management Rep',
+    management_auxiliary: 'Management Aux',
+    account_admin: 'Account Admin',
+    super_admin: 'Super Admin',
+    homeowner: 'Homeowner',
+    household_member: 'Household Member',
+    contractor: 'Contractor',
+  };
+  return roles.map(r => roleLabels[r] || r).join(', ');
 }
 
 export default RollCallAttendance;

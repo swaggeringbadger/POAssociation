@@ -221,6 +221,59 @@ export interface CommunityResidenceWithDetails extends CommunityResidence {
   linkedApplications: Application[];
 }
 
+// Residence Timeline types
+export type ResidenceTimelineCategory =
+  | 'residence' | 'application' | 'document' | 'comment'
+  | 'ai_analysis' | 'workflow' | 'meeting' | 'edit'
+  | 'signature' | 'collaborator' | 'email';
+
+export interface ResidenceTimelineEntry {
+  id: string;
+  timestamp: string;
+  category: ResidenceTimelineCategory;
+  eventType: string;
+  title: string;
+  description: string | null;
+  applicationId: string | null;
+  applicationNumber: string | null;
+  applicationTitle: string | null;
+  userId: string | null;
+  userName: string | null;
+  userRole: string | null;
+  details: Record<string, any> | null;
+  thumbnailId: string | null;
+  thumbnailType: 'residence_photo' | 'document' | null;
+}
+
+export interface ResidenceTimeline {
+  entries: ResidenceTimelineEntry[];
+  summary: {
+    totalEntries: number;
+    applicationCount: number;
+    photoCount: number;
+    commentCount: number;
+    aiAnalysisCount: number;
+    meetingCount: number;
+    emailCount: number;
+  };
+}
+
+export interface EmailPreview {
+  id: string;
+  subject: string;
+  recipientEmail: string;
+  sentAt: string;
+  status: string;
+  templateId: string | null;
+  templateName: string | null;
+  html: string;
+  deliveredAt: string | null;
+  bouncedAt: string | null;
+  openedAt: string | null;
+  bounceType: string | null;
+  bounceReason: string | null;
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -564,6 +617,15 @@ class ApiClient {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("Failed to remove user");
+    return response.json();
+  }
+
+  async getAccountAdminCommunities(tenantId: string): Promise<{
+    communities: { id: string; name: string }[];
+    adminMap: Record<string, { id: string; name: string }[]>;
+  }> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/users/account-admin-communities`);
+    if (!response.ok) throw new Error("Failed to fetch account admin communities");
     return response.json();
   }
 
@@ -1252,6 +1314,18 @@ class ApiClient {
   async checkResidenceUploadStatus(token: string): Promise<{ isUsed: boolean; isExpired: boolean; photosUploaded: number; usedAt: string | null }> {
     const response = await fetch(`${this.baseUrl}/residence-upload/${token}/status`);
     if (!response.ok) throw new Error('Failed to check upload status');
+    return response.json();
+  }
+
+  async getResidenceTimeline(tenantId: string, residenceId: string): Promise<ResidenceTimeline> {
+    const response = await fetch(`${this.baseUrl}/tenants/${tenantId}/residences/${residenceId}/timeline`);
+    if (!response.ok) throw new Error('Failed to fetch residence timeline');
+    return response.json();
+  }
+
+  async getEmailPreview(emailLogId: string): Promise<EmailPreview> {
+    const response = await fetch(`${this.baseUrl}/email-logs/${emailLogId}/preview`);
+    if (!response.ok) throw new Error('Failed to fetch email preview');
     return response.json();
   }
 }
@@ -2888,6 +2962,7 @@ export interface EventAgendaItem {
   description: string | null;
   presenterId: string | null;
   presenterNotes: string | null;
+  discussionNotes: string | null;
   estimatedMinutes: number | null;
   decision: AgendaDecision | null;
   decisionNotes: string | null;
@@ -2988,6 +3063,7 @@ export async function updateAgendaItem(eventId: string, itemId: string, data: Pa
   title: string;
   description: string;
   presenterNotes: string;
+  discussionNotes: string;
   estimatedMinutes: number;
   decision: AgendaDecision;
   decisionNotes: string;
@@ -3190,6 +3266,14 @@ export async function addAttendee(eventId: string, data: {
   notes?: string;
 }): Promise<MeetingAttendance> {
   return apiRequest('POST', `/api/events/${eventId}/attendance`, data);
+}
+
+export async function removeAttendee(eventId: string, userId: string): Promise<{ success: boolean }> {
+  return apiRequest('DELETE', `/api/events/${eventId}/attendance/${userId}`);
+}
+
+export async function getAttendanceDirectory(eventId: string): Promise<(User & { roles: string[] })[]> {
+  return apiRequest('GET', `/api/events/${eventId}/attendance/directory`);
 }
 
 // Presentation data

@@ -126,7 +126,13 @@ export function CommentThread({ applicationId }: { applicationId: string }) {
                 <div key={commentData.id} className="border rounded-lg p-4 space-y-3" data-testid={`comment-${commentData.id}`}>
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium">{comment.user?.firstName || "User"}</p>
+                      <p className="text-sm font-medium">
+                        {comment.users
+                          ? [comment.users.firstName, comment.users.lastName].filter(Boolean).join(' ') || 'User'
+                          : comment.user
+                            ? [comment.user.firstName, comment.user.lastName].filter(Boolean).join(' ') || 'User'
+                            : 'User'}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(commentData.createdAt).toLocaleString()}
                       </p>

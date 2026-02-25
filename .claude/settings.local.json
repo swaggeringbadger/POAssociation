@@ -75,7 +75,14 @@
       "WebFetch(domain:www.sjcpa.gov)",
       "WebFetch(domain:www.zillow.com)",
       "WebFetch(domain:www.redfin.com)",
-      "WebFetch(domain:fal.ai)"
+      "WebFetch(domain:fal.ai)",
+      "WebFetch(domain:www.smtp2go.com)",
+      "WebFetch(domain:developers.smtp2go.com)",
+      "WebFetch(domain:support.smtp2go.com)",
+      "WebFetch(domain:pipedream.com)",
+      "WebFetch(domain:fluentcrm.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(for file in /home/runner/workspace/client/src/pages/*.tsx /home/runner/workspace/client/src/pages/admin/*.tsx; do\n  if ! grep -q \"setCurrentPageTitle\" \"$file\"; then\n    basename \"$file\"\n  fi\ndone | sort)"
     ],
     "deny": [],
     "ask": []

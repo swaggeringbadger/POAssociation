@@ -1,13 +1,156 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-02-20
-**Current Session:** Neighborhood Residences Feature Complete
+**Last Updated:** 2026-02-23
+**Current Session:** Presentation Mode UX Overhaul
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed (2026-02-20)
+### Just Completed (2026-02-23)
+
+#### Live Meeting Presentation Mode — UX Overhaul - COMPLETE
+
+Transformed the presentation mode (`/calendar/events/:eventId/agenda/present`) from a flat scroll into a polished, professional live-meeting experience.
+
+**Phase 1: Schema**
+- Added `discussionNotes` text column to `eventAgendaItems` table in `shared/schema.ts`
+- Updated `EventAgendaItem` type and `updateAgendaItem()` function in `client/src/lib/api.ts`
+
+**Phase 2: Section Navigation Sidebar**
+- Created `client/src/lib/agendaConstants.ts` — extracted shared section icons, colors, bg colors
+- Created `client/src/components/agenda/SectionNavigator.tsx` — desktop sticky sidebar (260px) + mobile sticky top bar with sheet
+- Restructured `AgendaPresentation.tsx` with flex sidebar + content layout
+- Added `IntersectionObserver` to track visible section for active highlighting
+
+**Phase 3: Active Item Focus & Keyboard Navigation**
+- Added `focusedItemId` state and `orderedItemIds` list in `AgendaPresentation.tsx`
+- Keyboard: `N` = next item, `P` = previous, `Escape` = clear focus (skips textarea/input)
+- Focus → `scrollIntoView({ behavior: 'smooth', block: 'center' })`
+- Updated `PresentationAgendaItem.tsx`: focused item gets `ring-2 ring-primary shadow-lg scale-[1.01]`, others dim to `opacity-60`
+
+**Phase 4: Discussion Notes Capture**
+- Each agenda item has inline `Textarea` for live discussion notes during meetings
+- Debounced save (2s or on blur) via `updateAgendaItem(eventId, itemId, { discussionNotes })`
+- Optimistic cache update on `['presentation-data', eventId]`
+- `MessageSquare` icon badge on items with notes
+
+**Phase 5: Meeting State Machine & Post-Meeting Summary**
+- Added visual stepper in `MeetingControls.tsx` showing 5 states: Not Started → Roll Call → In Progress → Wrapping Up → Ended
+- States derived from attendance + completions (roll call = all expected, wrapping up = all sections complete)
+- Added focus nav buttons (Prev/Next) with current item display in meeting controls
+- Created `MeetingSummary.tsx` — shown at top when meeting ended with duration card, attendance summary (quorum check), decisions grouped by type
+
+**Phase 6: Meeting Minutes PDF**
+- Created `MinutesPdfDocument.tsx` using `@react-pdf/renderer`
+- Structure: header, duration, attendance (grouped by role with quorum), sections with items, discussion notes, decision notes, presenter notes
+- Auto-extracts action items from discussion notes matching `ACTION:` / `TODO:` / `TASK:` patterns
+- "Generate Minutes" button in MeetingSummary
+
+**Phase 7: Polish**
+- Polling: `refetchInterval: 10000` → `5000`
+- Layout-matching loading skeleton (sidebar + header + sections)
+- Mobile header: secondary actions collapsed into DropdownMenu on small screens
+- Roll call touch targets: `min-h-12`, larger checkboxes
+- Smooth transitions: `transition-all duration-200` on section completion state changes
+- Keyboard shortcut hint: floating card on first visit ("Press N/P to navigate") dismisses after 5s
+
+**New Files:**
+- `client/src/lib/agendaConstants.ts`
+- `client/src/components/agenda/SectionNavigator.tsx`
+- `client/src/components/agenda/MeetingSummary.tsx`
+- `client/src/components/agenda/MinutesPdfDocument.tsx`
+
+**Modified Files:**
+- `shared/schema.ts` — added `discussionNotes` column
+- `client/src/lib/api.ts` — added `discussionNotes` to types + updateAgendaItem
+- `client/src/pages/AgendaPresentation.tsx` — complete rewrite with sidebar, focus, state machine
+- `client/src/components/agenda/PresentationAgendaItem.tsx` — focus, notes capture
+- `client/src/components/agenda/PresentationAgendaSection.tsx` — shared constants, focus pass-through
+- `client/src/components/agenda/MeetingControls.tsx` — stepper, focus nav
+- `client/src/components/agenda/RollCallAttendance.tsx` — improved touch targets
+- `client/src/components/agenda/index.ts` — new exports
+
+---
+
+### Previous Session (2026-02-23)
+
+#### Email Preview in Residence Timeline - COMPLETE
+
+Added ability to click an email entry in the residence timeline and see the actual rendered email in a slide-in panel.
+
+**Changes:**
+- `server/storage.ts` — Added `getEmailLogById()` to IStorage + DbStorage; added `emailLogId` to timeline entry details
+- `server/routes.ts` — Added `GET /api/email-logs/:id/preview` endpoint (fetches log, calls `generatePreview()` from template registry, returns reconstructed HTML)
+- `client/src/lib/api.ts` — Added `EmailPreview` type + `getEmailPreview()` method
+- `client/src/components/ResidenceTimeline.tsx` — Added "View Email" button on email entries, `EmailPreviewSheet` component (Sheet slide-in from right with subject/to/date/status header + sandboxed iframe for email HTML body)
+
+**How it works:**
+- Email log stores `templateId` + `templateParameters` as JSONB
+- Preview endpoint calls `generatePreview(templateId, storedParams)` which merges with template defaults
+- HTML renders in a sandboxed `<iframe srcDoc>` with auto-height resizing for style isolation
+- If template not found in registry, shows "preview unavailable" fallback
+
+### Planned — SMTP2GO Webhook Integration
+
+**Feature doc:** `persistent-memory/feature-smtp2go-webhooks.md`
+
+Currently email logs only know `'sent'` (SMTP2GO accepted) or `'failed'` (HTTP error). SMTP2GO can send async webhooks for actual delivery outcomes (delivered, bounced, opened, spam complaint). Plan:
+1. Add `POST /api/webhooks/smtp2go` endpoint (no auth, shared secret validation)
+2. Match incoming events to email logs by `messageId` (= SMTP2GO `request_id`)
+3. Update `status` to `delivered`, `bounced`, etc.
+4. Optional new columns: `deliveredAt`, `bouncedAt`, `bounceReason`
+5. Update timeline badges to reflect new statuses
+6. Configure webhooks in SMTP2GO dashboard + add `SMTP2GO_WEBHOOK_SECRET` env var
+
+### Previous Session (2026-02-22)
+
+#### Email Logging + Timeline Integration - COMPLETE
+
+Added persistent email logging and integrated email events into the residence timeline.
+
+**New Database Table:**
+- `email_logs` — Stores metadata for every transactional email sent (template ID, parameters, recipient, subject, status, SMTP message ID, error message). FKs use `onDelete: "set null"` so logs survive parent deletion.
+
+**Modified Files:**
+- `shared/schema.ts` — Added `emailLogs` table definition with insert schema and types
+- `server/emailService.ts` — Added `EmailLogContext` interface, private `logEmail()` helper, modified `send()` to accept optional log context, updated all 15 specialized methods with optional `logContext` parameter (backward compatible)
+- `server/routes.ts` — Updated 14 email callsites to pass `EmailLogContext` objects (tenantId, applicationId, templateId, templateParameters, triggeredByUserId)
+- `server/storage.ts` — Added `createEmailLog()` and `getEmailLogsByApplication()` to IStorage + DbStorage, added email query to `getResidenceTimeline()` Promise.all block, added `emailCount` to timeline summary
+- `client/src/lib/api.ts` — Added `'email'` to `ResidenceTimelineCategory` union, `emailCount` to timeline summary type
+- `client/src/components/ResidenceTimeline.tsx` — Added `Mail` icon, `email` category config (cyan), email detail renderer showing template badge + failure badge, email count in summary
+
+**Key Design Decisions:**
+- Logging is fire-and-forget: `logEmail()` is wrapped in try/catch so failures never break email sends
+- `logContext` is optional on all methods — existing callers without context continue working unchanged
+- Email logs linked to applications appear on residence timeline; tenant-only logs (workflow changes, invoices) are stored but don't appear on timeline
+- Template parameters stored as JSONB enable future re-rendering via template registry
+
+#### Residence Timeline Tab - COMPLETE
+
+Added a Timeline tab to the NeighborhoodDetail page that aggregates all activity associated with a residence into a chronological, vertical-scroll timeline.
+
+**What appears on the timeline:**
+- Residence record creation and photo uploads
+- Linked application submissions (address-matched)
+- Documents uploaded, comments added
+- AI analyses completed (with compliance score/risk badges)
+- Workflow step actions (approved/rejected/tabled)
+- Meeting agenda decisions
+- Field edits by management (before/after diff)
+- Signatures collected
+- Contractor collaborators added
+
+**New/Modified Files:**
+- `client/src/lib/api.ts` — Added `ResidenceTimelineCategory`, `ResidenceTimelineEntry`, `ResidenceTimeline` types + `getResidenceTimeline()` API client method
+- `server/storage.ts` — Added `getResidenceTimeline()` to IStorage interface + DbStorage (parallel queries across 8+ tables, batch user name resolution)
+- `server/routes.ts` — Added `GET /api/tenants/:tenantId/residences/:id/timeline`
+- `client/src/components/ResidenceTimeline.tsx` — **NEW** timeline component with category filters, sort toggle, date grouping, framer motion animations
+- `client/src/pages/NeighborhoodDetail.tsx` — Added shadcn Tabs (Overview + Timeline)
+
+---
+
+### Previous Session (2026-02-20)
 
 #### Neighborhood Residences (Property Archive) - COMPLETE
 

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -5,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useAppStore } from '@/lib/store';
 import {
   Table,
   TableBody,
@@ -410,6 +412,13 @@ function DashboardSkeleton() {
 
 // Main dashboard component
 export default function ConsumptionDashboard() {
+  const { setCurrentPageTitle } = useAppStore();
+
+  useEffect(() => {
+    setCurrentPageTitle("Billing & Usage");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
+
   const { data: summary, isLoading: summaryLoading, error: summaryError } = useQuery({
     queryKey: ['billing-consumption'],
     queryFn: getConsumptionSummary,

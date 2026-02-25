@@ -15,7 +15,7 @@ import { Link, useLocation } from "wouter";
 import { WorkflowSection } from "@/components/WorkflowSection";
 import { CommentThread } from "@/components/CommentThread";
 import { ApplicationEditHistory } from "@/components/ApplicationEditHistory";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Application } from "@shared/schema";
 import type { AdditionalInfoConfig, BylawReference } from "@shared/formTypes";
 import type { DocumentRequirement } from "@shared/additionalInfoTypes";
@@ -95,6 +95,44 @@ export default function ApplicationDetail() {
   const [quickActionSelected, setQuickActionSelected] = useState<string | null>(null);
   const [showQuickActionDialog, setShowQuickActionDialog] = useState(false);
   const [showInviteContractorDialog, setShowInviteContractorDialog] = useState(false);
+
+  // Track where the user came from for smart back navigation
+  const cameFromRef = useRef<{ path: string; label: string } | null>(null);
+  useEffect(() => {
+    // Capture the referrer on mount (before any in-page navigation)
+    const entries = window.performance?.getEntriesByType?.('navigation') as PerformanceNavigationTiming[] | undefined;
+    const isDirectNav = entries?.[0]?.type === 'navigate';
+
+    // Check the previous history state for internal SPA navigation
+    // We can infer from the current referrer or use a simple heuristic
+    const referrer = document.referrer;
+    const isSameOrigin = referrer && new URL(referrer).origin === window.location.origin;
+
+    if (isSameOrigin) {
+      const refPath = new URL(referrer).pathname;
+      if (refPath.includes('/agenda/present')) {
+        cameFromRef.current = { path: refPath, label: 'Back to Presentation' };
+      } else if (refPath.includes('/agenda')) {
+        cameFromRef.current = { path: refPath, label: 'Back to Agenda' };
+      } else if (refPath.startsWith('/neighborhood')) {
+        cameFromRef.current = { path: refPath, label: 'Back to Residence' };
+      } else if (refPath === '/applications') {
+        cameFromRef.current = { path: '/applications', label: 'Back to Applications' };
+      } else if (refPath === '/dashboard') {
+        cameFromRef.current = { path: '/dashboard', label: 'Back to Dashboard' };
+      }
+    }
+  }, []);
+
+  const handleGoBack = useCallback(() => {
+    if (cameFromRef.current) {
+      navigate(cameFromRef.current.path);
+    } else {
+      navigate('/applications');
+    }
+  }, [navigate]);
+
+  const backLabel = cameFromRef.current?.label || 'Back to Applications';
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["/api/applications", applicationId],
@@ -356,12 +394,10 @@ export default function ApplicationDetail() {
   if (!application) {
     return (
       <div className="space-y-6">
-        <Link href="/applications">
-          <Button variant="outline" className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Applications
-          </Button>
-        </Link>
+        <Button variant="outline" className="gap-2" onClick={handleGoBack}>
+          <ArrowLeft className="h-4 w-4" />
+          {backLabel}
+        </Button>
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12 text-muted-foreground">
@@ -608,12 +644,10 @@ export default function ApplicationDetail() {
     <div className="space-y-6">
       {/* Header with Back Button and Title */}
       <div className="flex items-center gap-4">
-        <Link href="/applications">
-          <Button variant="outline" size="sm" className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-        </Link>
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleGoBack}>
+          <ArrowLeft className="h-4 w-4" />
+          {backLabel}
+        </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">{application.title}</h1>
           <p className="text-muted-foreground text-sm">Application #{application.applicationNumber}</p>

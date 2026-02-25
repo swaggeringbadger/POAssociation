@@ -44,6 +44,10 @@ import {
   Eye,
   EyeOff,
   Repeat,
+  Building2,
+  Home,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { format, addHours, setHours, setMinutes, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -115,9 +119,16 @@ export default function EventModal({
   const availableTenants = tenants.filter(
     (t) => t.type === "management_company" || t.type === "community"
   );
+  const communityTenants = availableTenants.filter((t) => t.type === "community");
+  const managementTenants = availableTenants.filter((t) => t.type === "management_company");
+
+  // Show prominent tenant picker when creating and multiple tenants exist
+  const needsTenantStep = isCreating && availableTenants.length > 1;
+  const [tenantStepComplete, setTenantStepComplete] = useState(false);
 
   // Get the first available tenant and event type IDs
-  const firstTenantId = availableTenants[0]?.id || "";
+  // Default to first community if available, otherwise first tenant
+  const firstTenantId = communityTenants[0]?.id || availableTenants[0]?.id || "";
   const firstEventTypeId = eventTypes[0]?.id || "";
 
   // Reset form when event changes or dialog opens
@@ -171,6 +182,7 @@ export default function EventModal({
       setRecurrenceConfig(null);
     }
     setActiveTab("details");
+    setTenantStepComplete(false);
   }, [event, open, initialDate, firstTenantId, firstEventTypeId]);
 
   // Update end date when start date changes
@@ -332,6 +344,94 @@ export default function EventModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        {/* Step 1: Prominent community picker for new events with multiple tenants */}
+        {needsTenantStep && !tenantStepComplete ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Who is this event for?</DialogTitle>
+              <DialogDescription>
+                Select the community or company this event belongs to — this determines which members see it and which applications are available for the agenda.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              {/* Communities */}
+              {communityTenants.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Communities / Properties</Label>
+                  <div className="grid gap-2">
+                    {communityTenants.map((tenant) => (
+                      <button
+                        key={tenant.id}
+                        type="button"
+                        onClick={() => {
+                          setTenantId(tenant.id);
+                          setTenantStepComplete(true);
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 w-full p-4 rounded-lg border-2 text-left transition-all hover:border-primary/50 hover:bg-primary/5",
+                          tenantId === tenant.id
+                            ? "border-primary bg-primary/5"
+                            : "border-border"
+                        )}
+                      >
+                        <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
+                          <Home className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{tenant.name}</p>
+                          <p className="text-xs text-muted-foreground">Community events, meetings, and reviews</p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Management Companies */}
+              {managementTenants.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Management Company</Label>
+                  <div className="grid gap-2">
+                    {managementTenants.map((tenant) => (
+                      <button
+                        key={tenant.id}
+                        type="button"
+                        onClick={() => {
+                          setTenantId(tenant.id);
+                          setTenantStepComplete(true);
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 w-full p-3 rounded-lg border text-left transition-all hover:border-primary/50 hover:bg-muted/50 opacity-75 hover:opacity-100",
+                          tenantId === tenant.id
+                            ? "border-primary bg-primary/5 opacity-100"
+                            : "border-border"
+                        )}
+                      >
+                        <div className="p-2 rounded-lg bg-slate-100 text-slate-600 shrink-0">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{tenant.name}</p>
+                          <p className="text-xs text-muted-foreground">Internal company events only (not community-specific)</p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                    <p className="text-xs">
+                      Management company events won't have access to community applications or agenda features like ARC reviews. Choose a specific community above for meetings that involve application reviews.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+        <>
         <DialogHeader>
           <DialogTitle>
             {isCreating ? "New Event" : `Edit: ${event?.title}`}
@@ -364,24 +464,45 @@ export default function EventModal({
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 mt-4">
-            {/* Tenant Selection */}
+            {/* Tenant Selection - show selected badge if came from picker step, dropdown otherwise */}
             <div className="space-y-2">
-              <Label htmlFor="tenant">Property / Management Company</Label>
-              <Select value={tenantId} onValueChange={setTenantId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select property or company" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        ({tenant.type === "management_company" ? "Company" : "Property"})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="tenant">Event For</Label>
+              {needsTenantStep ? (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30">
+                  {availableTenants.find((t) => t.id === tenantId)?.type === "management_company" ? (
+                    <Building2 className="h-4 w-4 text-slate-600" />
+                  ) : (
+                    <Home className="h-4 w-4 text-emerald-600" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {availableTenants.find((t) => t.id === tenantId)?.name || "Not selected"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-7 text-xs text-muted-foreground"
+                    onClick={() => setTenantStepComplete(false)}
+                  >
+                    Change
+                  </Button>
+                </div>
+              ) : (
+                <Select value={tenantId} onValueChange={setTenantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select property or company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name}
+                        <span className="text-muted-foreground ml-2 text-xs">
+                          ({tenant.type === "management_company" ? "Company" : "Property"})
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Event Type */}
@@ -674,13 +795,31 @@ export default function EventModal({
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Saving..." : isCreating ? "Create Event" : "Save Changes"}
-          </Button>
+          <div className="flex items-center gap-2 w-full">
+            {/* Show "Back" button to return to tenant picker when applicable */}
+            {needsTenantStep && tenantStepComplete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTenantStepComplete(false)}
+                disabled={isLoading}
+                className="mr-auto text-muted-foreground"
+              >
+                Change community
+              </Button>
+            )}
+            <div className="flex items-center gap-2 ml-auto">
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} disabled={isLoading}>
+                {isLoading ? "Saving..." : isCreating ? "Create Event" : "Save Changes"}
+              </Button>
+            </div>
+          </div>
         </DialogFooter>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,9 +30,14 @@ interface HouseholdMember {
 export default function HouseholdSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { currentTenant } = useAppStore();
+  const { currentTenant, setCurrentPageTitle } = useAppStore();
   const tenantId = currentTenant?.id;
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+
+  useEffect(() => {
+    setCurrentPageTitle("Household Settings");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
 
   // Fetch household members
   const { data: members = [], isLoading } = useQuery<HouseholdMember[]>({

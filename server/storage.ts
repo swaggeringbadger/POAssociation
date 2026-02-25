@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, and, or, sql, inArray, desc, asc, lt, gte, lte, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray, notInArray, desc, asc, lt, gte, lte, isNull, isNotNull } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { workflowEngine } from "./workflowEngine";
 import { expandRecurringEvents, type ExpandedEvent, type EventWithType } from "./recurrenceExpander";
@@ -45,6 +45,7 @@ export interface IStorage {
   assignUserRole(assignment: schema.InsertUserTenantRole): Promise<schema.UserTenantRole>;
   removeUserRole(userId: string, tenantId: string, role: string, deactivatedByUserId?: string): Promise<void>;
   removeUserFromTenant(userId: string, tenantId: string, deactivatedByUserId?: string): Promise<void>;
+  getAccountAdminCommunities(managementCompanyId: string): Promise<Record<string, { id: string; name: string }[]>>;
 
   // Property Rep Assignments
   getPropertyRepAssignments(propertyId: string): Promise<(schema.PropertyRepAssignment & { user: schema.User })[]>;
@@ -406,6 +407,13 @@ export interface IStorage {
   updateCommunityResidence(id: string, updates: Partial<schema.InsertCommunityResidence>): Promise<schema.CommunityResidence>;
   deleteCommunityResidence(id: string): Promise<void>;
   getLinkedApplications(tenantId: string, normalizedAddress: string): Promise<schema.Application[]>;
+  getResidenceTimeline(residenceId: string, tenantId: string, normalizedAddress: string): Promise<any>;
+
+  // Email Logs
+  createEmailLog(log: schema.InsertEmailLog): Promise<schema.EmailLog>;
+  getEmailLogById(id: string): Promise<schema.EmailLog | undefined>;
+  getEmailLogsByApplication(applicationId: string): Promise<schema.EmailLog[]>;
+  updateEmailLogByMessageId(messageId: string, updates: { status: string; deliveredAt?: Date; bouncedAt?: Date; openedAt?: Date; bounceType?: string; bounceReason?: string }): Promise<schema.EmailLog | undefined>;
 
   // Residence Photos
   listResidencePhotos(residenceId: string): Promise<schema.ResidencePhoto[]>;
@@ -825,6 +833,46 @@ export class DbStorage implements IStorage {
     }
 
     return Array.from(userMap.values());
+  }
+
+  async getAccountAdminCommunities(managementCompanyId: string): Promise<Record<string, { id: string; name: string }[]>> {
+    // Get all communities managed by this management company
+    const managedCommunities = await this.getTenantsByManagementCompany(managementCompanyId);
+    if (managedCommunities.length === 0) return {};
+
+    const communityIds = managedCommunities.map(c => c.id);
+
+    // Find all account_admin role assignments at those communities
+    const adminRoles = await db
+      .select({
+        userId: schema.userTenantRoles.userId,
+        tenantId: schema.userTenantRoles.tenantId,
+      })
+      .from(schema.userTenantRoles)
+      .where(
+        and(
+          eq(schema.userTenantRoles.role, 'account_admin'),
+          eq(schema.userTenantRoles.isActive, true),
+          inArray(schema.userTenantRoles.tenantId, communityIds)
+        )
+      );
+
+    // Build a lookup of community id -> name
+    const communityMap = new Map(managedCommunities.map(c => [c.id, c.name]));
+
+    // Group by userId
+    const result: Record<string, { id: string; name: string }[]> = {};
+    for (const row of adminRoles) {
+      if (!result[row.userId]) {
+        result[row.userId] = [];
+      }
+      result[row.userId].push({
+        id: row.tenantId,
+        name: communityMap.get(row.tenantId) || 'Unknown Community',
+      });
+    }
+
+    return result;
   }
 
   async removeUserRole(userId: string, tenantId: string, role: string, deactivatedByUserId?: string): Promise<void> {
@@ -4055,16 +4103,15 @@ export class DbStorage implements IStorage {
     oldBusiness: schema.Application[];
     finalApproval: schema.Application[];
   }> {
-    // Get all pending/under_review applications for this tenant
+    // Get all non-terminated applications for this tenant
+    // Excluded: rejected and withdrawn are terminal states
+    const terminatedStatuses = ['rejected', 'withdrawn'];
     const applications = await db.select()
       .from(schema.applications)
       .where(
         and(
           eq(schema.applications.tenantId, tenantId),
-          or(
-            eq(schema.applications.status, 'pending'),
-            eq(schema.applications.status, 'under_review')
-          )
+          notInArray(schema.applications.status, terminatedStatuses)
         )
       )
       .orderBy(schema.applications.submittedAt);
@@ -4232,31 +4279,76 @@ export class DbStorage implements IStorage {
   // ==================== Meeting Attendance Methods ====================
 
   async initializeMeetingAttendance(eventId: string, tenantId: string): Promise<schema.MeetingAttendance[]> {
-    // Get board members and management reps for this community
-    const roles = await db.select()
+    // Pre-populate with board members, contributors, delegated reps, and management
+    // Homeowners and others can be added manually during the meeting
+    const prePopulateRoles = [
+      'poa_board_member',
+      'poa_board_contributor',
+      'delegated_rep',
+      'management_rep',
+      'management_manager',
+    ];
+
+    // Query community tenant
+    const communityRoles = await db.select()
       .from(schema.userTenantRoles)
       .where(
         and(
           eq(schema.userTenantRoles.tenantId, tenantId),
           eq(schema.userTenantRoles.isActive, true),
-          inArray(schema.userTenantRoles.role, [
-            'poa_board_member',
-            'poa_board_contributor',
-            'management_manager',
-            'management_rep'
-          ])
+          inArray(schema.userTenantRoles.role, prePopulateRoles)
         )
       );
+
+    // Also query parent management company if exists
+    const tenant = await this.getTenant(tenantId);
+    let mgmtRoles: typeof communityRoles = [];
+    if (tenant?.managementCompanyId) {
+      mgmtRoles = await db.select()
+        .from(schema.userTenantRoles)
+        .where(
+          and(
+            eq(schema.userTenantRoles.tenantId, tenant.managementCompanyId),
+            eq(schema.userTenantRoles.isActive, true),
+            inArray(schema.userTenantRoles.role, prePopulateRoles)
+          )
+        );
+    }
+
+    const roles = [...communityRoles, ...mgmtRoles];
 
     if (roles.length === 0) {
       return [];
     }
 
-    const attendanceRecords = roles.map(r => ({
+    // Map user roles to attendee role categories
+    const roleToAttendeeRole = (role: string): string => {
+      if (role.startsWith('poa_') || role === 'delegated_rep') return 'board_member';
+      if (role.startsWith('management_')) return 'management';
+      return 'guest';
+    };
+
+    // Deduplicate by userId — a user with multiple roles should appear once
+    // with the highest-priority attendee role
+    const rolePriority: Record<string, number> = {
+      board_member: 1,
+      management: 2,
+      guest: 3,
+    };
+    const userMap = new Map<string, string>();
+    for (const r of roles) {
+      const attendeeRole = roleToAttendeeRole(r.role);
+      const existing = userMap.get(r.userId);
+      if (!existing || (rolePriority[attendeeRole] || 99) < (rolePriority[existing] || 99)) {
+        userMap.set(r.userId, attendeeRole);
+      }
+    }
+
+    const attendanceRecords = Array.from(userMap.entries()).map(([userId, attendeeRole]) => ({
       eventId,
-      userId: r.userId,
+      userId,
       status: 'expected' as const,
-      attendeeRole: r.role.includes('poa_') ? 'board_member' : 'management',
+      attendeeRole,
     }));
 
     // Insert all, ignoring duplicates
@@ -4298,6 +4390,16 @@ export class DbStorage implements IStorage {
       .values(data)
       .returning();
     return attendance;
+  }
+
+  async removeAttendee(eventId: string, userId: string): Promise<void> {
+    await db.delete(schema.meetingAttendance)
+      .where(
+        and(
+          eq(schema.meetingAttendance.eventId, eventId),
+          eq(schema.meetingAttendance.userId, userId)
+        )
+      );
   }
 
   async getMeetingAttendance(eventId: string): Promise<(schema.MeetingAttendance & { user: schema.User })[]> {
@@ -4944,6 +5046,393 @@ export class DbStorage implements IStorage {
       .where(eq(schema.residenceUploadTokens.token, token))
       .returning();
     return updated;
+  }
+
+  async createEmailLog(log: schema.InsertEmailLog): Promise<schema.EmailLog> {
+    const [created] = await db.insert(schema.emailLogs).values(log).returning();
+    return created;
+  }
+
+  async getEmailLogById(id: string): Promise<schema.EmailLog | undefined> {
+    const [log] = await db.select().from(schema.emailLogs).where(eq(schema.emailLogs.id, id));
+    return log;
+  }
+
+  async getEmailLogsByApplication(applicationId: string): Promise<schema.EmailLog[]> {
+    return db.select().from(schema.emailLogs).where(eq(schema.emailLogs.applicationId, applicationId)).orderBy(desc(schema.emailLogs.sentAt));
+  }
+
+  async updateEmailLogByMessageId(messageId: string, updates: { status: string; deliveredAt?: Date; bouncedAt?: Date; openedAt?: Date; bounceType?: string; bounceReason?: string }): Promise<schema.EmailLog | undefined> {
+    const [updated] = await db
+      .update(schema.emailLogs)
+      .set(updates)
+      .where(eq(schema.emailLogs.messageId, messageId))
+      .returning();
+    return updated;
+  }
+
+  async getResidenceTimeline(residenceId: string, tenantId: string, normalizedAddress: string): Promise<any> {
+    // 1. Get the residence record for the creation event
+    const residence = await this.getCommunityResidence(residenceId);
+    if (!residence) return { entries: [], summary: { totalEntries: 0, applicationCount: 0, photoCount: 0, commentCount: 0, aiAnalysisCount: 0, meetingCount: 0, emailCount: 0 } };
+
+    // 2. Get linked application IDs via normalized address
+    const linkedApps = await this.getLinkedApplications(tenantId, normalizedAddress);
+    const appIds = linkedApps.map(a => a.id);
+    const appLookup = new Map(linkedApps.map(a => [a.id, a]));
+
+    const entries: any[] = [];
+
+    // 3. Residence creation event
+    entries.push({
+      id: `res-created-${residenceId}`,
+      timestamp: residence.createdAt?.toISOString() || new Date().toISOString(),
+      category: 'residence',
+      eventType: 'residence_created',
+      title: 'Residence record created',
+      description: residence.propertyAddress,
+      applicationId: null,
+      applicationNumber: null,
+      applicationTitle: null,
+      userId: residence.createdByUserId,
+      userName: null,
+      details: null,
+      thumbnailId: null,
+      thumbnailType: null,
+    });
+
+    // 4. Residence photos
+    const photos = await this.listResidencePhotos(residenceId);
+    for (const photo of photos) {
+      entries.push({
+        id: `photo-${photo.id}`,
+        timestamp: photo.createdAt?.toISOString() || new Date().toISOString(),
+        category: 'residence',
+        eventType: 'photo_uploaded',
+        title: `${photo.photoType.charAt(0).toUpperCase() + photo.photoType.slice(1)} photo added`,
+        description: photo.caption || photo.fileName,
+        applicationId: null,
+        applicationNumber: null,
+        applicationTitle: null,
+        userId: photo.uploadedByUserId,
+        userName: null,
+        details: { photoType: photo.photoType, fileName: photo.fileName },
+        thumbnailId: photo.id,
+        thumbnailType: 'residence_photo' as const,
+      });
+    }
+
+    // 5. Application events (only if there are linked apps)
+    if (appIds.length > 0) {
+      // Application submitted events
+      for (const app of linkedApps) {
+        entries.push({
+          id: `app-submitted-${app.id}`,
+          timestamp: app.submittedAt?.toISOString() || new Date().toISOString(),
+          category: 'application',
+          eventType: 'application_submitted',
+          title: app.title || `Application ${app.applicationNumber}`,
+          description: `${app.projectType || 'Application'} submitted`,
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          applicationTitle: app.title,
+          userId: app.submittedByUserId,
+          userName: null,
+          details: { status: app.status, projectType: app.projectType },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Run parallel queries for all app-related data — each wrapped to isolate failures
+      const safeQuery = async <T>(label: string, fn: () => Promise<T>): Promise<T | []> => {
+        try { return await fn(); } catch (err: any) { console.error(`[Timeline] ${label} query failed:`, err.message); return [] as any; }
+      };
+
+      const [docsResult, commentsResult, aiResult, workflowActionsResult, agendaItemsResult, fieldEditsResult, signaturesResult, collaboratorsResult, emailLogsResult] = await Promise.all([
+        safeQuery('documents', () => db.select().from(schema.documents).where(inArray(schema.documents.applicationId, appIds))),
+        safeQuery('comments', () => db.select().from(schema.comments).where(inArray(schema.comments.applicationId, appIds))),
+        safeQuery('aiAnalyses', () => db.select().from(schema.aiAnalyses).where(and(inArray(schema.aiAnalyses.applicationId, appIds), eq(schema.aiAnalyses.status, 'completed')))),
+        safeQuery('workflowActions', () =>
+          db.select({
+            actionId: schema.workflowStepActions.id,
+            actionAction: schema.workflowStepActions.action,
+            actionUserId: schema.workflowStepActions.userId,
+            actionNotes: schema.workflowStepActions.notes,
+            actionStepIndex: schema.workflowStepActions.stepIndex,
+            actionCreatedAt: schema.workflowStepActions.createdAt,
+            workflowApplicationId: schema.applicationWorkflows.applicationId,
+          }).from(schema.workflowStepActions)
+            .innerJoin(schema.applicationWorkflows, eq(schema.workflowStepActions.applicationWorkflowId, schema.applicationWorkflows.id))
+            .where(inArray(schema.applicationWorkflows.applicationId, appIds))
+        ),
+        safeQuery('agendaItems', () =>
+          db.select({
+            itemId: schema.eventAgendaItems.id,
+            itemApplicationId: schema.eventAgendaItems.applicationId,
+            itemDecision: schema.eventAgendaItems.decision,
+            itemDecisionNotes: schema.eventAgendaItems.decisionNotes,
+            itemAddedByUserId: schema.eventAgendaItems.addedByUserId,
+            itemUpdatedAt: schema.eventAgendaItems.updatedAt,
+            itemAddedAt: schema.eventAgendaItems.addedAt,
+            eventTitle: schema.events.title,
+            eventStartDatetime: schema.events.startDatetime,
+          }).from(schema.eventAgendaItems)
+            .innerJoin(schema.events, eq(schema.eventAgendaItems.eventId, schema.events.id))
+            .where(and(
+              inArray(schema.eventAgendaItems.applicationId, appIds),
+              isNotNull(schema.eventAgendaItems.decision)
+            ))
+        ),
+        safeQuery('fieldEdits', () => db.select().from(schema.applicationFieldEdits).where(inArray(schema.applicationFieldEdits.applicationId, appIds))),
+        safeQuery('signatures', () => db.select().from(schema.signatures).where(inArray(schema.signatures.applicationId, appIds))),
+        safeQuery('collaborators', () => db.select().from(schema.applicationCollaborators).where(inArray(schema.applicationCollaborators.applicationId, appIds))),
+        safeQuery('emailLogs', () => db.select().from(schema.emailLogs).where(inArray(schema.emailLogs.applicationId, appIds))),
+      ]);
+
+      // Map documents
+      for (const doc of docsResult) {
+        const app = appLookup.get(doc.applicationId);
+        entries.push({
+          id: `doc-${doc.id}`,
+          timestamp: doc.uploadedAt?.toISOString() || new Date().toISOString(),
+          category: 'document',
+          eventType: 'document_uploaded',
+          title: `Document uploaded: ${doc.documentRequirementName}`,
+          description: doc.fileName,
+          applicationId: doc.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: doc.uploadedByUserId,
+          userName: null,
+          details: { fileName: doc.fileName, ocrStatus: doc.ocrStatus, mimeType: doc.mimeType },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map comments
+      for (const comment of commentsResult) {
+        const app = appLookup.get(comment.applicationId);
+        entries.push({
+          id: `comment-${comment.id}`,
+          timestamp: comment.createdAt?.toISOString() || new Date().toISOString(),
+          category: 'comment',
+          eventType: 'comment_added',
+          title: 'Comment added',
+          description: comment.text.length > 120 ? comment.text.slice(0, 120) + '...' : comment.text,
+          applicationId: comment.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: comment.userId,
+          userName: null,
+          details: { text: comment.text, isResolved: comment.isResolved },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map AI analyses
+      for (const analysis of aiResult) {
+        const app = appLookup.get(analysis.applicationId);
+        entries.push({
+          id: `ai-${analysis.id}`,
+          timestamp: analysis.completedAt?.toISOString() || analysis.queuedAt?.toISOString() || new Date().toISOString(),
+          category: 'ai_analysis',
+          eventType: 'ai_analysis_completed',
+          title: 'AI Analysis completed',
+          description: analysis.overallSummary ? (analysis.overallSummary.length > 120 ? analysis.overallSummary.slice(0, 120) + '...' : analysis.overallSummary) : null,
+          applicationId: analysis.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: analysis.requestedByUserId,
+          userName: null,
+          details: { complianceScore: analysis.complianceScore, riskLevel: analysis.riskLevel },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map workflow step actions
+      for (const row of workflowActionsResult) {
+        const app = appLookup.get(row.workflowApplicationId);
+        entries.push({
+          id: `workflow-${row.actionId}`,
+          timestamp: row.actionCreatedAt?.toISOString() || new Date().toISOString(),
+          category: 'workflow',
+          eventType: `workflow_${row.actionAction}`,
+          title: `Workflow: ${row.actionAction.replace(/_/g, ' ')}`,
+          description: row.actionNotes || null,
+          applicationId: row.workflowApplicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: row.actionUserId,
+          userName: null,
+          details: { action: row.actionAction, stepIndex: row.actionStepIndex, notes: row.actionNotes },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map meeting agenda items with decisions
+      for (const row of agendaItemsResult) {
+        const app = row.itemApplicationId ? appLookup.get(row.itemApplicationId) : null;
+        entries.push({
+          id: `meeting-${row.itemId}`,
+          timestamp: row.itemUpdatedAt?.toISOString() || row.itemAddedAt?.toISOString() || new Date().toISOString(),
+          category: 'meeting',
+          eventType: 'meeting_decision',
+          title: `Meeting decision: ${row.itemDecision?.replace(/_/g, ' ') || 'discussed'}`,
+          description: `${row.eventTitle} — ${row.itemDecisionNotes || 'No notes'}`,
+          applicationId: row.itemApplicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: row.itemAddedByUserId,
+          userName: null,
+          details: { decision: row.itemDecision, decisionNotes: row.itemDecisionNotes, eventTitle: row.eventTitle, eventDate: row.eventStartDatetime?.toISOString() },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map field edits
+      for (const edit of fieldEditsResult) {
+        const app = appLookup.get(edit.applicationId);
+        entries.push({
+          id: `edit-${edit.id}`,
+          timestamp: edit.editedAt?.toISOString() || new Date().toISOString(),
+          category: 'edit',
+          eventType: 'field_edited',
+          title: `Field edited: ${edit.fieldLabel || edit.fieldPath}`,
+          description: edit.editReason || null,
+          applicationId: edit.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: edit.editedByUserId,
+          userName: null,
+          details: { fieldPath: edit.fieldPath, fieldLabel: edit.fieldLabel, previousValue: edit.previousValue, newValue: edit.newValue, editSource: edit.editSource },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map signatures
+      for (const sig of signaturesResult) {
+        const app = appLookup.get(sig.applicationId);
+        entries.push({
+          id: `sig-${sig.id}`,
+          timestamp: sig.signedAt?.toISOString() || sig.createdAt?.toISOString() || new Date().toISOString(),
+          category: 'signature',
+          eventType: 'signature_collected',
+          title: `Signature collected from ${sig.signedByName}`,
+          description: null,
+          applicationId: sig.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: sig.signedBy,
+          userName: sig.signedByName,
+          details: { type: sig.type, signedByName: sig.signedByName, signedByEmail: sig.signedByEmail },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map collaborators
+      for (const collab of collaboratorsResult) {
+        const app = appLookup.get(collab.applicationId);
+        entries.push({
+          id: `collab-${collab.id}`,
+          timestamp: collab.invitedAt?.toISOString() || collab.createdAt?.toISOString() || new Date().toISOString(),
+          category: 'collaborator',
+          eventType: 'collaborator_added',
+          title: 'Contractor collaborator added',
+          description: null,
+          applicationId: collab.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: collab.invitedByUserId,
+          userName: null,
+          details: { contractorId: collab.contractorId, status: collab.status },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+
+      // Map email logs
+      for (const email of emailLogsResult) {
+        const app = email.applicationId ? appLookup.get(email.applicationId) : null;
+        const templateLabel = email.templateId
+          ? email.templateId.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase()).trim()
+          : 'Custom Email';
+        entries.push({
+          id: `email-${email.id}`,
+          timestamp: email.sentAt?.toISOString() || new Date().toISOString(),
+          category: 'email',
+          eventType: 'email_sent',
+          title: email.subject,
+          description: `To: ${email.recipientEmail}`,
+          applicationId: email.applicationId,
+          applicationNumber: app?.applicationNumber || null,
+          applicationTitle: app?.title || null,
+          userId: email.triggeredByUserId,
+          userName: null,
+          details: { emailLogId: email.id, templateId: email.templateId, templateLabel, recipientEmail: email.recipientEmail, status: email.status },
+          thumbnailId: null,
+          thumbnailType: null,
+        });
+      }
+    }
+
+    // 6. Batch-resolve user names and roles
+    const userIds = [...new Set(entries.map((e: any) => e.userId).filter(Boolean))];
+    if (userIds.length > 0) {
+      const [users, userRoles] = await Promise.all([
+        db.select({ id: schema.users.id, firstName: schema.users.firstName, lastName: schema.users.lastName, email: schema.users.email })
+          .from(schema.users)
+          .where(inArray(schema.users.id, userIds)),
+        db.select({ userId: schema.userTenantRoles.userId, role: schema.userTenantRoles.role })
+          .from(schema.userTenantRoles)
+          .where(and(
+            inArray(schema.userTenantRoles.userId, userIds),
+            eq(schema.userTenantRoles.tenantId, tenantId),
+            eq(schema.userTenantRoles.isActive, true),
+          )),
+      ]);
+      const userMap = new Map(users.map(u => [u.id, u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : (u.email || 'Unknown')]));
+      // Build userId → best role map (pick most relevant role per user)
+      const rolePriority: Record<string, number> = {
+        homeowner: 1, poa_board_contributor: 2, poa_board_member: 3, delegated_rep: 4,
+        management_rep: 5, management_manager: 6, management_auxiliary: 7, account_admin: 8, super_admin: 9, contractor: 0,
+      };
+      const userRoleMap = new Map<string, string>();
+      for (const ur of userRoles) {
+        const existing = userRoleMap.get(ur.userId);
+        if (!existing || (rolePriority[ur.role] || 0) > (rolePriority[existing] || 0)) {
+          userRoleMap.set(ur.userId, ur.role);
+        }
+      }
+      for (const entry of entries) {
+        if (entry.userId && !entry.userName) {
+          entry.userName = userMap.get(entry.userId) || null;
+        }
+        if (entry.userId) {
+          entry.userRole = userRoleMap.get(entry.userId) || null;
+        }
+      }
+    }
+
+    // 7. Sort by timestamp descending
+    entries.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return { entries, summary: {
+      totalEntries: entries.length,
+      applicationCount: linkedApps.length,
+      photoCount: photos.length,
+      commentCount: entries.filter((e: any) => e.category === 'comment').length,
+      aiAnalysisCount: entries.filter((e: any) => e.category === 'ai_analysis').length,
+      meetingCount: entries.filter((e: any) => e.category === 'meeting').length,
+      emailCount: entries.filter((e: any) => e.category === 'email').length,
+    }};
   }
 }
 

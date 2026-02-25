@@ -35,6 +35,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/hooks/useAuth';
 import { PaymentMethodForm } from '@/components/billing/PaymentMethodForm';
 
@@ -68,7 +69,13 @@ interface BillingSettings {
 export default function PaymentMethodsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { setCurrentPageTitle } = useAppStore();
   const [showAddDialog, setShowAddDialog] = useState(false);
+
+  useEffect(() => {
+    setCurrentPageTitle("Payment Methods");
+    return () => setCurrentPageTitle(null);
+  }, [setCurrentPageTitle]);
   const [setupIntentSecret, setSetupIntentSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

@@ -20,6 +20,7 @@ import {
   contractorInviteAcceptedTemplate,
   contractorReferralTemplate,
   contractorReferralSignupTemplate,
+  delegatedEditNotificationTemplate,
 } from './emailTemplates';
 
 export interface TemplateParameter {
@@ -555,6 +556,46 @@ export const emailTemplateRegistry: Record<string, TemplateDefinition> = {
         data.communityName,
         data.referralCode,
         data.dashboardLink
+      ),
+    }),
+  },
+
+  delegatedEditNotification: {
+    id: 'delegatedEditNotification',
+    name: 'Delegated Edit Notification',
+    description: 'Sent to homeowner when a management rep edits their application on their behalf',
+    status: 'info',
+    parameters: [
+      { key: 'recipientName', label: 'Recipient Name', type: 'string' },
+      { key: 'applicationTitle', label: 'Application Title', type: 'string' },
+      { key: 'editorName', label: 'Editor Name', type: 'string' },
+      { key: 'editorRole', label: 'Editor Role', type: 'string' },
+      { key: 'changedFields', label: 'Changed Fields', type: 'string' },
+      { key: 'editReason', label: 'Edit Reason', type: 'string' },
+      { key: 'applicationLink', label: 'Application URL', type: 'url' },
+      { key: 'communityName', label: 'Community Name', type: 'string' },
+    ],
+    sampleData: {
+      recipientName: 'John Smith',
+      applicationTitle: 'Fence Installation',
+      editorName: 'Sarah Johnson',
+      editorRole: 'Management Representative',
+      changedFields: 'Property Address, Project Description',
+      editReason: 'Updated address to match county records',
+      applicationLink: 'https://poassociation.com/applications/123',
+      communityName: 'Oakwood HOA',
+    },
+    generate: (data) => ({
+      subject: `Your Application Was Updated: ${data.applicationTitle}`,
+      html: delegatedEditNotificationTemplate(
+        data.recipientName,
+        data.applicationTitle,
+        data.editorName,
+        data.editorRole,
+        data.changedFields.split(', '),
+        data.editReason || undefined,
+        data.applicationLink,
+        data.communityName
       ),
     }),
   },

@@ -151,6 +151,11 @@ function ApplicationSuggestionCard({
 
   const StageIcon = stageInfo[stage].icon;
 
+  // Applications in ideal states (pending/under_review) get full emphasis;
+  // others (approved, etc.) are shown but visually de-emphasized
+  const idealStatuses = ['pending', 'under_review'];
+  const isIdealStatus = idealStatuses.includes(application.status || '');
+
   if (isAlreadyAdded) {
     return (
       <div className="p-3 rounded-lg border bg-muted/30 opacity-60">
@@ -169,7 +174,12 @@ function ApplicationSuggestionCard({
   }
 
   return (
-    <div className="p-3 rounded-lg border hover:bg-muted/30 transition-colors">
+    <div className={cn(
+      "p-3 rounded-lg border transition-colors",
+      isIdealStatus
+        ? "hover:bg-muted/30"
+        : "opacity-60 bg-muted/20 hover:opacity-80"
+    )}>
       <div className="flex items-start gap-3">
         <div className={cn("p-1.5 rounded shrink-0",
           stage === "new_business" && "bg-blue-100 text-blue-700",
@@ -206,7 +216,13 @@ function ApplicationSuggestionCard({
           </div>
 
           {application.status && (
-            <Badge variant="outline" className="mt-2 text-xs">
+            <Badge
+              variant="outline"
+              className={cn(
+                "mt-2 text-xs",
+                !isIdealStatus && "border-muted-foreground/40 text-muted-foreground"
+              )}
+            >
               {application.status.replace(/_/g, " ")}
             </Badge>
           )}
@@ -377,7 +393,7 @@ export default function AgendaSuggestions({
                     <Icon className={cn("h-4 w-4", info.className)} />
                     <span className="text-xs text-muted-foreground">{info.description}</span>
                   </div>
-                  <ScrollArea className="h-[300px] pr-4">
+                  <ScrollArea className="h-[600px] pr-4">
                     {applications.length === 0 ? (
                       <div className="text-center py-6 text-muted-foreground">
                         <p className="text-sm">No {info.label.toLowerCase()} items</p>

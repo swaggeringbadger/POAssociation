@@ -21,6 +21,7 @@ import {
   contractorReferralSignupTemplate,
   delegatedEditNotificationTemplate,
 } from './emailTemplates';
+import { emailLogs } from '@shared/schema';
 
 interface EmailPayload {
   to: string | string[];
@@ -28,6 +29,14 @@ interface EmailPayload {
   html: string;
   from?: string;
   replyTo?: string;
+}
+
+export interface EmailLogContext {
+  tenantId?: string;
+  applicationId?: string;
+  templateId?: string;
+  templateParameters?: Record<string, string>;
+  triggeredByUserId?: string;
 }
 
 export class EmailService {
@@ -44,16 +53,49 @@ export class EmailService {
   }
 
   /**
+   * Log an email send to the database (fire-and-forget, never breaks email flow)
+   */
+  private async logEmail(
+    payload: EmailPayload,
+    context: EmailLogContext,
+    status: 'sent' | 'failed',
+    messageId?: string,
+    errorMessage?: string,
+  ): Promise<void> {
+    try {
+      const { db } = await import('./storage');
+      const recipients = Array.isArray(payload.to) ? payload.to : [payload.to];
+      for (const recipient of recipients) {
+        await db.insert(emailLogs).values({
+          tenantId: context.tenantId || null,
+          applicationId: context.applicationId || null,
+          templateId: context.templateId || null,
+          templateParameters: context.templateParameters || null,
+          recipientEmail: recipient,
+          subject: payload.subject,
+          status,
+          messageId: messageId || null,
+          errorMessage: errorMessage || null,
+          triggeredByUserId: context.triggeredByUserId || null,
+        });
+      }
+    } catch (logError) {
+      console.error('[EmailService] Failed to log email (non-fatal):', logError);
+    }
+  }
+
+  /**
    * Send an email via SMTP2GO
    */
-  async send(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async send(payload: EmailPayload, logContext?: EmailLogContext): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (!this.apiKey) {
       console.warn('Email sending disabled: SMTP2GO_API_KEY not configured');
+      if (logContext) await this.logEmail(payload, logContext, 'failed', undefined, 'Email service not configured');
       return { success: false, error: 'Email service not configured' };
     }
 
     try {
-      const recipients = Array.isArray(payload.to) 
+      const recipients = Array.isArray(payload.to)
         ? payload.to
         : [payload.to];
 
@@ -66,10 +108,10 @@ export class EmailService {
         ...(payload.replyTo && { reply_to: payload.replyTo }),
       };
 
-      console.log('[EmailService] Sending to SMTP2GO with payload:', { 
-        to: requestBody.to, 
+      console.log('[EmailService] Sending to SMTP2GO with payload:', {
+        to: requestBody.to,
         subject: requestBody.subject,
-        sender: requestBody.sender 
+        sender: requestBody.sender
       });
 
       const response = await fetch(this.apiUrl, {
@@ -83,22 +125,27 @@ export class EmailService {
       if (!response.ok) {
         const error = await response.json();
         console.error('SMTP2GO API error:', error);
-        return { 
-          success: false, 
-          error: error.message || `HTTP ${response.status}` 
+        const errorMsg = error.message || `HTTP ${response.status}`;
+        if (logContext) await this.logEmail(payload, logContext, 'failed', undefined, errorMsg);
+        return {
+          success: false,
+          error: errorMsg,
         };
       }
 
       const data = await response.json();
+      if (logContext) await this.logEmail(payload, logContext, 'sent', data.request_id);
       return {
         success: true,
         messageId: data.request_id,
       };
     } catch (error: any) {
       console.error('Email service error:', error);
+      const errorMsg = error.message || 'Failed to send email';
+      if (logContext) await this.logEmail(payload, logContext, 'failed', undefined, errorMsg);
       return {
         success: false,
-        error: error.message || 'Failed to send email',
+        error: errorMsg,
       };
     }
   }
@@ -111,7 +158,8 @@ export class EmailService {
     applicationTitle: string,
     applicantName: string,
     communityName: string,
-    applicationLink?: string
+    applicationLink?: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = applicationSubmittedTemplate(
       applicantName,
@@ -124,7 +172,7 @@ export class EmailService {
       to: homeownerEmail,
       subject: `Application Received: ${communityName}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -135,7 +183,8 @@ export class EmailService {
     applicationTitle: string,
     applicantName: string,
     communityName: string,
-    applicationLink?: string
+    applicationLink?: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = applicationApprovedTemplate(
       applicantName,
@@ -148,7 +197,7 @@ export class EmailService {
       to: homeownerEmail,
       subject: `Approved: ${applicationTitle}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -160,7 +209,8 @@ export class EmailService {
     applicantName: string,
     communityName: string,
     reason?: string,
-    applicationLink?: string
+    applicationLink?: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = applicationRejectedTemplate(
       applicantName,
@@ -174,7 +224,7 @@ export class EmailService {
       to: homeownerEmail,
       subject: `Application Status: ${applicationTitle}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -186,7 +236,8 @@ export class EmailService {
     applicationTitle: string,
     stepTitle: string,
     communityName: string,
-    applicationLink: string
+    applicationLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = stepAssignmentTemplate(
       recipientName,
@@ -200,7 +251,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `Application Review Required: ${applicationTitle}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -212,7 +263,8 @@ export class EmailService {
     commenterName: string,
     applicationTitle: string,
     comment: string,
-    applicationLink: string
+    applicationLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = commentNotificationTemplate(
       recipientName,
@@ -226,7 +278,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `New Comment: ${applicationTitle}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -240,7 +292,8 @@ export class EmailService {
     invoiceAmount: string,
     billingPeriod: string,
     dueDate: string,
-    invoiceLink: string
+    invoiceLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = invoiceTemplate(
       recipientName,
@@ -256,7 +309,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `Invoice ${invoiceNumber} - ${billingEntityName}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -269,7 +322,8 @@ export class EmailService {
     invoiceNumber: string,
     paymentAmount: string,
     paymentDate: string,
-    receiptLink: string
+    receiptLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = paymentReceivedTemplate(
       recipientName,
@@ -284,7 +338,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `Payment Received - Invoice ${invoiceNumber}`,
       html,
-    });
+    }, logContext);
   }
 
   // ============================================
@@ -300,7 +354,8 @@ export class EmailService {
     communityName: string,
     inviterName: string,
     inviteLink: string,
-    communityDescription?: string
+    communityDescription?: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = bulkCommunityInviteTemplate(
       recipientName,
@@ -314,7 +369,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `You're Invited to Join ${communityName}`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -326,7 +381,8 @@ export class EmailService {
     inviterName: string,
     communityName: string,
     relationship: string,
-    inviteLink: string
+    inviteLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = householdMemberInviteTemplate(
       recipientName,
@@ -340,7 +396,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `${inviterName} invited you to join their household`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -352,7 +408,8 @@ export class EmailService {
     memberName: string,
     memberEmail: string,
     communityName: string,
-    dashboardLink: string
+    dashboardLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = householdMemberJoinedTemplate(
       recipientName,
@@ -366,7 +423,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `${memberName} joined your household`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -379,7 +436,8 @@ export class EmailService {
     applicationTitle: string,
     communityName: string,
     inviteLink: string,
-    projectDescription?: string
+    projectDescription?: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = contractorInviteTemplate(
       recipientName,
@@ -394,7 +452,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `${inviterName} invited you to collaborate on "${applicationTitle}"`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -407,7 +465,8 @@ export class EmailService {
     contractorCompany: string | undefined,
     applicationTitle: string,
     communityName: string,
-    applicationLink: string
+    applicationLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = contractorInviteAcceptedTemplate(
       recipientName,
@@ -422,7 +481,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `${contractorName} joined your application`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -433,7 +492,8 @@ export class EmailService {
     recipientName: string,
     referralCode: string,
     referralLink: string,
-    dashboardLink: string
+    dashboardLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = contractorReferralTemplate(
       recipientName,
@@ -446,7 +506,7 @@ export class EmailService {
       to: recipientEmail,
       subject: 'Your POAssociation Referral Link',
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -457,7 +517,8 @@ export class EmailService {
     recipientName: string,
     communityName: string,
     referralCode: string,
-    dashboardLink: string
+    dashboardLink: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = contractorReferralSignupTemplate(
       recipientName,
@@ -470,7 +531,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `New Referral: ${communityName} signed up!`,
       html,
-    });
+    }, logContext);
   }
 
   /**
@@ -485,7 +546,8 @@ export class EmailService {
     changedFields: string[],
     editReason: string | undefined,
     applicationLink: string,
-    communityName: string
+    communityName: string,
+    logContext?: EmailLogContext
   ): Promise<{ success: boolean; error?: string }> {
     const html = delegatedEditNotificationTemplate(
       recipientName,
@@ -502,7 +564,7 @@ export class EmailService {
       to: recipientEmail,
       subject: `Your application "${applicationTitle}" was updated`,
       html,
-    });
+    }, logContext);
   }
 }
 
