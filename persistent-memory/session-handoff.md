@@ -1,13 +1,57 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-02-23
-**Current Session:** Presentation Mode UX Overhaul
+**Last Updated:** 2026-02-25
+**Current Session:** Prompt Versioning System
 
 ---
 
 ## CURRENT STATE SUMMARY
 
-### Just Completed (2026-02-23)
+### Just Completed (2026-02-25)
+
+#### Prompt Versioning System - COMPLETE
+
+Implemented a centralized versioned prompt management system for all 21 AI prompts across the application. Each prompt now lives in its own directory with numbered version files and a registry for easy rollback.
+
+**New Files:**
+- `server/prompts/promptRegistry.ts` — Singleton PromptRegistry class with getPrompt(), getPromptJson(), listVersions(), setActiveVersion(), reload()
+- `server/prompts/registry.json` — Manifest mapping 21 prompt keys to active version numbers
+- 21 versioned prompt directories under `server/prompts/*/v1.md` (or v1.json for JSON maps)
+
+**Migrated from flat files (8 prompts):**
+- `form-generation-system`, `form-generation-user` (from system-prompt.md, user-prompt.md)
+- `analysis-system`, `analysis-user` (from analysis-system-prompt.md, analysis-user-prompt.md)
+- `breakdown-report-system`, `breakdown-report-user` (from breakdown-report-*.md)
+- `property-research-system`, `property-research-user` (from property-research-*.md)
+
+**Extracted from inline code (13 prompts):**
+- `public-resources-generation` (from routes.ts)
+- `flux-kontext-uploaded-photo`, `flux-kontext-satellite` (from imageGenerationService.ts)
+- `mockup-with-photos`, `mockup-satellite-only`, `mockup-no-images` (from imageGenerationService.ts)
+- `project-type-snippets` (JSON map, from imageGenerationService.ts)
+- `blueprint-with-satellite`, `blueprint-no-satellite` (from imageGenerationService.ts)
+- `blueprint-project-snippets` (JSON map, from imageGenerationService.ts)
+- `landscape-mockup-with-satellite`, `landscape-mockup-no-satellite` (from imageGenerationService.ts)
+- `image-sharpening` (from imageSharpeningService.ts)
+
+**Modified Files:**
+- `server/aiFormGenerationService.ts` — Removed loadPromptTemplate(), uses promptRegistry.getPrompt()
+- `server/services/aiAnalysisService.ts` — Removed loadPromptTemplate(), uses promptRegistry for 6 prompts
+- `server/services/imageGenerationService.ts` — Extracted 10 inline prompts to files, uses promptRegistry
+- `server/services/imageSharpeningService.ts` — Extracted inline prompt, uses promptRegistry
+- `server/routes.ts` — Extracted public-resources prompt, uses promptRegistry
+- `server/prompts/README.md` — Updated documentation for versioned system
+
+**Deleted Files:**
+- 8 old flat prompt files (system-prompt.md, user-prompt.md, analysis-*.md, breakdown-*.md, property-research-*.md)
+
+**Rollback Workflow:**
+- Quick rollback: Edit registry.json, change activeVersion number, restart server
+- New version: Copy v1.md → v2.md, edit, update registry.json
+
+---
+
+### Previous Session (2026-02-23)
 
 #### Live Meeting Presentation Mode — UX Overhaul - COMPLETE
 
