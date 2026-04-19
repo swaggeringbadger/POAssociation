@@ -16,6 +16,16 @@ import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
 import { getCalendarFeedToken, regenerateCalendarFeedToken, type CalendarFeedToken } from "@/lib/api";
 import QRCode from "qrcode";
+import { McpReviewerPanel } from "@/components/settings/McpReviewerPanel";
+
+const REVIEWER_ROLES_FOR_AI_TAB = new Set([
+  "poa_board_member",
+  "poa_board_contributor",
+  "management_manager",
+  "management_rep",
+  "account_admin",
+  "super_admin",
+]);
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -44,7 +54,7 @@ const notificationTypes: { key: keyof NotificationPreferences; label: string; de
 
 export default function ProfileSettings() {
   const { user } = useAuth();
-  const { setCurrentPageTitle } = useAppStore();
+  const { setCurrentPageTitle, availableRolesForCurrentTenant } = useAppStore();
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPreferences>({
     applicationSubmitted: true,
@@ -177,13 +187,23 @@ export default function ProfileSettings() {
     }
   };
 
+  const canSeeAiReviewer = availableRolesForCurrentTenant.some((r) =>
+    REVIEWER_ROLES_FOR_AI_TAB.has(r),
+  );
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-3" data-testid="settings-tabs">
+        <TabsList
+          className={`grid w-full ${canSeeAiReviewer ? "grid-cols-4" : "grid-cols-3"}`}
+          data-testid="settings-tabs"
+        >
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          {canSeeAiReviewer && (
+            <TabsTrigger value="ai-reviewer">AI Reviewer</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile">
@@ -513,6 +533,12 @@ export default function ProfileSettings() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canSeeAiReviewer && (
+          <TabsContent value="ai-reviewer">
+            <McpReviewerPanel />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Account Info */}

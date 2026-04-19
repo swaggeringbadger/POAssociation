@@ -426,6 +426,14 @@ export interface IStorage {
   createResidenceUploadToken(token: schema.InsertResidenceUploadToken): Promise<schema.ResidenceUploadToken>;
   getResidenceUploadToken(token: string): Promise<schema.ResidenceUploadToken | undefined>;
   markResidenceTokenAsUsed(token: string, photosUploaded: number): Promise<schema.ResidenceUploadToken>;
+
+  // MCP Reviewer Tokens
+  createMcpToken(data: { userId: string; tenantId: string; token: string; label?: string | null; expiresAt?: Date | null }): Promise<schema.McpToken>;
+  listMcpTokensForUserInTenant(userId: string, tenantId: string): Promise<schema.McpToken[]>;
+  getMcpTokenByValue(token: string): Promise<schema.McpToken | undefined>;
+  revokeMcpToken(id: string, userId: string): Promise<schema.McpToken | undefined>;
+  touchMcpToken(id: string): Promise<void>;
+  logMcpToolCall(entry: schema.InsertMcpToolCall): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -5433,6 +5441,70 @@ export class DbStorage implements IStorage {
       meetingCount: entries.filter((e: any) => e.category === 'meeting').length,
       emailCount: entries.filter((e: any) => e.category === 'email').length,
     }};
+  }
+
+  // ============================================
+  // MCP Reviewer Tokens
+  // ============================================
+
+  async createMcpToken(data: {
+    userId: string;
+    tenantId: string;
+    token: string;
+    label?: string | null;
+    expiresAt?: Date | null;
+  }): Promise<schema.McpToken> {
+    const [row] = await db
+      .insert(schema.mcpTokens)
+      .values({
+        userId: data.userId,
+        tenantId: data.tenantId,
+        token: data.token,
+        label: data.label ?? null,
+        expiresAt: data.expiresAt ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async listMcpTokensForUserInTenant(userId: string, tenantId: string): Promise<schema.McpToken[]> {
+    return db
+      .select()
+      .from(schema.mcpTokens)
+      .where(and(eq(schema.mcpTokens.userId, userId), eq(schema.mcpTokens.tenantId, tenantId)))
+      .orderBy(desc(schema.mcpTokens.createdAt));
+  }
+
+  async getMcpTokenByValue(token: string): Promise<schema.McpToken | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.mcpTokens)
+      .where(eq(schema.mcpTokens.token, token))
+      .limit(1);
+    return row;
+  }
+
+  async revokeMcpToken(id: string, userId: string): Promise<schema.McpToken | undefined> {
+    const [row] = await db
+      .update(schema.mcpTokens)
+      .set({ isActive: false })
+      .where(and(eq(schema.mcpTokens.id, id), eq(schema.mcpTokens.userId, userId)))
+      .returning();
+    return row;
+  }
+
+  async touchMcpToken(id: string): Promise<void> {
+    await db
+      .update(schema.mcpTokens)
+      .set({
+        lastUsedAt: new Date(),
+        accessCount: sql`${schema.mcpTokens.accessCount} + 1`,
+      })
+      .where(eq(schema.mcpTokens.id, id));
+  }
+
+  async logMcpToolCall(entry: schema.InsertMcpToolCall): Promise<void> {
+    await db.insert(schema.mcpToolCalls).values(entry);
   }
 }
 

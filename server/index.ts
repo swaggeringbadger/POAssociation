@@ -50,6 +50,9 @@ app.use(
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
 
+  // MCP endpoint uses bearer-token auth, not session cookies — carve out first.
+  if (req.path === "/mcp" || req.path.startsWith("/mcp/")) return next();
+
   // Exclude webhook endpoints (they use signature-based auth)
   if (req.path.startsWith("/api/webhooks/")) return next();
 
@@ -106,8 +109,14 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Redact MCP token bodies — POST response returns a plaintext bearer
+      // token that must never appear in logs.
+      const isMcpTokenCreate =
+        req.method === "POST" && /\/mcp-tokens\/?$/.test(path);
+      if (capturedJsonResponse && !isMcpTokenCreate) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      } else if (isMcpTokenCreate) {
+        logLine += ` :: [redacted]`;
       }
 
       if (logLine.length > 80) {

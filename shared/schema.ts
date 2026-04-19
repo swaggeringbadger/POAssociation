@@ -2352,4 +2352,67 @@ export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
   sentAt: true,
 });
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+
+// ============================================
+// MCP REVIEWER TOKENS (external LLM clients)
+// ============================================
+// Personal bearer tokens issued to reviewer-role users so they can connect
+// Claude Desktop / Claude Code / Cursor to /mcp and review applications via
+// their LLM. One active token per (user, tenant) pair, enforced by a partial
+// unique index. Plaintext storage follows the calendar_feed_tokens pattern.
+export const mcpTokens = pgTable("mcp_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(), // crypto.randomBytes(32).toString('hex')
+  label: text("label"),                    // user-supplied, e.g. "My laptop"
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  accessCount: integer("access_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),      // null = no expiry
+}, (table) => ({
+  userTenantIdx: index("mcp_tokens_user_tenant_idx").on(table.userId, table.tenantId),
+  tokenIdx: index("mcp_tokens_token_idx").on(table.token),
+  // One active token per (user, tenant) pair. Revocation sets isActive=false,
+  // freeing the slot for a new token.
+  activeUnique: uniqueIndex("mcp_tokens_active_user_tenant_uniq")
+    .on(table.userId, table.tenantId)
+    .where(sql`${table.isActive} = true`),
+}));
+
+export const insertMcpTokenSchema = createInsertSchema(mcpTokens).omit({
+  id: true,
+  createdAt: true,
+  lastUsedAt: true,
+  accessCount: true,
+});
+export type InsertMcpToken = z.infer<typeof insertMcpTokenSchema>;
+export type McpToken = typeof mcpTokens.$inferSelect;
+
+// MCP tool call audit log — append-only record of every /mcp tool invocation.
+// argumentKeys stores only the *keys* of the arguments object (never values) to
+// avoid persisting comment bodies (potential PII). Writes are fire-and-forget.
+export const mcpToolCalls = pgTable("mcp_tool_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tokenId: varchar("token_id").references(() => mcpTokens.id, { onDelete: "set null" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  tenantId: varchar("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  toolName: text("tool_name").notNull(),
+  argumentKeys: jsonb("argument_keys").$type<string[]>(), // KEYS ONLY, never values
+  resultStatus: text("result_status").notNull(), // 'ok' | 'error' | 'forbidden'
+  errorCode: text("error_code"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantCreatedIdx: index("mcp_tool_calls_tenant_created_idx").on(table.tenantId, table.createdAt),
+  tokenIdx: index("mcp_tool_calls_token_idx").on(table.tokenId),
+}));
+
+export const insertMcpToolCallSchema = createInsertSchema(mcpToolCalls).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertMcpToolCall = z.infer<typeof insertMcpToolCallSchema>;
+export type McpToolCall = typeof mcpToolCalls.$inferSelect;
 export type EmailLog = typeof emailLogs.$inferSelect;

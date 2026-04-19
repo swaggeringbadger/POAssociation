@@ -16,6 +16,8 @@ import multer from "multer";
 import crypto from "crypto";
 import { promptRegistry } from "./prompts/promptRegistry";
 import { sanitizeText, sanitizeFormData } from "./lib/sanitize";
+import { createMcpRouter } from "./mcp";
+import { REVIEWER_ROLES } from "./mcp/auth";
 
 // Configure multer for in-memory file uploads
 const upload = multer({
@@ -72,6 +74,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Referenced from Replit Auth integration: blueprint:javascript_log_in_with_replit
   await setupAuth(app);
 
+  // MCP reviewer endpoint — mounted BEFORE subdomain / auth-gated routes so
+  // bearer-token clients (Claude Desktop, Cursor, etc.) never touch session
+  // middleware. Feature-flagged by MCP_ENABLED; default enabled.
+  if (process.env.MCP_ENABLED !== "false") {
+    app.use("/mcp", createMcpRouter());
+  }
+
   // Apply subdomain detection to all routes
   app.use(subdomainMiddleware);
 
@@ -100,6 +109,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
+
+  // ============================================
+  // MCP Reviewer Token Management
+  // ============================================
+  // Session-authed CRUD for the bearer tokens that external LLM clients use
+  // to reach /mcp. Users generate one token per community they review for.
+  // Reviewer-role gate is enforced per-endpoint against the :tenantId param.
+
+  async function resolveSessionUserId(req: any): Promise<string | null> {
+    if (req.session?.userId) return req.session.userId;
+    if (req.user?.claims?.sub) return req.user.claims.sub;
+    return null;
+  }
+
+  async function requireReviewerInTenant(req: any, res: any, tenantId: string): Promise<string | null> {
+    const userId = await resolveSessionUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: "Not authenticated" });
+      return null;
+    }
+    const roles = await storage.getUserRolesForTenant(userId, tenantId);
+    const hasReviewerRole = roles.some((r) =>
+      (REVIEWER_ROLES as readonly string[]).includes(r.role),
+    );
+    if (!hasReviewerRole) {
+      res.status(403).json({ error: "No reviewer role in this community" });
+      return null;
+    }
+    return userId;
+  }
+
+  app.get("/api/tenants/:tenantId/mcp-tokens", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = await requireReviewerInTenant(req, res, req.params.tenantId);
+      if (!userId) return;
+      const tokens = await storage.listMcpTokensForUserInTenant(userId, req.params.tenantId);
+      // Never return the plaintext token after creation.
+      res.json(
+        tokens.map((t) => ({
+          id: t.id,
+          label: t.label,
+          isActive: t.isActive,
+          createdAt: t.createdAt,
+          lastUsedAt: t.lastUsedAt,
+          accessCount: t.accessCount,
+          expiresAt: t.expiresAt,
+        })),
+      );
+    } catch (err: any) {
+      console.error("listMcpTokens error", err);
+      res.status(500).json({ error: err?.message || "Failed to list tokens" });
+    }
+  });
+
+  app.post("/api/tenants/:tenantId/mcp-tokens", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = await requireReviewerInTenant(req, res, req.params.tenantId);
+      if (!userId) return;
+
+      const bodySchema = z.object({
+        label: z.string().trim().min(1).max(100).optional(),
+      });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).toString() });
+      }
+
+      // Enforce partial unique index: revoke any existing active token first.
+      const existing = await storage.listMcpTokensForUserInTenant(userId, req.params.tenantId);
+      for (const t of existing.filter((t) => t.isActive)) {
+        await storage.revokeMcpToken(t.id, userId);
+      }
+
+      const tokenValue = `mcpr_${crypto.randomBytes(32).toString("hex")}`;
+      const created = await storage.createMcpToken({
+        userId,
+        tenantId: req.params.tenantId,
+        token: tokenValue,
+        label: parsed.data.label ?? null,
+      });
+
+      // Plaintext token returned ONCE — response body is redacted in logs.
+      res.json({
+        id: created.id,
+        token: tokenValue,
+        label: created.label,
+        createdAt: created.createdAt,
+      });
+    } catch (err: any) {
+      console.error("createMcpToken error", err);
+      res.status(500).json({ error: err?.message || "Failed to create token" });
+    }
+  });
+
+  app.delete(
+    "/api/tenants/:tenantId/mcp-tokens/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const userId = await requireReviewerInTenant(req, res, req.params.tenantId);
+        if (!userId) return;
+        const revoked = await storage.revokeMcpToken(req.params.id, userId);
+        if (!revoked) {
+          return res.status(404).json({ error: "Token not found" });
+        }
+        res.status(204).end();
+      } catch (err: any) {
+        console.error("revokeMcpToken error", err);
+        res.status(500).json({ error: err?.message || "Failed to revoke token" });
+      }
+    },
+  );
 
   // Logout endpoint - properly destroys session for both demo and Replit auth users
   app.post('/api/auth/logout', async (req: any, res) => {

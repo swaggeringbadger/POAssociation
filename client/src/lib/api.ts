@@ -2118,6 +2118,43 @@ export async function regenerateCalendarFeedToken(): Promise<CalendarFeedToken> 
 }
 
 // ============================================================
+// MCP REVIEWER TOKENS
+// ============================================================
+
+export interface McpTokenSummary {
+  id: string;
+  label: string | null;
+  isActive: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+  accessCount: number;
+  expiresAt: string | null;
+}
+
+// Returned ONCE at creation. Plaintext `token` will not be shown again.
+export interface McpTokenCreated {
+  id: string;
+  token: string;
+  label: string | null;
+  createdAt: string;
+}
+
+export async function listMcpTokens(tenantId: string): Promise<McpTokenSummary[]> {
+  return apiRequest('GET', `/api/tenants/${tenantId}/mcp-tokens`);
+}
+
+export async function createMcpToken(
+  tenantId: string,
+  label?: string,
+): Promise<McpTokenCreated> {
+  return apiRequest('POST', `/api/tenants/${tenantId}/mcp-tokens`, { label });
+}
+
+export async function revokeMcpToken(tenantId: string, tokenId: string): Promise<void> {
+  await apiRequest('DELETE', `/api/tenants/${tenantId}/mcp-tokens/${tokenId}`);
+}
+
+// ============================================================
 // AI ANALYSIS API METHODS
 // ============================================================
 
