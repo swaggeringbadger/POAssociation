@@ -84,9 +84,17 @@
       "WebFetch(domain:github.com)",
       "Bash(for file in /home/runner/workspace/client/src/pages/*.tsx /home/runner/workspace/client/src/pages/admin/*.tsx; do\n  if ! grep -q \"setCurrentPageTitle\" \"$file\"; then\n    basename \"$file\"\n  fi\ndone | sort)",
       "WebFetch(domain:www.vantaca.com)",
-      "WebFetch(domain:support.vantaca.com)"
+      "WebFetch(domain:support.vantaca.com)",
+      "WebFetch(domain:poassociation.com)",
+      "WebFetch(domain:app.swaggerhub.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.swaggerhub.com)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "sb-mcp",
+    "sb-team"
+  ]
 }

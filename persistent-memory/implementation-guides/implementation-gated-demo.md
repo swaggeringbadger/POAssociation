@@ -555,7 +555,7 @@ const PERSONAS = [
   {
     id: 'contributor',
     name: 'Alex Rivera',
-    title: 'Board Contributor',
+    title: 'ARC Committee Member',
     icon: Users,
     description: 'Participate in reviews, add comments, but without voting rights',
     features: [
@@ -755,7 +755,7 @@ export function DemoBanner() {
     manager: 'Management Manager',
     board: 'Board Member',
     resident: 'Homeowner',
-    contributor: 'Board Contributor',
+    contributor: 'ARC Committee Member',
   }[user.demoPersona || ''] || 'Demo User';
 
   return (

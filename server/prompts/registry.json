@@ -1,9 +1,11 @@
 {
   "prompts": {
-    "form-generation-system": { "activeVersion": 1, "description": "System prompt for AI form generation" },
-    "form-generation-user": { "activeVersion": 1, "description": "User prompt for AI form generation" },
-    "analysis-system": { "activeVersion": 1, "description": "System prompt for compliance analysis" },
-    "analysis-user": { "activeVersion": 1, "description": "User prompt for compliance analysis" },
+    "form-generation-system": { "activeVersion": 4, "description": "System prompt for AI form generation" },
+    "form-generation-user": { "activeVersion": 4, "description": "User prompt for AI form generation" },
+    "document-extraction-system": { "activeVersion": 2, "description": "System prompt for extracting relevant sections from governing documents" },
+    "document-extraction-user": { "activeVersion": 2, "description": "User prompt for document extraction with document content" },
+    "analysis-system": { "activeVersion": 2, "description": "System prompt for compliance analysis" },
+    "analysis-user": { "activeVersion": 2, "description": "User prompt for compliance analysis" },
     "breakdown-report-system": { "activeVersion": 1, "description": "System prompt for breakdown report" },
     "breakdown-report-user": { "activeVersion": 1, "description": "User prompt for breakdown report" },
     "property-research-system": { "activeVersion": 1, "description": "System prompt for property research" },

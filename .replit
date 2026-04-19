@@ -45,6 +45,8 @@ integrations = ["javascript_log_in_with_replit:1.0.0"]
 [userenv]
 
 [userenv.shared]
+SB_MCP_URL = "SB_MCP_URL"
+SB_PUBLIC_URL = ""
 
 [userenv.development]
 APP_URL = "https://3790db04-5cf2-445f-8181-a43c1b7b7d66-00-3mqxrhnfh6gcs.worf.replit.dev"

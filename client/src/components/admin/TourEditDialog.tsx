@@ -26,6 +26,7 @@ import { updateAdminTour, TourContentOverride } from '@/lib/api';
 import { FlattenedTour } from '@/lib/tour';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useFormatRoleLabel } from '@/hooks/useLegalEntityLabel';
 
 interface TourStep {
   title: string;
@@ -123,12 +124,7 @@ export function TourEditDialog({ open, onOpenChange, tour, override }: TourEditD
 
   if (!tour) return null;
 
-  const formatRoleLabel = (role: string) => {
-    return role
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
+  const formatRoleLabel = useFormatRoleLabel();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

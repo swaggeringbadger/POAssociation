@@ -8,7 +8,6 @@ import {
   CalendarPlus,
   Clock,
   ExternalLink,
-  FileText,
   Globe,
   Mail,
   MapPin,
@@ -18,6 +17,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { format } from "date-fns";
+import CommunityGuidelinesCard from "@/components/CommunityGuidelinesCard";
 import logoImage from "@assets/generated_images/abstract_geometric_building_logo_concept.png";
 import defaultHeroImage from "@assets/generated_images/modern_suburban_homes_with_green_lawns_and_blue_sky.png";
 
@@ -48,6 +48,15 @@ interface PublicCommunityInfo {
       publicResources?: string;
     } | null;
   };
+  guidelines?: {
+    id: string;
+    name: string;
+    description: string | null;
+    sourceType: 'url' | 'uploaded_document';
+    sourceUrl: string | null;
+    fileName: string | null;
+    mimeType: string | null;
+  }[];
   nextEvent: {
     id: string;
     title: string;
@@ -60,6 +69,18 @@ interface PublicCommunityInfo {
       slug: string;
     } | null;
   } | null;
+  upcomingEvents?: {
+    id: string;
+    title: string;
+    startDatetime: string;
+    endDatetime: string;
+    location: string | null;
+    meetingUrl: string | null;
+    eventType: {
+      name: string;
+      slug: string;
+    } | null;
+  }[];
 }
 
 interface CommunityLandingProps {
@@ -102,7 +123,7 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
     );
   }
 
-  const { tenant, nextEvent } = data;
+  const { tenant, nextEvent, guidelines, upcomingEvents = [] } = data;
   const settings = tenant.communitySettings || {};
   const heroImage = tenant.heroImageUrl || defaultHeroImage;
   const focusX = settings.heroImageFocusX ?? 50;
@@ -143,11 +164,6 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
             <span className="text-xl font-bold text-primary font-heading">{tenant.name}</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" asChild>
-              <Link href="/apply">
-                Submit Request
-              </Link>
-            </Button>
             <Button onClick={() => window.location.href = '/api/login'}>
               Sign In <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -320,58 +336,75 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
             </Card>
           </div>
 
-          {/* Quick Links Section */}
-          <div className="mt-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Links</CardTitle>
-                <CardDescription>
-                  Common actions and resources
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-4">
-                  <Button asChild>
-                    <Link href="/apply">
-                      <FileText className="h-4 w-4 mr-2" />
-                      Submit a Request
-                    </Link>
-                  </Button>
-
-                  {tenant.designGuidelinesUrl && (
-                    <Button variant="outline" asChild>
-                      <a
-                        href={tenant.designGuidelinesUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        View Guidelines
-                      </a>
-                    </Button>
-                  )}
-
-                  <Button variant="outline" onClick={() => window.location.href = '/api/login'}>
-                    <User className="h-4 w-4 mr-2" />
-                    Resident Portal
-                  </Button>
-
-                  {settings.website && (
-                    <Button variant="outline" asChild>
-                      <a
-                        href={settings.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Community Website
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Upcoming Events Section */}
+          {upcomingEvents.length > 1 && (
+            <div className="mt-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    Upcoming Events
+                  </CardTitle>
+                  <CardDescription>
+                    Community meetings and events
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {upcomingEvents.slice(1).map((event) => {
+                      const startDate = new Date(event.startDatetime);
+                      const calUrl = getGoogleCalendarUrl(event);
+                      return (
+                        <div
+                          key={event.id}
+                          className="flex items-start gap-4 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="flex flex-col items-center justify-center rounded-md bg-primary/10 px-3 py-2 shrink-0 min-w-[56px]">
+                            <span className="text-xs font-medium text-primary uppercase">
+                              {format(startDate, 'MMM')}
+                            </span>
+                            <span className="text-lg font-bold text-primary leading-tight">
+                              {format(startDate, 'd')}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{event.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {format(startDate, 'h:mm a')}
+                              </span>
+                              {event.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {event.location}
+                                </span>
+                              )}
+                              {event.eventType && (
+                                <span className="text-primary/70">{event.eventType.name}</span>
+                              )}
+                            </div>
+                          </div>
+                          {calUrl && (
+                            <a
+                              href={calUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0"
+                            >
+                              <Button variant="ghost" size="sm" className="h-8 px-2">
+                                <CalendarPlus className="h-3.5 w-3.5" />
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           {/* Public Records & Resources Section */}
           {settings.publicResources && (
             <div className="mt-8">
@@ -388,6 +421,8 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
                 <CardContent>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    disallowedElements={["script", "iframe", "object", "embed", "form", "input"]}
+                    unwrapDisallowed
                     components={{
                       h2: ({ children }) => (
                         <h3 className="text-base font-semibold text-foreground mt-6 mb-3 first:mt-0">
@@ -428,6 +463,18 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
                   </ReactMarkdown>
                 </CardContent>
               </Card>
+            </div>
+          )}
+
+          {/* Community Guidelines & Reference Documents */}
+          {((guidelines && guidelines.length > 0) || tenant.designGuidelinesUrl) && (
+            <div className="mt-8">
+              <CommunityGuidelinesCard
+                tenantId={tenant.id}
+                guidelines={guidelines}
+                designGuidelinesUrl={tenant.designGuidelinesUrl}
+                communityName={tenant.name}
+              />
             </div>
           )}
         </div>

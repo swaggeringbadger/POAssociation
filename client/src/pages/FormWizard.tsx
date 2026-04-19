@@ -211,9 +211,19 @@ export default function FormWizard() {
       const result = await api.generateForm(effectiveTenantId, applicationType);
 
       toast.dismiss(loadingToast);
-      toast.success(`Version ${result.version} generated successfully! Used ${result.tokensUsed} tokens (~$${result.estimatedCost.toFixed(4)})`, {
-        duration: 5000,
-      });
+
+      // Build pipeline info for the toast
+      const pipelineLabel = result.pipelineType === 'staged'
+        ? `Staged pipeline (${result.documentsProcessed || 0} docs)`
+        : 'Direct pipeline';
+      const stageDetail = result.stageBreakdown && result.stageBreakdown.length > 1
+        ? ` | ${result.stageBreakdown.filter((s: any) => s.stage.startsWith('extraction:')).length} extractions`
+        : '';
+
+      toast.success(
+        `Version ${result.version} generated! ${pipelineLabel}${stageDetail} | ${result.tokensUsed.toLocaleString()} tokens (~$${result.estimatedCost})`,
+        { duration: 6000 }
+      );
 
       // Invalidate and refetch all related queries to ensure fresh data
       await queryClient.invalidateQueries({ queryKey: ["formTemplates", effectiveTenantId] });

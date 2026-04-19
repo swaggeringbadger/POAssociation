@@ -81,14 +81,14 @@ function HeroSection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
             <Button size="lg" className="text-lg px-8 h-12" onClick={() => window.location.href = '/api/login'} data-testid="button-get-started">
-              Get Started Free
+              Get Started
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 h-12" onClick={onScheduleDemo}>
               Schedule Demo
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            14-day free trial. No credit card required.
+            Request a demo or try our sandbox environment.
           </p>
         </div>
         <div className="flex-1 relative">
@@ -106,24 +106,24 @@ function HeroSection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
 
 // Social Proof Bar
 function SocialProofBar() {
-  const stats = [
-    { value: "50+", label: "Communities" },
-    { value: "1,000+", label: "Applications Processed" },
-    { value: "99.9%", label: "Uptime" },
-    { value: "24/7", label: "Support" },
+  const highlights = [
+    { value: "9", label: "User Roles" },
+    { value: "AI-Powered", label: "Application Analysis" },
+    { value: "Multi-Tenant", label: "Architecture" },
+    { value: "Real-Time", label: "Workflow Tracking" },
   ];
 
   return (
     <section className="py-12 bg-muted/30 border-y">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <p className="text-center text-muted-foreground mb-8">
-          Trusted by communities across Texas
+          Built for HOA and POA communities
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-          {stats.map((stat) => (
-            <div key={stat.label} className="text-center">
-              <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+          {highlights.map((item) => (
+            <div key={item.label} className="text-center">
+              <div className="text-3xl font-bold text-foreground">{item.value}</div>
+              <div className="text-sm text-muted-foreground">{item.label}</div>
             </div>
           ))}
         </div>
@@ -153,12 +153,12 @@ function FeaturesSection() {
     {
       icon: Shield,
       title: "Compliance Tracking",
-      description: "Never miss a filing deadline. Track insurance, annual meetings, and state requirements.",
+      description: "Track filing deadlines, insurance renewals, annual meetings, and state requirements in one place.",
     },
     {
       icon: FileText,
       title: "Document Management",
-      description: "Secure cloud storage for all community documents with version control and audit trails.",
+      description: "Secure cloud storage for community documents with organized uploads and access controls.",
     },
     {
       icon: Calendar,
@@ -168,12 +168,12 @@ function FeaturesSection() {
     {
       icon: Smartphone,
       title: "Mobile-First Design",
-      description: "Upload photos via QR code, submit requests on the go, and get instant notifications.",
+      description: "Upload photos via QR code, submit requests on the go, and review applications from any device.",
     },
     {
       icon: Building2,
       title: "Multi-Community",
-      description: "Manage multiple HOAs or POAs from a single dashboard with consolidated reporting.",
+      description: "Manage multiple HOAs or POAs from a single dashboard with role-based access control.",
     },
   ];
 
@@ -222,10 +222,10 @@ function SolutionsSection() {
       features: [
         "Manage multiple communities from one dashboard",
         "Assign property reps to specific communities",
-        "Consolidated billing and invoicing",
-        "White-label community landing pages",
+        "Credit-based billing with invoice management",
+        "Customizable community landing pages",
         "Team management with role-based access",
-        "Centralized document repository",
+        "Centralized document storage",
       ],
     },
     {
@@ -363,7 +363,7 @@ function PricingSection({ onContact }: { onContact: () => void }) {
             Simple, door-based pricing
           </h2>
           <p className="text-lg text-muted-foreground">
-            Choose your plan based on community size. All plans include a 14-day free trial.
+            Choose your plan based on community size. All plans include every feature.
           </p>
         </div>
 
@@ -445,7 +445,7 @@ function CTASection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
           Ready to modernize your community management?
         </h2>
         <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-          Join hundreds of communities already using POAssociation to streamline their operations.
+          See how POAssociation can streamline your architectural reviews, compliance, and operations.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
@@ -462,7 +462,7 @@ function CTASection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
             className="text-lg px-8 h-12 bg-transparent border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary"
             onClick={() => window.location.href = '/api/login'}
           >
-            Start Free Trial
+            Sign In
           </Button>
         </div>
       </div>
@@ -539,19 +539,19 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
             <h4 className="font-semibold mb-4">Resources</h4>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Documentation
-                </a>
+                <Link href="/security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Security
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  API Reference
-                </a>
+                <Link href="/legal" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Legal
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Blog
-                </a>
+                <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  About Us
+                </Link>
               </li>
             </ul>
           </div>
@@ -561,9 +561,9 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
             <h4 className="font-semibold mb-4">Company</h4>
             <ul className="space-y-2">
               <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   About
-                </a>
+                </Link>
               </li>
               <li>
                 <button
@@ -574,9 +574,9 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
                 </button>
               </li>
               <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Careers
-                </a>
+                <Link href="/security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Security
+                </Link>
               </li>
             </ul>
           </div>
@@ -595,6 +595,9 @@ function Footer({ onContact, onScheduleDemo }: { onContact: () => void; onSchedu
             </Link>
             <Link href="/legal" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Legal
+            </Link>
+            <Link href="/security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Security
             </Link>
           </div>
         </div>

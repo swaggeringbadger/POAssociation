@@ -21,6 +21,20 @@ async function seed() {
     subdomain: "markland",
     managementCompanyId: apex.id,
     isActive: true,
+    communitySettings: {
+      legalEntityType: "poa",
+      legalEntityName: "Markland Property Owners Association, Inc.",
+      contactEmail: "arc@marklandpoa.org",
+      contactPhone: "(555) 867-5309",
+      officeHours: "Mon–Fri, 9:00 AM – 5:00 PM",
+      emergencyPhone: "(555) 867-5310",
+      description: "A vibrant residential community with 312 homes, established in 1998. Markland POA is committed to preserving property values and fostering a welcoming neighborhood.",
+      website: "https://info.marklandpoa.org",
+      yearEstablished: 1998,
+      numberOfLots: 312,
+      physicalAddress: { street: "4200 Markland Blvd", city: "Statesville", state: "NC", zip: "28677" },
+      mailingAddress: { street: "PO Box 4200", city: "Statesville", state: "NC", zip: "28677" },
+    },
   });
   console.log("✅ Created community:", markland.name);
 
@@ -30,6 +44,18 @@ async function seed() {
     subdomain: "whispering-pines",
     managementCompanyId: apex.id,
     isActive: true,
+    communitySettings: {
+      legalEntityType: "hoa",
+      legalEntityName: "Whispering Pines Homeowners Association",
+      contactEmail: "info@whisperingpineshoa.org",
+      contactPhone: "(555) 234-5678",
+      officeHours: "Tue–Thu, 10:00 AM – 4:00 PM",
+      description: "A peaceful, wooded community of 148 homes nestled among longleaf pines.",
+      website: "https://whisperingpineshoa.org",
+      yearEstablished: 2005,
+      numberOfLots: 148,
+      physicalAddress: { street: "100 Pine Hollow Dr", city: "Southern Pines", state: "NC", zip: "28387" },
+    },
   });
   console.log("✅ Created community:", whisperingPines.name);
 
@@ -39,6 +65,17 @@ async function seed() {
     subdomain: "oak-ridge",
     managementCompanyId: apex.id,
     isActive: true,
+    communitySettings: {
+      legalEntityType: "poa",
+      legalEntityName: "Oak Ridge Estates Property Owners Association",
+      contactEmail: "board@oakridgeestates.org",
+      contactPhone: "(555) 345-6789",
+      officeHours: "Mon, Wed, Fri, 9:00 AM – 1:00 PM",
+      description: "An upscale gated community with 96 estate lots and a championship golf course.",
+      yearEstablished: 2012,
+      numberOfLots: 96,
+      physicalAddress: { street: "1 Oak Ridge Pkwy", city: "Mooresville", state: "NC", zip: "28117" },
+    },
   });
   console.log("✅ Created community:", oakRidge.name);
 

@@ -9,6 +9,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAppStore } from '@/lib/store';
+import { useFormatRoleLabel } from '@/hooks/useLegalEntityLabel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -143,12 +144,7 @@ export default function TourContent() {
     }
   };
 
-  const formatRoleLabel = (role: string) => {
-    return role
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
+  const formatRoleLabel = useFormatRoleLabel();
 
   const formatPageLabel = (pageKey: string) => {
     return pageKey

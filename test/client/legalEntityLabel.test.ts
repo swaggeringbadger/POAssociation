@@ -241,8 +241,8 @@ describe('formatRoleLabel', () => {
       expect(formatRoleLabel('poa_board_member', poaTenant)).toBe('POA Board Member');
     });
 
-    it('should format "poa_board_contributor" as "POA Board Contributor"', () => {
-      expect(formatRoleLabel('poa_board_contributor', poaTenant)).toBe('POA Board Contributor');
+    it('should format "poa_board_contributor" as "ARC Committee Member"', () => {
+      expect(formatRoleLabel('poa_board_contributor', poaTenant)).toBe('ARC Committee Member');
     });
 
     it('should format "hoa_board_member" as "POA Board Member" (uses tenant setting)', () => {
@@ -255,8 +255,8 @@ describe('formatRoleLabel', () => {
       expect(formatRoleLabel('poa_board_member', hoaTenant)).toBe('HOA Board Member');
     });
 
-    it('should format "poa_board_contributor" as "HOA Board Contributor"', () => {
-      expect(formatRoleLabel('poa_board_contributor', hoaTenant)).toBe('HOA Board Contributor');
+    it('should format "poa_board_contributor" as "ARC Committee Member"', () => {
+      expect(formatRoleLabel('poa_board_contributor', hoaTenant)).toBe('ARC Committee Member');
     });
 
     it('should format "hoa_board_member" as "HOA Board Member"', () => {
@@ -283,8 +283,8 @@ describe('formatRoleLabel', () => {
       expect(formatRoleLabel('poa_board_member', nullTenant)).toBe('POA Board Member');
     });
 
-    it('should default to POA for entity-specific roles when tenant is undefined', () => {
-      expect(formatRoleLabel('poa_board_contributor', undefinedTenant)).toBe('POA Board Contributor');
+    it('should default to ARC Committee Member for contributor role when tenant is undefined', () => {
+      expect(formatRoleLabel('poa_board_contributor', undefinedTenant)).toBe('ARC Committee Member');
     });
 
     it('should default to POA when communitySettings is missing', () => {
@@ -337,6 +337,8 @@ describe('Integration scenarios', () => {
     });
 
     it('should format poa_board_contributor correctly for HOA tenant', () => {
+      // Note: The actual Directory page now uses a hardcoded "ARC Committee Member" label
+      // This test covers the generic formatRole helper which still does snake_case conversion
       expect(formatRole('poa_board_contributor', hoaTenant)).toBe('HOA Board Contributor');
     });
 
@@ -414,8 +416,10 @@ describe('All role types comprehensive test', () => {
         expect(result).toBeTruthy();
         expect(typeof result).toBe('string');
         expect(result.length).toBeGreaterThan(0);
-        // Entity-specific roles should contain "POA" for POA tenants
-        if (role.includes('board')) {
+        // poa_board_contributor is now "ARC Committee Member" (entity-independent)
+        if (role === 'poa_board_contributor') {
+          expect(result).toBe('ARC Committee Member');
+        } else if (role.includes('board')) {
           expect(result).toContain('POA');
         }
       });
@@ -429,8 +433,10 @@ describe('All role types comprehensive test', () => {
         expect(result).toBeTruthy();
         expect(typeof result).toBe('string');
         expect(result.length).toBeGreaterThan(0);
-        // Entity-specific roles should contain "HOA" for HOA tenants
-        if (role.includes('board')) {
+        // poa_board_contributor is now "ARC Committee Member" (entity-independent)
+        if (role === 'poa_board_contributor') {
+          expect(result).toBe('ARC Committee Member');
+        } else if (role.includes('board')) {
           expect(result).toContain('HOA');
         }
       });
@@ -454,10 +460,9 @@ describe('Regression: Historical POA-only behavior', () => {
     expect(roleLabel).toBe('HOA Board Member');
   });
 
-  it('should NOT show "POA Board Contributor" role for HOA tenant', () => {
+  it('should show "ARC Committee Member" for contributor role regardless of tenant', () => {
     const roleLabel = formatRoleLabel('poa_board_contributor', hoaTenant);
-    expect(roleLabel).not.toBe('POA Board Contributor');
-    expect(roleLabel).toBe('HOA Board Contributor');
+    expect(roleLabel).toBe('ARC Committee Member');
   });
 
   it('should show correct entity label in all contexts for HOA tenant', () => {

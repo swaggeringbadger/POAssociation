@@ -29,6 +29,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { markAttendance, initializeMeetingAttendance, addAttendee, removeAttendee, getAttendanceDirectory } from '@/lib/api';
 import type { MeetingAttendance, AttendanceStatus, User } from '@/lib/api';
 import { toast } from 'sonner';
+import { formatRoleLabel } from '@/hooks/useLegalEntityLabel';
+import { useAppStore } from '@/lib/store';
 
 /** Roles that are auto-populated in roll call */
 const AUTO_POPULATE_ROLES = [
@@ -57,6 +59,7 @@ export function RollCallAttendance({
   className = '',
 }: RollCallAttendanceProps) {
   const queryClient = useQueryClient();
+  const { currentTenant } = useAppStore();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [addPersonOpen, setAddPersonOpen] = useState(false);
 
@@ -387,7 +390,7 @@ export function RollCallAttendance({
                                 {member.firstName} {member.lastName}
                               </p>
                               <p className="text-xs text-muted-foreground truncate">
-                                {formatRoles(member.roles)}
+                                {formatRoles(member.roles, currentTenant)}
                               </p>
                             </div>
                           </CommandItem>
@@ -455,7 +458,7 @@ export function RollCallAttendance({
                                 {member.firstName} {member.lastName}
                               </p>
                               <p className="text-xs text-muted-foreground truncate">
-                                {formatRoles(member.roles)}
+                                {formatRoles(member.roles, currentTenant)}
                               </p>
                             </div>
                           </CommandItem>
@@ -506,22 +509,9 @@ function getAttendeeRoleFromUserRoles(roles: string[]): string {
   return 'guest';
 }
 
-/** Format role names for display */
-function formatRoles(roles: string[]): string {
-  const roleLabels: Record<string, string> = {
-    poa_board_member: 'Board Member',
-    poa_board_contributor: 'Board Contributor',
-    delegated_rep: 'Delegated Rep',
-    management_manager: 'Manager',
-    management_rep: 'Management Rep',
-    management_auxiliary: 'Management Aux',
-    account_admin: 'Account Admin',
-    super_admin: 'Super Admin',
-    homeowner: 'Homeowner',
-    household_member: 'Household Member',
-    contractor: 'Contractor',
-  };
-  return roles.map(r => roleLabels[r] || r).join(', ');
+/** Format role names for display using central role label system */
+function formatRoles(roles: string[], tenant: any): string {
+  return roles.map(r => formatRoleLabel(r, tenant)).join(', ');
 }
 
 export default RollCallAttendance;

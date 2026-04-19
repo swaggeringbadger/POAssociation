@@ -46,11 +46,11 @@ const PERSONA_INFO = {
     gradient: 'from-teal-500 to-teal-600',
   },
   'Alex': {
-    title: 'Board Contributor & Contractor',
+    title: 'ARC Committee Member & Contractor',
     icon: Users,
-    description: 'Serve on the Markland board AND run a landscaping business serving multiple communities',
+    description: 'Serve on the Markland ARC review committee AND run a landscaping business serving multiple communities',
     features: [
-      'Board contributor at Markland POA',
+      'ARC committee member at Markland POA',
       'Contractor dashboard for landscaping jobs',
       'View applications across communities',
       'Cross-community contractor work',

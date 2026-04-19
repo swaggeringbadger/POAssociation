@@ -13,8 +13,8 @@ import { storage } from '../storage';
 import { azureBlobStorage } from '../azureBlobStorage';
 import type { AiContextSource, AiInstruction } from '@shared/schema';
 
-// Maximum tokens for context (leaving room for prompt and response)
-const MAX_CONTEXT_TOKENS = 50000;
+// Maximum tokens for context (Claude's 200K window has room after prompts + 16K output)
+const MAX_CONTEXT_TOKENS = 120000;
 // Rough token estimation: ~4 characters per token
 const CHARS_PER_TOKEN = 4;
 
@@ -255,6 +255,49 @@ class AiContextService {
   }
 
   /**
+   * Estimate the total context size for a tenant's AI sources.
+   * Returns per-document token estimates and whether staged processing is needed.
+   */
+  async estimateContextSize(tenantId: string, formType?: string): Promise<{
+    totalEstimatedTokens: number;
+    documentEstimates: Array<{ sourceId: string; name: string; estimatedTokens: number }>;
+    instructionTokens: number;
+    exceedsLimit: boolean;
+    maxContextTokens: number;
+  }> {
+    const sources = await storage.getActiveAiContextSourcesForForm(tenantId, formType);
+    const instructions = await storage.getActiveInstructionsForAnalysis(tenantId, formType);
+    const instructionTokens = this.estimateTokens(instructions);
+
+    const documentEstimates: Array<{ sourceId: string; name: string; estimatedTokens: number }> = [];
+    let totalDocTokens = 0;
+
+    for (const source of sources) {
+      try {
+        const doc = await this.fetchSourceContent(source);
+        documentEstimates.push({
+          sourceId: source.id,
+          name: source.name,
+          estimatedTokens: doc.estimatedTokens,
+        });
+        totalDocTokens += doc.estimatedTokens;
+      } catch (error) {
+        console.error(`[AiContext] Failed to estimate size for "${source.name}":`, error);
+      }
+    }
+
+    const totalEstimatedTokens = instructionTokens + totalDocTokens;
+
+    return {
+      totalEstimatedTokens,
+      documentEstimates,
+      instructionTokens,
+      exceedsLimit: totalEstimatedTokens > MAX_CONTEXT_TOKENS,
+      maxContextTokens: MAX_CONTEXT_TOKENS,
+    };
+  }
+
+  /**
    * Clear the content cache
    */
   clearCache(): void {
@@ -262,50 +305,80 @@ class AiContextService {
   }
 
   /**
-   * Format aggregated context into a string for prompts
-   * Includes both text content and signals for PDF documents
+   * Format aggregated context into a string for prompts.
+   *
+   * Each source is numbered (SOURCE 1, SOURCE 2 …) so the AI can cite
+   * them individually. Text documents are inlined; PDFs are listed by
+   * name (they arrive as separate document blocks in the API call).
    */
   formatContextForPrompt(context: AggregatedContext): string {
     const parts: string[] = [];
+    const totalSources = context.documents.length;
 
-    // Add text documents
+    if (totalSources > 1) {
+      parts.push(`=== MULTIPLE REFERENCE DOCUMENTS (${totalSources} sources) ===`);
+      parts.push('');
+      parts.push('IMPORTANT: This community has provided MULTIPLE governing documents.');
+      parts.push('A single topic (e.g. fences, flags, colors) may be addressed in MORE');
+      parts.push('THAN ONE document. When that happens you MUST consider ALL of them');
+      parts.push('together — do NOT pick just one. If documents conflict, present every');
+      parts.push('relevant provision and note the conflict; do NOT silently choose a winner.');
+      parts.push('Later documents or addenda generally supersede earlier ones, but always');
+      parts.push('surface both so the review committee can make the final call.');
+      parts.push('');
+    } else if (totalSources === 1) {
+      parts.push('=== REFERENCE DOCUMENT ===');
+      parts.push('');
+    }
+
+    // Number every document so the AI can cite "SOURCE 1", "SOURCE 2", etc.
+    let sourceNum = 0;
+
+    // Inline text documents
     const textDocs = context.documents.filter(d => d.type === 'text');
-    if (textDocs.length > 0) {
-      parts.push('=== Reference Documents ===\n');
-      for (const doc of textDocs) {
-        parts.push(`--- ${doc.source.name} ---`);
+    for (const doc of textDocs) {
+      sourceNum++;
+      parts.push(`--- SOURCE ${sourceNum}: ${doc.source.name} ---`);
+      if (doc.source.description) {
+        parts.push(`Type/Description: ${doc.source.description}`);
+      }
+      parts.push('');
+      parts.push(doc.content);
+      parts.push('');
+      parts.push(`--- END SOURCE ${sourceNum} ---`);
+      parts.push('');
+    }
+
+    // List PDF documents (content arrives as document blocks in the API call)
+    const pdfDocs = context.documents.filter(d => d.type === 'pdf');
+    if (pdfDocs.length > 0) {
+      for (const doc of pdfDocs) {
+        sourceNum++;
+        parts.push(`--- SOURCE ${sourceNum}: ${doc.source.name} (PDF attached) ---`);
         if (doc.source.description) {
-          parts.push(`(${doc.source.description})`);
+          parts.push(`Type/Description: ${doc.source.description}`);
         }
-        parts.push(doc.content);
+        parts.push('(Full PDF content is provided as a separate document block in this request.)');
+        parts.push(`--- END SOURCE ${sourceNum} ---`);
         parts.push('');
       }
     }
 
-    // Note about PDF documents (they'll be sent as document blocks separately)
-    const pdfDocs = context.documents.filter(d => d.type === 'pdf');
-    if (pdfDocs.length > 0) {
-      parts.push('=== PDF Documents (attached as files) ===');
-      for (const doc of pdfDocs) {
-        parts.push(`- ${doc.source.name}${doc.source.description ? `: ${doc.source.description}` : ''}`);
-      }
-      parts.push('');
-    }
-
-    // Add instructions - clearly mark these as context guidance, not output format changes
+    // Community-specific admin instructions
     if (context.instructions) {
-      parts.push('\n=== Community-Specific Guidelines (for context) ===');
+      parts.push('=== COMMUNITY-SPECIFIC INSTRUCTIONS ===');
       parts.push('The following are additional guidelines from the community administrator.');
       parts.push('Use these to inform your understanding of community requirements.');
       parts.push('Your output format must still be valid JSON as specified in the system prompt.');
       parts.push('---');
       parts.push(context.instructions);
       parts.push('---');
+      parts.push('');
     }
 
-    // Note about excluded sources
+    // Log excluded sources server-side only — never leak into generated forms
     if (context.excludedSources.length > 0) {
-      parts.push(`\n(Note: ${context.excludedSources.length} additional source(s) were excluded due to context limits)`);
+      console.warn(`[AiContext] ${context.excludedSources.length} source(s) excluded due to context limits: ${context.excludedSources.join(', ')}. Consider staged pipeline.`);
     }
 
     return parts.join('\n');

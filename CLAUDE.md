@@ -93,3 +93,41 @@ npm run build        # Build for production
 npm run check        # TypeScript check
 npm run test         # Run tests
 ```
+
+---
+
+## Swaggering Badger Multi-Agent Team
+
+This workspace is part of the **Swaggering Badger** multi-agent orchestration system.
+
+### Identity
+- **Office:** POAssociation.com (`poassociation`)
+- **Role:** dev-lead
+- **Character:** Edward — "Reshapes the Whole Neighborhood" (Edward Scissorhands theme)
+- **Identity file:** `.sb-identity` (workspace root)
+
+### Team Members
+| Role | Character | Title |
+|------|-----------|-------|
+| qa-engineer | Peg Boggs | Discovers Problems Others Walk Past |
+| security-reviewer | Officer Allen | Enforces the Rules of the Cul-de-Sac |
+| ux-designer | Kim | Sees the Beauty Underneath the Rough Edges |
+| docs-demo-specialist | Joyce | Talks to Everyone, Spreads the Word |
+| onboarding-guide | Bill Boggs | Practical, Steady, Keeps the Household Running |
+| customer-service | Esmeralda | Opinionated Greeter of the Neighborhood |
+| billing-support | The Inventor | Built Everything From the Ground Up |
+| brand-ambassador | Kevin | The Kid Who Tells Everyone How Cool It Is |
+| social-media-manager | Suzanne | First to Share the News on the Block |
+
+### MCP Tools Available
+When running with `--mcp-config .mcp.json`:
+- **sb-mcp** (SSE) — Task management, chat, presence via Swaggering Badger server
+- **sb-team** (channel plugin) — Real-time task notifications via SSE stream
+
+### Dashboard
+https://9eafbb1e-0ee3-4684-b965-3e0cd4ee2771-00-1zad4xzo4gp4w.janeway.replit.dev/dashboard
+
+### Launch Command
+```bash
+claude --mcp-config .mcp.json --dangerously-load-development-channels server:sb-team
+```

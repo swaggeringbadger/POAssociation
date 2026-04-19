@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
 import { apiRequest, createSignature } from "@/lib/api";
+import { useFormatRoleLabel } from "@/hooks/useLegalEntityLabel";
 import { DynamicAdditionalInfoForm } from "@/components/DynamicAdditionalInfoForm";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import { Button } from "@/components/ui/button";
@@ -35,13 +36,6 @@ const DELEGATED_EDIT_ROLES = [
   'super_admin',
 ];
 
-const roleDisplayNames: Record<string, string> = {
-  management_rep: "Management Rep",
-  management_manager: "Management Manager",
-  account_admin: "Account Admin",
-  super_admin: "Super Admin",
-  poa_board_member: "Board Member",
-};
 
 const editSourceOptions = [
   { value: "phone_call", label: "Phone Call" },
@@ -63,6 +57,7 @@ export default function ApplicationEdit() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { currentTenant, setCurrentPageTitle, currentUserRole } = useAppStore();
+  const formatRoleLabel = useFormatRoleLabel();
   const queryClient = useQueryClient();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -333,7 +328,7 @@ export default function ApplicationEdit() {
               <CardTitle className="text-base">Editing on Behalf of {ownerDisplayName}</CardTitle>
             </div>
             <CardDescription>
-              You are making changes as a {roleDisplayNames[currentUserRole || ''] || currentUserRole}.
+              You are making changes as a {formatRoleLabel(currentUserRole || '')}.
               Changes will be tracked and the homeowner will be notified.
             </CardDescription>
           </CardHeader>

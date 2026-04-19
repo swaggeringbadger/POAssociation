@@ -11,6 +11,7 @@ import { AccountAdminDashboard } from "@/components/account-admin/AccountAdminDa
 import RepContactCard from "@/components/RepContactCard";
 import { SuperAdminDashboard } from "@/components/SuperAdminDashboard";
 import { HomeHubCard } from "@/components/HomeHubCard";
+import CommunityGuidelinesCard from "@/components/CommunityGuidelinesCard";
 import { api, getCalendarEvents } from "@/lib/api";
 import type { CalendarEvent } from "@/lib/api";
 
@@ -576,16 +577,11 @@ function BoardMemberDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-amber-50 border-amber-200">
-            <CardHeader>
-              <CardTitle className="text-amber-900">Review Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-amber-800">
-                Remember to review inline bylaw guidance when evaluating applications. All decisions should align with community standards.
-              </p>
-            </CardContent>
-          </Card>
+          <CommunityGuidelinesCard
+            tenantId={currentTenant?.id}
+            designGuidelinesUrl={currentTenant?.designGuidelinesUrl}
+            communityName={currentTenant?.name}
+          />
         </div>
       </div>
     </div>
@@ -604,7 +600,7 @@ function ContributorDashboard() {
           <div className="flex items-center gap-3">
             <Users className="h-8 w-8" />
             <div>
-              <CardTitle className="text-2xl">Board Contributor Dashboard</CardTitle>
+              <CardTitle className="text-2xl">ARC Committee Member Dashboard</CardTitle>
               <CardDescription className="text-orange-100">
                 {currentTenant?.name || 'Your Community'}
               </CardDescription>
@@ -682,10 +678,16 @@ function ContributorDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                As a Board Contributor, you can review applications and provide feedback, but final approval decisions are made by board members.
+                As an ARC Committee Member, you can review applications and provide feedback, but final approval decisions are made by board members.
               </p>
             </CardContent>
           </Card>
+
+          <CommunityGuidelinesCard
+            tenantId={currentTenant?.id}
+            designGuidelinesUrl={currentTenant?.designGuidelinesUrl}
+            communityName={currentTenant?.name}
+          />
 
           <Card>
             <CardHeader>
@@ -860,35 +862,11 @@ function HomeownerDashboard() {
           {/* HomeHub SSO Card */}
           <HomeHubCard />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Community Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {currentTenant?.designGuidelinesUrl ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Before submitting an application, review the community architectural guidelines to ensure your project complies.
-                  </p>
-                  <a
-                    href={currentTenant.designGuidelinesUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <Button variant="outline" size="sm" className="w-full">
-                      View Guidelines
-                      <ArrowUpRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </a>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Community design guidelines have not been specified yet. Contact your community administrator for more information.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <CommunityGuidelinesCard
+            tenantId={currentTenant?.id}
+            designGuidelinesUrl={currentTenant?.designGuidelinesUrl}
+            communityName={currentTenant?.name}
+          />
 
           <Card>
             <CardHeader>

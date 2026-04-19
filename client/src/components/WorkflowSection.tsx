@@ -6,6 +6,7 @@ import { Loader2, ChevronRight, MessageSquare, Lock } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatEnumValue } from "@/lib/formatters";
+import { useFormatRoleLabel } from "@/hooks/useLegalEntityLabel";
 
 interface WorkflowSectionProps {
   applicationId: string;
@@ -91,19 +92,8 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
   const steps = workflow.template?.steps || [];
   const currentStep = steps[workflow.currentStepIndex];
 
-  // Format role names for display (e.g., "poa_board_member" → "POA Board Member")
-  const formatRole = (role: string) => {
-    // Special case for POA
-    const formatted = role
-      .split("_")
-      .map((word: string) => {
-        if (word.toLowerCase() === 'poa') return 'POA';
-        if (word.toLowerCase() === 'arc') return 'ARC';
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      })
-      .join(" ");
-    return formatted;
-  };
+  // Format role names for display using central role label system
+  const formatRole = useFormatRoleLabel();
 
   // Check if user has role for current step
   const stepRequiresRole = currentStep?.role && currentStep.role !== "system";

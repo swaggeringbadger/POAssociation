@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { analysisWorker } from "./services/analysisWorker";
@@ -8,6 +9,75 @@ import { seedCommunityTiers } from "./seed-tiers";
 import { seedAgendaSystem } from "./seed-agenda";
 
 const app = express();
+
+// --- Security: CSP + standard headers via helmet ---
+const isDev = process.env.NODE_ENV !== "production";
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          // Vite HMR + inline scripts in dev; production bundles are self-hosted
+          ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : []),
+          "https://maps.googleapis.com",
+          "https://js.stripe.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        connectSrc: [
+          "'self'",
+          "https://maps.googleapis.com",
+          "https://api.stripe.com",
+          // Vite HMR websocket in dev
+          ...(isDev ? ["ws:", "wss:"] : []),
+        ],
+        frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    // HSTS not needed — Replit/reverse proxy handles TLS termination
+    strictTransportSecurity: false,
+    crossOriginEmbedderPolicy: false, // Stripe Elements requires cross-origin loading
+  })
+);
+
+// --- Security: CSRF origin validation on mutation requests ---
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+
+  // Exclude webhook endpoints (they use signature-based auth)
+  if (req.path.startsWith("/api/webhooks/")) return next();
+
+  // Exclude public/unauthenticated endpoints
+  if (req.path.startsWith("/api/public/")) return next();
+  if (req.path === "/api/demo/validate-code" || req.path === "/api/demo/login") return next();
+  if (req.path.match(/^\/api\/invitations\/[^/]+$/)) return next();
+  if (req.path.match(/^\/api\/upload\/[^/]+$/)) return next();
+  if (req.path.match(/^\/api\/residence-upload\/[^/]+$/)) return next();
+
+  const origin = req.get("origin");
+  const host = req.get("host");
+
+  // If no origin header (same-origin requests, curl, etc.) — allow
+  if (!origin || !host) return next();
+
+  // Parse the origin hostname and compare against the Host header
+  try {
+    const originHost = new URL(origin).host;
+    if (originHost === host) return next();
+  } catch {
+    // Malformed origin — reject
+    return res.status(403).json({ error: "Invalid request origin" });
+  }
+
+  log(`CSRF blocked: origin=${origin} host=${host}`);
+  return res.status(403).json({ error: "Cross-origin request blocked" });
+});
 
 declare module 'http' {
   interface IncomingMessage {

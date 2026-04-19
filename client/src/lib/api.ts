@@ -274,6 +274,27 @@ export interface EmailPreview {
   bounceReason: string | null;
 }
 
+export interface StageBreakdown {
+  stage: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+}
+
+export interface GenerateFormResult {
+  generatedForm: any;
+  generationId: string;
+  formTemplateId: string;
+  version: number;
+  tokensUsed: number;
+  estimatedCost: string;
+  generationTimeMs: number;
+  pipelineType?: 'direct' | 'staged';
+  stageBreakdown?: StageBreakdown[];
+  documentsProcessed?: number;
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -824,7 +845,7 @@ class ApiClient {
     return response.json();
   }
 
-  async generateForm(tenantId: string, applicationType: string): Promise<any> {
+  async generateForm(tenantId: string, applicationType: string): Promise<GenerateFormResult> {
     const response = await fetch(`${this.baseUrl}/ai/generate-form`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3495,6 +3516,14 @@ export async function toggleAiContextSource(tenantId: string, id: string, isActi
 
 export async function reorderAiContextSources(tenantId: string, orderedIds: string[]): Promise<void> {
   return apiRequest('POST', `/api/tenants/${tenantId}/ai-context-sources/reorder`, { orderedIds });
+}
+
+/**
+ * Get the URL for viewing/downloading an AI context source document.
+ * Returns a URL string suitable for window.open() or href.
+ */
+export function getAiContextSourceViewUrl(tenantId: string, sourceId: string): string {
+  return `/api/tenants/${tenantId}/ai-context-sources/${sourceId}/view`;
 }
 
 // ============================================

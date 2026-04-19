@@ -30,7 +30,7 @@ import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTenants } from "@/hooks/useUserTenants";
 import { useSubdomain } from "@/hooks/useSubdomain";
-import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
+import { useFormatRoleLabel } from "@/hooks/useLegalEntityLabel";
 import { api, queryClient } from "@/lib/api";
 import { ChevronDown, User as UserIcon, Building, LogOut, Globe, Shield, Ticket, Filter, Settings, Users, Wrench } from "lucide-react";
 import logoImage from "@assets/generated_images/POAssociationLogo.png";
@@ -112,18 +112,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ? `${user.firstName} ${user.lastName}`
     : user?.email || "User";
 
-  // Get the legal entity label for the current tenant (POA or HOA)
-  const legalEntityLabel = useLegalEntityLabel();
-
-  // Format role display name - replaces "Poa" with the correct entity label
-  const formatRole = (role: string) => {
-    const formatted = role
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-    // Replace "Poa" or "Hoa" with the correct label based on current tenant
-    return formatted.replace(/\bPoa\b/g, legalEntityLabel).replace(/\bHoa\b/g, legalEntityLabel);
-  };
+  // Format role display name using central role label system (respects POA/HOA + ARC)
+  const formatRole = useFormatRoleLabel();
 
   // Get role icon/emoji
   const getRoleIcon = (role: string) => {

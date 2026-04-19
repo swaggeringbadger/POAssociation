@@ -608,7 +608,7 @@ Response 200:
 3. `management_representative` - Management company representative
 4. `management_manager` - Management company manager
 5. `poa_board_member` - Community board member with voting rights
-6. `poa_board_contributor` - Community board contributor (non-voting)
+6. `poa_board_contributor` - ARC Committee Member (reviews apps, provides feedback, non-voting)
 7. `homeowner` - Property owner
 8. `delegated_representative` - Acting on behalf of homeowner
 

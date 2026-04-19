@@ -108,7 +108,7 @@ Access demo mode with pre-configured personas:
 - Emily Chen (Management Manager)
 - Sarah Johnson (POA Board Member)
 - James Wilson (Homeowner)
-- Alex Rodriguez (POA Board Contributor)
+- Alex Rodriguez (ARC Committee Member)
 
 Visit `/demo` to enter a demo code and select a persona.
 

@@ -15,7 +15,7 @@ The POA Association platform now includes a **fully isolated demo ecosystem syst
 - ✅ **Scheduled Availability** - Demo codes have validity date ranges
 - ✅ **Usage Limits** - Optional max usage tracking per code
 - ✅ **Isolated Ecosystems** - Each demo code gets complete independent environment
-- ✅ **4 Personas** - Management Company Manager, POA Board Member, Homeowner, Board Contributor
+- ✅ **4 Personas** - Management Company Manager, POA Board Member, Homeowner, ARC Committee Member
 - ✅ **Zero Behavioral Differences** - Demo users function exactly like production users
 - ✅ **Safe Cleanup** - Cascade delete removes entire ecosystem atomically
 - ✅ **Analytics** - Session tracking and usage statistics

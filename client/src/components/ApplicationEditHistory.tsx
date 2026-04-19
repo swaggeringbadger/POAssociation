@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useFormatRoleLabel } from "@/hooks/useLegalEntityLabel";
 
 interface ApplicationFieldEdit {
   id: string;
@@ -49,14 +50,6 @@ interface ApplicationEditHistoryProps {
   applicationId: string;
 }
 
-const roleDisplayNames: Record<string, string> = {
-  management_rep: "Management Rep",
-  management_manager: "Management Manager",
-  account_admin: "Account Admin",
-  super_admin: "Super Admin",
-  poa_board_member: "Board Member",
-};
-
 const editSourceDisplayNames: Record<string, string> = {
   phone_call: "Phone Call",
   in_person: "In Person",
@@ -76,16 +69,13 @@ function formatValue(value: any): string {
   return String(value);
 }
 
-function formatRole(role: string): string {
-  return roleDisplayNames[role] || role;
-}
-
 function formatEditSource(source: string): string {
   return editSourceDisplayNames[source] || source;
 }
 
 export function ApplicationEditHistory({ applicationId }: ApplicationEditHistoryProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const formatRole = useFormatRoleLabel();
 
   const { data, isLoading } = useQuery<EditHistoryResponse>({
     queryKey: [`/api/applications/${applicationId}/edit-history`],

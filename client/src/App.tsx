@@ -45,6 +45,8 @@ import ConsumptionDashboard from "@/pages/ConsumptionDashboard";
 import PaymentMethodsPage from "@/pages/PaymentMethodsPage";
 import PricingPage from "@/pages/PricingPage";
 import LegalPage from "@/pages/LegalPage";
+import SecurityPage from "@/pages/SecurityPage";
+import AboutPage from "@/pages/AboutPage";
 import JoinCommunity from "@/pages/JoinCommunity";
 import InvitationAccept from "@/pages/InvitationAccept";
 import ReferralLanding from "@/pages/ReferralLanding";
@@ -150,6 +152,12 @@ function Router() {
 
       {/* Public legal page - accessible without auth */}
       <Route path="/legal" component={LegalPage} />
+
+      {/* Public security page - accessible without auth */}
+      <Route path="/security" component={SecurityPage} />
+
+      {/* Public about page - accessible without auth */}
+      <Route path="/about" component={AboutPage} />
 
       {/* Path-based community/management landing pages - accessible without auth */}
       <Route path="/community/:subdomain" component={CommunityLandingByPath} />

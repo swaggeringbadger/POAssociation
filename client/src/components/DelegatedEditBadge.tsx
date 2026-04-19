@@ -5,6 +5,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { useFormatRoleLabel } from "@/hooks/useLegalEntityLabel";
 
 interface DelegatedEditBadgeProps {
   editorName: string;
@@ -14,14 +15,6 @@ interface DelegatedEditBadgeProps {
   editReason?: string | null;
   editSource?: string;
 }
-
-const roleDisplayNames: Record<string, string> = {
-  management_rep: "Management Rep",
-  management_manager: "Management Manager",
-  account_admin: "Account Admin",
-  super_admin: "Super Admin",
-  poa_board_member: "Board Member",
-};
 
 const editSourceDisplayNames: Record<string, string> = {
   phone_call: "Phone Call",
@@ -38,9 +31,7 @@ export function DelegatedEditBadge({
   editReason,
   editSource,
 }: DelegatedEditBadgeProps) {
-  const formatRole = (role: string): string => {
-    return roleDisplayNames[role] || role;
-  };
+  const formatRole = useFormatRoleLabel();
 
   const formatEditSource = (source: string): string => {
     return editSourceDisplayNames[source] || source;

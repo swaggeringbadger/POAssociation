@@ -1006,6 +1006,7 @@ export function delegatedEditNotificationTemplate(
     account_admin: 'Account Administrator',
     super_admin: 'System Administrator',
     poa_board_member: 'Board Member',
+    poa_board_contributor: 'ARC Committee Member',
   };
 
   const roleDisplay = roleDisplayNames[editorRole] || editorRole;

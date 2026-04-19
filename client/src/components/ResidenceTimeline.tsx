@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFormatRoleLabel } from '@/hooks/useLegalEntityLabel';
 import {
   Home, FileText, Upload, MessageCircle, Sparkles,
   GitBranch, Calendar, Edit3, PenTool, Users, Mail,
@@ -345,22 +346,9 @@ function TimelineEntryDetails({ entry, onViewEmail }: { entry: ResidenceTimeline
   }
 }
 
-const roleLabels: Record<string, string> = {
-  homeowner: 'Homeowner',
-  household_member: 'Household',
-  poa_board_member: 'Board Member',
-  poa_board_contributor: 'Board Contributor',
-  management_rep: 'Mgmt Rep',
-  management_manager: 'Mgmt Manager',
-  management_auxiliary: 'Mgmt Auxiliary',
-  account_admin: 'Account Admin',
-  super_admin: 'Super Admin',
-  delegated_rep: 'Delegated Rep',
-  contractor: 'Contractor',
-};
-
 function TimelineEntry({ entry, index, onViewEmail }: { entry: ResidenceTimelineEntry; index: number; onViewEmail: (emailLogId: string) => void }) {
   const [, navigate] = useLocation();
+  const formatRoleLabel = useFormatRoleLabel();
   const config = categoryConfig[entry.category] || categoryConfig.residence;
   const Icon = config.icon;
 
@@ -400,7 +388,7 @@ function TimelineEntry({ entry, index, onViewEmail }: { entry: ResidenceTimeline
               by {entry.userName}
               {entry.userRole && (
                 <span className="ml-1 text-muted-foreground/70">
-                  ({roleLabels[entry.userRole] || entry.userRole})
+                  ({formatRoleLabel(entry.userRole)})
                 </span>
               )}
             </span>

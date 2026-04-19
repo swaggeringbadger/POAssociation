@@ -23,6 +23,12 @@ export interface BylawReference {
   prohibited?: string;
   preferredStyles?: string[];
   keyProvisions?: string[];
+  // Source document tracking (populated by AI + post-processing)
+  sourceIndex?: number;      // Maps to SOURCE N in the prompt
+  sourceDocument?: string;   // Display name of the source document
+  sourceId?: string;         // FK to ai_context_sources.id (set post-generation)
+  pageNumber?: string;       // e.g. "Page 42"
+  sectionId?: string;        // e.g. "Section 7.7A"
 }
 
 export interface AdditionalInfoField {
@@ -48,6 +54,12 @@ export interface PrimaryBylaw {
   summary: string;
   keyRequirements: string[];
   quote?: string;
+  // Source document tracking
+  sourceIndex?: number;
+  sourceDocument?: string;
+  sourceId?: string;
+  pageNumber?: string;
+  sectionId?: string;
 }
 
 export interface AdditionalBylawReference {
@@ -55,6 +67,12 @@ export interface AdditionalBylawReference {
   document: string;
   summary: string;
   keyProvisions: string[];
+  // Source document tracking
+  sourceIndex?: number;
+  sourceDocument?: string;
+  sourceId?: string;
+  pageNumber?: string;
+  sectionId?: string;
 }
 
 export interface RelevantBylaws {
@@ -119,12 +137,23 @@ export interface GenerateFormRequest {
   applicationType: ApplicationType;
 }
 
+export interface StageBreakdown {
+  stage: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+}
+
 export interface GenerateFormResponse {
   generatedForm: AdditionalInfoConfig;
   generationId: string;
   tokensUsed: number;
   estimatedCost: string;
   generationTimeMs: number;
+  pipelineType?: 'direct' | 'staged';
+  stageBreakdown?: StageBreakdown[];
+  documentsProcessed?: number;
 }
 
 // Validation result

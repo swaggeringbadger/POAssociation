@@ -1,11 +1,65 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-02-25
-**Current Session:** Prompt Versioning System
+**Last Updated:** 2026-04-19
+**Current Session:** Catch-up commit + SB multi-agent onboarding
 
 ---
 
 ## CURRENT STATE SUMMARY
+
+### Catch-Up Commit (2026-04-19)
+
+Cleared ~6 weeks of uncommitted drift on `main` in one bundled commit. Changes spanned several threads of work that had accumulated without commits since the 2026-02-25 prompt-versioning session.
+
+**Security hardening (`server/index.ts`, `server/lib/sanitize.ts`)**
+- Added `helmet` with a tuned CSP (allows Google Maps, Stripe, Google Fonts, Vite HMR in dev)
+- Added same-origin CSRF middleware on mutation routes, with carve-outs for webhooks, public endpoints, demo login, invitation tokens, and upload tokens
+- HSTS disabled (Replit handles TLS); COEP disabled (Stripe Elements needs cross-origin)
+- New `server/lib/sanitize.ts` helper
+
+**AI form generation (`server/aiFormGenerationService.ts`, `server/routes.ts`, `server/services/aiContextService.ts`)**
+- Major expansion of `aiFormGenerationService.ts` (+365 lines)
+- Context service enhancements (+117 lines)
+
+**Prompt versioning — more versions**
+- `form-generation-system` now has v2, v3, v4
+- `form-generation-user` now has v2, v3, v4
+- `analysis-system` / `analysis-user` have v2
+- NEW: `document-extraction-system` and `document-extraction-user` prompt dirs (v1, v2)
+- `registry.json` updated
+
+**Landing / public pages**
+- `client/src/pages/Landing.tsx` redesigned (+75 lines)
+- `client/src/pages/CommunityLanding.tsx` redesigned (+165 lines)
+- NEW: `client/src/pages/AboutPage.tsx`
+- NEW: `client/src/pages/SecurityPage.tsx`
+- NEW: `client/src/components/CommunityGuidelinesCard.tsx`
+- Routes registered in `client/src/App.tsx`
+
+**Role terminology**
+- `poa_board_contributor` renamed in copy to "ARC Committee Member" (reviews apps, provides feedback, non-voting) — affects memory docs + user-facing strings
+- Alex Rivera demo persona updated to reflect ARC committee role
+
+**Vantaca integration (`persistent-memory/feature-vantaca-integration.md`)**
+- +378 lines of research notes on the partner API integration
+
+**Swaggering Badger multi-agent onboarding**
+- NEW: `.sb-identity` — Edward @ poassociation (dev-lead, hazel dept)
+- NEW: `CLAUDE.md` team section documenting 9 team members, MCP wiring, launch command
+- `.mcp.json` is gitignored (contains SB_API_KEY bearer token)
+
+**Touched but minor**
+- `DynamicForm`, `ResidenceTimeline`, `WorkflowSection`, `TourEditDialog`, `RollCallAttendance`, `DashboardLayout`, `Dashboard`, `Directory`, `FormWizard`, `ApplicationEdit`, `DemoPersonaSelect`, `TourContent`, `DelegatedEditBadge`, `ApplicationEditHistory`
+- `server/provision.ts`, `server/seed.ts`, `server/seed-workflows.ts`, `server/emailTemplates.ts`
+- `shared/formTypes.ts` (+29), `client/src/lib/api.ts` (+31)
+- `package.json` + lockfile (helmet added)
+
+### SB Task Inbox State (2026-04-19)
+
+10 open tasks assigned to me, all from `dev-lead@swaggering-b`. None tackled yet — they're queued for the next session:
+- 4 high-priority MCP config broadcasts (three contradict each other; the "stay on SSE" one supersedes the streamable-http ones — current `.mcp.json` uses SSE, which is correct)
+- 1 "add SB_API_KEY to sb-team env" — already done
+- 6 medium: config drift audit, Skill Democracy onboarding, report Replit dev URL, request `SCRAPE_DO_TOKEN` / `FAL_KEY` secrets, channel plugin heartbeat fix, migrate MCP wiring to prod (already done — `.mcp.json` points at `swaggeringbadger.com`)
 
 ### Just Completed (2026-02-25)
 
@@ -614,7 +668,7 @@ Fixed activity log not showing credits for historical events.
 | `management_manager` | Management company manager |
 | `management_rep` | Property representative |
 | `poa_board_member` | Board member with full access |
-| `poa_board_contributor` | Board member with limited access |
+| `poa_board_contributor` | ARC Committee Member (review apps, provide feedback) |
 | `homeowner` | Property owner |
 | `household_member` | Member of homeowner's household |
 | `contractor` | External contractor |
@@ -628,9 +682,9 @@ Fixed activity log not showing credits for historical events.
 | **Emily** | Emily Foster | management_manager, account_admin | Full access to all |
 | **Sarah** | Sarah Chen | poa_board_member, homeowner | Board + homeowner at Markland |
 | **Jordan** | Jordan Mitchell | management_rep | Rep for Whispering Pines only |
-| **Alex** | Alex Rivera | poa_board_contributor, **contractor** | Contributor at Markland + Landscaping business |
+| **Alex** | Alex Rivera | poa_board_contributor, **contractor** | ARC Committee Member at Markland + Landscaping business |
 
-**Note:** Alex has a dual role - he's on the Markland board AND runs "Rivera Landscaping & Design" serving multiple communities. His expertise: landscaping, fencing, outdoor structures.
+**Note:** Alex has a dual role - he's on the Markland ARC review committee AND runs "Rivera Landscaping & Design" serving multiple communities. His expertise: landscaping, fencing, outdoor structures.
 
 ---
 

@@ -15,6 +15,7 @@ import { eq, and, desc } from "drizzle-orm";
 import multer from "multer";
 import crypto from "crypto";
 import { promptRegistry } from "./prompts/promptRegistry";
+import { sanitizeText, sanitizeFormData } from "./lib/sanitize";
 
 // Configure multer for in-memory file uploads
 const upload = multer({
@@ -204,16 +205,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Community not found' });
       }
 
-      // Get next upcoming scheduled event for this community
+      // Get upcoming scheduled events for this community (next 5)
       const now = new Date();
-      const upcomingEvents = await storage.listEvents({
+      const allUpcoming = await storage.listEvents({
         tenantId: tenant.id,
         status: 'scheduled',
         startAfter: now,
       });
 
-      // Get the first upcoming event (already ordered by startDatetime)
-      const nextEvent = upcomingEvents.length > 0 ? upcomingEvents[0] : null;
+      const formatEvent = (e: typeof allUpcoming[0]) => ({
+        id: e.id,
+        title: e.title,
+        startDatetime: e.startDatetime,
+        endDatetime: e.endDatetime,
+        location: e.location || null,
+        meetingUrl: e.meetingUrl || null,
+        eventType: e.eventType ? {
+          name: e.eventType.name,
+          slug: e.eventType.slug,
+        } : null,
+      });
+
+      // First event as featured, up to 5 total for the list
+      const nextEvent = allUpcoming.length > 0 ? formatEvent(allUpcoming[0]) : null;
+      const upcomingEvents = allUpcoming.slice(0, 5).map(formatEvent);
+
+      // Get active AI context sources (guidelines/reference docs) for public display
+      const contextSources = await storage.listAiContextSources(tenant.id, false);
+      const guidelines = contextSources.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        sourceType: s.sourceType,
+        sourceUrl: s.sourceUrl,
+        fileName: s.fileName,
+        mimeType: s.mimeType,
+      }));
 
       // Return sanitized public info (no internal IDs, settings, etc.)
       res.json({
@@ -225,22 +252,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
           designGuidelinesUrl: tenant.designGuidelinesUrl || null,
           communitySettings: tenant.communitySettings || null,
         },
-        nextEvent: nextEvent ? {
-          id: nextEvent.id,
-          title: nextEvent.title,
-          startDatetime: nextEvent.startDatetime,
-          endDatetime: nextEvent.endDatetime,
-          location: nextEvent.location || null,
-          meetingUrl: nextEvent.meetingUrl || null,
-          eventType: nextEvent.eventType ? {
-            name: nextEvent.eventType.name,
-            slug: nextEvent.eventType.slug,
-          } : null,
-        } : null,
+        guidelines,
+        nextEvent,
+        upcomingEvents,
       });
     } catch (error: any) {
       console.error('Error fetching public community info:', error);
       res.status(500).json({ error: 'Failed to fetch community info' });
+    }
+  });
+
+  // Public view/download for AI context source documents (guidelines)
+  // No auth required - these are community reference documents meant to be public
+  app.get('/api/public/tenants/:tenantId/guidelines/:id/view', async (req, res) => {
+    try {
+      const { tenantId, id } = req.params;
+
+      const source = await storage.getAiContextSource(id);
+      if (!source || !source.isActive) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      // Tenant isolation check
+      if (source.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      if (source.sourceType === 'url' && source.sourceUrl) {
+        return res.redirect(source.sourceUrl);
+      }
+
+      if (source.sourceType === 'uploaded_document' && source.blobPath && source.containerName) {
+        if (!azureBlobStorage.isAvailable()) {
+          return res.status(503).json({ error: 'Storage not configured' });
+        }
+
+        const buffer = await azureBlobStorage.downloadFile(source.containerName, source.blobPath);
+        const mimeType = source.mimeType || 'application/octet-stream';
+
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${source.fileName || 'document'}"`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.send(buffer);
+      }
+
+      return res.status(400).json({ error: 'Document has no viewable content' });
+    } catch (error: any) {
+      console.error('Error viewing public guideline document:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -355,7 +414,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/public/contact - Submit contact form or demo request
   app.post('/api/public/contact', async (req, res) => {
     try {
-      const { mode, name, email, phone, company, communitySize, message, preferredTime } = req.body;
+      const { mode, email } = req.body;
+      const name = sanitizeText(req.body.name);
+      const phone = sanitizeText(req.body.phone);
+      const company = sanitizeText(req.body.company);
+      const communitySize = sanitizeText(req.body.communitySize);
+      const message = sanitizeText(req.body.message);
+      const preferredTime = sanitizeText(req.body.preferredTime);
 
       // Validate required fields
       if (!name || !email) {
@@ -1358,9 +1423,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const applicationNumber = `${tenantSuffix}-${year}-${randomPart}`;
 
+      // Sanitize user-submitted form data before storage
+      const sanitizedBody = {
+        ...req.body,
+        formData: req.body.formData ? sanitizeFormData(req.body.formData) : req.body.formData,
+      };
+
       // Validate and create application
       const validated = insertApplicationSchema.parse({
-        ...req.body,
+        ...sanitizedBody,
         applicationNumber,
         formTemplateVersion: formTemplate.version,
         completenessScore,
@@ -1473,7 +1544,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/applications/:id/status", isAuthenticated, async (req, res) => {
     try {
-      const { status, reviewedByUserId, reviewNotes } = req.body;
+      const { status, reviewedByUserId } = req.body;
+      const reviewNotes = req.body.reviewNotes ? sanitizeText(req.body.reviewNotes) : req.body.reviewNotes;
       const applicationId = req.params.id;
 
       // Get current application to check submitter
@@ -5238,6 +5310,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const item = await storage.addAgendaItem({
         ...req.body,
+        title: req.body.title ? sanitizeText(req.body.title) : req.body.title,
+        description: req.body.description ? sanitizeText(req.body.description) : req.body.description,
+        presenterNotes: req.body.presenterNotes ? sanitizeText(req.body.presenterNotes) : req.body.presenterNotes,
+        decisionNotes: req.body.decisionNotes ? sanitizeText(req.body.decisionNotes) : req.body.decisionNotes,
+        discussionNotes: req.body.discussionNotes ? sanitizeText(req.body.discussionNotes) : req.body.discussionNotes,
         eventId: req.params.eventId,
         addedByUserId: req.userId,
       });
@@ -5255,7 +5332,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: 'Write access required' });
       }
 
-      const item = await storage.updateAgendaItem(req.params.itemId, req.body);
+      const sanitizedUpdates = { ...req.body };
+      if (sanitizedUpdates.title) sanitizedUpdates.title = sanitizeText(sanitizedUpdates.title);
+      if (sanitizedUpdates.description) sanitizedUpdates.description = sanitizeText(sanitizedUpdates.description);
+      if (sanitizedUpdates.presenterNotes) sanitizedUpdates.presenterNotes = sanitizeText(sanitizedUpdates.presenterNotes);
+      if (sanitizedUpdates.decisionNotes) sanitizedUpdates.decisionNotes = sanitizeText(sanitizedUpdates.decisionNotes);
+      if (sanitizedUpdates.discussionNotes) sanitizedUpdates.discussionNotes = sanitizeText(sanitizedUpdates.discussionNotes);
+
+      const item = await storage.updateAgendaItem(req.params.itemId, sanitizedUpdates);
       res.json(item);
     } catch (error: any) {
       console.error('Error updating agenda item:', error);
@@ -9415,9 +9499,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Upload to Azure Blob Storage
       await azureBlobStorage.uploadFile(
         containerName,
-        blobPath,
         file.buffer,
-        file.mimetype
+        file.originalname,
+        file.mimetype,
+        blobPath
       );
 
       // Create database record
@@ -9522,6 +9607,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error reordering AI context sources:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // View/download an AI context source document (inline viewing)
+  app.get('/api/tenants/:tenantId/ai-context-sources/:id/view', isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, id } = req.params;
+
+      const source = await storage.getAiContextSource(id);
+      if (!source) {
+        return res.status(404).json({ error: 'AI context source not found' });
+      }
+
+      // Tenant isolation check
+      if (source.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      if (source.sourceType === 'url' && source.sourceUrl) {
+        // For URL sources, redirect to the original URL
+        return res.redirect(source.sourceUrl);
+      }
+
+      if (source.sourceType === 'uploaded_document' && source.blobPath && source.containerName) {
+        if (!azureBlobStorage.isAvailable()) {
+          return res.status(503).json({ error: 'Storage not configured' });
+        }
+
+        const buffer = await azureBlobStorage.downloadFile(source.containerName, source.blobPath);
+        const mimeType = source.mimeType || 'application/octet-stream';
+
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${source.fileName || 'document'}"`);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        return res.send(buffer);
+      }
+
+      return res.status(400).json({ error: 'Source has no viewable content' });
+    } catch (error: any) {
+      console.error('Error viewing AI context source:', error);
       res.status(500).json({ error: error.message });
     }
   });

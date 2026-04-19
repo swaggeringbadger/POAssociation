@@ -83,7 +83,7 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
   homeowner: "Homeowner",
   delegated_rep: "Delegated Representative",
   poa_board_member: "{entity} Board Member",
-  poa_board_contributor: "{entity} Board Contributor",
+  poa_board_contributor: "ARC Committee Member",
   hoa_board_member: "{entity} Board Member",
   management_rep: "Management Representative",
   management_manager: "Management Manager",

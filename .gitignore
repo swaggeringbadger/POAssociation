@@ -10,6 +10,9 @@ vite.config.ts.*
 .env.local
 .env.*.local
 
+# Agent / MCP local config (contains API tokens)
+.mcp.json
+
 # Logs
 *.log
 npm-debug.log*
