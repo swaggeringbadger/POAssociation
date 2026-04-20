@@ -18,6 +18,11 @@ import { promptRegistry } from "./prompts/promptRegistry";
 import { sanitizeText, sanitizeFormData } from "./lib/sanitize";
 import { createMcpRouter } from "./mcp";
 import { REVIEWER_ROLES } from "./mcp/auth";
+import {
+  authorizationServerMetadata,
+  createOauthRouter,
+  protectedResourceMetadata,
+} from "./oauth";
 
 // Configure multer for in-memory file uploads
 const upload = multer({
@@ -79,6 +84,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // middleware. Feature-flagged by MCP_ENABLED; default enabled.
   if (process.env.MCP_ENABLED !== "false") {
     app.use("/mcp", createMcpRouter());
+
+    // OAuth discovery (RFC 8414 / RFC 9728) — must be reachable without auth.
+    app.get("/.well-known/oauth-protected-resource", protectedResourceMetadata);
+    app.get("/.well-known/oauth-authorization-server", authorizationServerMetadata);
+
+    // OAuth 2.1 authorization server endpoints for DCR + auth-code + PKCE.
+    app.use("/oauth", createOauthRouter());
   }
 
   // Apply subdomain detection to all routes

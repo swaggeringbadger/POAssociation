@@ -428,12 +428,31 @@ export interface IStorage {
   markResidenceTokenAsUsed(token: string, photosUploaded: number): Promise<schema.ResidenceUploadToken>;
 
   // MCP Reviewer Tokens
-  createMcpToken(data: { userId: string; tenantId: string; token: string; label?: string | null; expiresAt?: Date | null }): Promise<schema.McpToken>;
+  createMcpToken(data: { userId: string; tenantId: string; token: string; label?: string | null; expiresAt?: Date | null; source?: "plaintext" | "oauth"; oauthClientId?: string | null }): Promise<schema.McpToken>;
   listMcpTokensForUserInTenant(userId: string, tenantId: string): Promise<schema.McpToken[]>;
   getMcpTokenByValue(token: string): Promise<schema.McpToken | undefined>;
   revokeMcpToken(id: string, userId: string): Promise<schema.McpToken | undefined>;
   touchMcpToken(id: string): Promise<void>;
   logMcpToolCall(entry: schema.InsertMcpToolCall): Promise<void>;
+
+  // MCP OAuth (DCR + authorization codes)
+  createOauthClient(data: { clientName: string; redirectUris: string[]; scope?: string | null }): Promise<schema.OauthClient>;
+  getOauthClient(clientId: string): Promise<schema.OauthClient | undefined>;
+  touchOauthClient(clientId: string): Promise<void>;
+  createAuthorizationCode(data: {
+    code: string;
+    clientId: string;
+    userId: string;
+    tenantId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    scope?: string | null;
+    resource?: string | null;
+    expiresAt: Date;
+  }): Promise<schema.OauthAuthorizationCode>;
+  consumeAuthorizationCode(code: string): Promise<schema.OauthAuthorizationCode | undefined>;
+  deactivateOauthTokensForClient(userId: string, tenantId: string, oauthClientId: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -5453,6 +5472,8 @@ export class DbStorage implements IStorage {
     token: string;
     label?: string | null;
     expiresAt?: Date | null;
+    source?: "plaintext" | "oauth";
+    oauthClientId?: string | null;
   }): Promise<schema.McpToken> {
     const [row] = await db
       .insert(schema.mcpTokens)
@@ -5462,6 +5483,8 @@ export class DbStorage implements IStorage {
         token: data.token,
         label: data.label ?? null,
         expiresAt: data.expiresAt ?? null,
+        source: data.source ?? "plaintext",
+        oauthClientId: data.oauthClientId ?? null,
       })
       .returning();
     return row;
@@ -5505,6 +5528,106 @@ export class DbStorage implements IStorage {
 
   async logMcpToolCall(entry: schema.InsertMcpToolCall): Promise<void> {
     await db.insert(schema.mcpToolCalls).values(entry);
+  }
+
+  // ============================================
+  // MCP OAuth (DCR + authorization codes)
+  // ============================================
+
+  async createOauthClient(data: {
+    clientName: string;
+    redirectUris: string[];
+    scope?: string | null;
+  }): Promise<schema.OauthClient> {
+    const [row] = await db
+      .insert(schema.oauthClients)
+      .values({
+        clientName: data.clientName,
+        redirectUris: data.redirectUris,
+        scope: data.scope ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async getOauthClient(clientId: string): Promise<schema.OauthClient | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.oauthClients)
+      .where(eq(schema.oauthClients.id, clientId))
+      .limit(1);
+    return row;
+  }
+
+  async touchOauthClient(clientId: string): Promise<void> {
+    await db
+      .update(schema.oauthClients)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(schema.oauthClients.id, clientId));
+  }
+
+  async createAuthorizationCode(data: {
+    code: string;
+    clientId: string;
+    userId: string;
+    tenantId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    scope?: string | null;
+    resource?: string | null;
+    expiresAt: Date;
+  }): Promise<schema.OauthAuthorizationCode> {
+    const [row] = await db
+      .insert(schema.oauthAuthorizationCodes)
+      .values({
+        code: data.code,
+        clientId: data.clientId,
+        userId: data.userId,
+        tenantId: data.tenantId,
+        redirectUri: data.redirectUri,
+        codeChallenge: data.codeChallenge,
+        codeChallengeMethod: data.codeChallengeMethod,
+        scope: data.scope ?? null,
+        resource: data.resource ?? null,
+        expiresAt: data.expiresAt,
+      })
+      .returning();
+    return row;
+  }
+
+  // Atomic one-shot consumption: sets consumedAt only if it was null.
+  // Returns the code row iff it was still redeemable.
+  async consumeAuthorizationCode(code: string): Promise<schema.OauthAuthorizationCode | undefined> {
+    const [row] = await db
+      .update(schema.oauthAuthorizationCodes)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(schema.oauthAuthorizationCodes.code, code),
+          isNull(schema.oauthAuthorizationCodes.consumedAt),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
+  async deactivateOauthTokensForClient(
+    userId: string,
+    tenantId: string,
+    oauthClientId: string,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpTokens)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(schema.mcpTokens.userId, userId),
+          eq(schema.mcpTokens.tenantId, tenantId),
+          eq(schema.mcpTokens.oauthClientId, oauthClientId),
+          eq(schema.mcpTokens.isActive, true),
+        ),
+      );
   }
 }
 

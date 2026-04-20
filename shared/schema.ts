@@ -2371,14 +2371,22 @@ export const mcpTokens = pgTable("mcp_tokens", {
   lastUsedAt: timestamp("last_used_at"),
   accessCount: integer("access_count").notNull().default(0),
   expiresAt: timestamp("expires_at"),      // null = no expiry
+  // 'plaintext' = user-generated via ProfileSettings (one active per user+tenant).
+  // 'oauth' = minted by /oauth/token for a DCR client (one active per user+tenant+client).
+  source: text("source").notNull().default("plaintext"),
+  oauthClientId: varchar("oauth_client_id"), // null when source='plaintext'
 }, (table) => ({
   userTenantIdx: index("mcp_tokens_user_tenant_idx").on(table.userId, table.tenantId),
   tokenIdx: index("mcp_tokens_token_idx").on(table.token),
-  // One active token per (user, tenant) pair. Revocation sets isActive=false,
-  // freeing the slot for a new token.
-  activeUnique: uniqueIndex("mcp_tokens_active_user_tenant_uniq")
+  // Plaintext tokens: one active per (user, tenant).
+  activePlaintextUnique: uniqueIndex("mcp_tokens_active_plaintext_uniq")
     .on(table.userId, table.tenantId)
-    .where(sql`${table.isActive} = true`),
+    .where(sql`${table.isActive} = true AND ${table.source} = 'plaintext'`),
+  // OAuth tokens: one active per (user, tenant, client). Re-authorising the
+  // same client replaces the old token.
+  activeOauthUnique: uniqueIndex("mcp_tokens_active_oauth_uniq")
+    .on(table.userId, table.tenantId, table.oauthClientId)
+    .where(sql`${table.isActive} = true AND ${table.source} = 'oauth'`),
 }));
 
 export const insertMcpTokenSchema = createInsertSchema(mcpTokens).omit({
@@ -2415,4 +2423,44 @@ export const insertMcpToolCallSchema = createInsertSchema(mcpToolCalls).omit({
 });
 export type InsertMcpToolCall = z.infer<typeof insertMcpToolCallSchema>;
 export type McpToolCall = typeof mcpToolCalls.$inferSelect;
+
+// ============================================
+// MCP OAUTH 2.1 (Dynamic Client Registration)
+// ============================================
+// Clients (Claude Desktop, Cursor, etc.) dynamically register themselves per
+// RFC 7591 and then run the authorization-code + PKCE flow against
+// /oauth/authorize and /oauth/token. A successful flow mints a row in
+// mcp_tokens with source='oauth'.
+export const oauthClients = pgTable("oauth_clients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // = client_id
+  clientName: text("client_name").notNull(),
+  redirectUris: jsonb("redirect_uris").$type<string[]>().notNull(),
+  tokenEndpointAuthMethod: text("token_endpoint_auth_method").notNull().default("none"), // public PKCE clients
+  grantTypes: jsonb("grant_types").$type<string[]>().notNull().default(sql`'["authorization_code"]'::jsonb`),
+  responseTypes: jsonb("response_types").$type<string[]>().notNull().default(sql`'["code"]'::jsonb`),
+  scope: text("scope"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+export type OauthClient = typeof oauthClients.$inferSelect;
+
+// Short-lived authorization codes. One-shot: consumed atomically at token
+// exchange. PKCE code_challenge stored so /oauth/token can verify the
+// code_verifier. 10-minute TTL per OAuth 2.1.
+export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
+  code: text("code").primaryKey(), // crypto.randomBytes(32).toString('hex')
+  clientId: varchar("client_id").notNull().references(() => oauthClients.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  codeChallengeMethod: text("code_challenge_method").notNull(), // 'S256' only
+  scope: text("scope"),
+  resource: text("resource"), // RFC 8707 — the MCP canonical URI
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"), // null = still redeemable
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type OauthAuthorizationCode = typeof oauthAuthorizationCodes.$inferSelect;
+
 export type EmailLog = typeof emailLogs.$inferSelect;

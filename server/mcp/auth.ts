@@ -39,6 +39,19 @@ function extractBearerToken(req: Request): string | null {
   return match ? match[1] : null;
 }
 
+// RFC 9728 §5.1 — 401 responses from a protected resource MUST point clients
+// at the resource-metadata URL so they can discover the authorization server.
+function setWwwAuthenticate(req: Request, res: Response, error: string, description?: string) {
+  const base = `${req.protocol}://${req.get("host")}`;
+  const parts = [
+    `Bearer realm="poa-mcp"`,
+    `resource_metadata="${base}/.well-known/oauth-protected-resource"`,
+    `error="${error}"`,
+  ];
+  if (description) parts.push(`error_description="${description.replace(/"/g, "\\\"")}"`);
+  res.setHeader("WWW-Authenticate", parts.join(", "));
+}
+
 /**
  * Bearer-token auth middleware for /mcp routes. Looks up the presented token,
  * validates its state, verifies the user still holds a reviewer role in the
@@ -53,6 +66,7 @@ export async function bearerAuthMiddleware(
 ): Promise<void> {
   const tokenValue = extractBearerToken(req);
   if (!tokenValue) {
+    setWwwAuthenticate(req, res, "invalid_request", "Missing bearer token");
     res.status(401).json({ error: "Missing bearer token" });
     return;
   }
@@ -67,11 +81,13 @@ export async function bearerAuthMiddleware(
   }
 
   if (!tokenRow || !tokenRow.isActive) {
+    setWwwAuthenticate(req, res, "invalid_token", "Invalid or revoked token");
     res.status(401).json({ error: "Invalid or revoked token" });
     return;
   }
 
   if (tokenRow.expiresAt && tokenRow.expiresAt.getTime() < Date.now()) {
+    setWwwAuthenticate(req, res, "invalid_token", "Token expired");
     res.status(401).json({ error: "Token expired" });
     return;
   }
