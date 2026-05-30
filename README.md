@@ -28,7 +28,7 @@ Visit `http://localhost:5000`
 - **Database**: PostgreSQL (Neon) + Drizzle ORM
 - **Storage**: Azure Blob Storage
 - **AI**: Anthropic Claude (Sonnet 4.5)
-- **Auth**: Replit Auth
+- **Auth**: Self-hosted email + password (session-based)
 
 ## 📁 Project Structure
 
@@ -93,7 +93,8 @@ DATABASE_URL=postgresql://...           # Neon PostgreSQL connection
 ANTHROPIC_API_KEY=sk-ant-...           # Claude API key
 AZURE_STORAGE_ACCOUNT_NAME=...         # Azure Storage account
 AZURE_STORAGE_ACCOUNT_KEY=...          # Azure Storage key
-REPLIT_AUTH_SECRET=...                 # Replit Auth secret (auto-configured on Replit)
+SESSION_SECRET=...                     # Signs the session cookie (openssl rand -hex 32)
+SMTP2GO_API_KEY=...                    # Email delivery (verification + password reset)
 ```
 
 ## 🎭 Demo System

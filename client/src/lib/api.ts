@@ -775,6 +775,40 @@ class ApiClient {
     return response.json();
   }
 
+  // Email + password auth
+  private async authRequest(path: string, body: Record<string, unknown>): Promise<any> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || "Request failed");
+    }
+    return data;
+  }
+
+  async register(input: { email: string; password: string; firstName?: string; lastName?: string }): Promise<any> {
+    return this.authRequest(`/auth/register`, input);
+  }
+
+  async login(input: { email: string; password: string }): Promise<any> {
+    return this.authRequest(`/auth/login`, input);
+  }
+
+  async forgotPassword(email: string): Promise<{ success: boolean }> {
+    return this.authRequest(`/auth/forgot-password`, { email });
+  }
+
+  async resetPassword(token: string, password: string): Promise<{ success: boolean }> {
+    return this.authRequest(`/auth/reset-password`, { token, password });
+  }
+
+  async verifyEmail(token: string): Promise<{ success: boolean }> {
+    return this.authRequest(`/auth/verify-email`, { token });
+  }
+
   // ============================================================
   // SUBSCRIPTION API METHODS
   // ============================================================

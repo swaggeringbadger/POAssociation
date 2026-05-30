@@ -74,7 +74,7 @@ Preferred communication style: Simple, everyday language.
 - Neon Serverless PostgreSQL 16
 - Drizzle ORM 0.39 (schema-first with migrations)
 - Express Session + connect-pg-simple (PostgreSQL-backed sessions)
-- Passport.js + OpenID Connect (Replit Auth)
+- Self-hosted email + password auth (bcryptjs; `server/auth.ts`)
 
 **Service Layer:**
 - `storage.ts` - Database access layer (single source of truth for all DB operations)
@@ -93,13 +93,14 @@ Preferred communication style: Simple, everyday language.
 ### Database Schema
 
 **Core Tables:**
-- `users` - User profiles (Replit Auth integration)
+- `users` - User profiles + credentials (email, bcrypt `passwordHash`, email verification)
 - `tenants` - Management companies and communities
 - `userTenantRoles` - Many-to-many user-tenant-role assignments
 - `formTemplates` - AI-generated form configurations (JSON)
 - `applications` - Submitted applications with workflow state
 - `documents` - File metadata with Azure Blob Storage paths
-- `sessions` - Express session storage (required for Replit Auth)
+- `sessions` - Express session storage (connect-pg-simple)
+- `passwordResetTokens` / `emailVerificationTokens` - single-use, hashed auth tokens
 - `demoCodes` - Time-limited demo access codes
 
 **Key Relationships:**
@@ -119,15 +120,17 @@ application-documents/{tenant-guid}/{application-guid}/{document-guid}.{ext}
 
 ### Authentication & Sessions
 
-**Replit OpenID Connect:**
+**Email + password (self-hosted):**
 - Session storage in PostgreSQL via `connect-pg-simple`
 - 7-day session TTL with automatic cleanup
 - `sessions` table tracks `sid`, `sess` (JSON), and `expire`
-- Passport.js with `openid-client` strategy
-- All API routes protected with `isAuthenticated` middleware
+- Identity is `session.userId`; passwords hashed with bcryptjs (cost 12)
+- Routes: `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/verify-email`
+- Per-account lockout + per-IP rate limiting on credential endpoints
+- All API routes protected with `isAuthenticated` middleware (`server/auth.ts`)
 
 **Demo Mode:**
-- Demo codes create temporary access without Replit Auth
+- Demo codes create temporary access via the same `session.userId` mechanism
 - Demo users auto-created during ecosystem provisioning
 - Demo sessions expire when `validUntil` date passes
 - Purge script (`purgeExpiredDemos.ts`) cleans up expired demos
@@ -178,9 +181,9 @@ application-documents/{tenant-guid}/{application-guid}/{document-guid}.{ext}
 - Environment variable: `SMTP2GO_API_KEY`
 - Used for application notifications and workflow updates
 
-**Replit Auth:**
-- OpenID Connect authentication
-- Environment variables: `ISSUER_URL`, `REPL_ID`, `SESSION_SECRET`
+**Authentication:**
+- Self-hosted email + password (no external identity provider)
+- Environment variables: `SESSION_SECRET` (required), `APP_URL` (base for email links)
 - Session persistence in PostgreSQL
 
 ### NPM Packages
@@ -202,8 +205,9 @@ application-documents/{tenant-guid}/{application-guid}/{document-guid}.{ext}
 - `shadcn/ui` - Pre-built accessible components
 
 **Authentication:**
-- `passport` + `openid-client` - OAuth/OIDC integration
+- `bcryptjs` - Password hashing
 - `express-session` + `connect-pg-simple` - Session management
+- `express-rate-limit` - Brute-force protection on credential endpoints
 
 ### Development Tools
 

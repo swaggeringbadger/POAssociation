@@ -126,7 +126,7 @@ export default function InvitationAccept() {
       localStorage.setItem(PENDING_INVITATION_KEY, token);
       console.log('[InvitationAccept] Stored pending invitation in localStorage:', token);
       // Redirect to login with returnTo parameter
-      window.location.href = `/api/login?returnTo=/invite/${token}`;
+      window.location.href = `/login?returnTo=/invite/${token}`;
     }
   };
 

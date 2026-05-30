@@ -1,11 +1,110 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-04-19
-**Current Session:** Catch-up commit + SB multi-agent onboarding
+**Last Updated:** 2026-05-30
+**Current Session:** Self-hosted auth go-live debugging + MCP OAuth client-integration fixes + 3D-Tiles research
+
+---
+
+## SESSION 2026-05-30 — Auth go-live, super_admin, MCP-over-claude.ai fixes
+
+Human is **Tim Butts** (`me@timbutts.com`; SB identity `apps@swaggeringbadger.com`). Brought the new self-hosted auth online and got the MCP reviewer connector working from claude.ai. Server runs in **dev mode** (`tsx server/index.ts`, reads source — no rebuild needed for it; rebuild only matters for `node dist/index.js`).
+
+> **2026-05-30 (later): COMMITTED.** The full auth migration + today's MCP-OAuth fixes are committed on branch **`feat/self-hosted-auth`** (commit `c9b833c`, 29 files, +1126/−555). Branched off `main` per CLAUDE.md. Build green (`npm run build`, dist/index.js 1.1mb). `tsc` baseline went 228→215 errors (migration removed 13; project has never typechecked clean — ships via esbuild). **Not yet pushed / no PR.** The 3D-Tiles research run dir was gone (cleaned up) — report unrecoverable.
+
+### super_admin — THE KEY FINDING
+Super-admin is gated by the **`SUPER_ADMIN_EMAILS` env var** (semicolon-separated allowlist), checked by `/api/auth/is-super-admin` (`routes.ts:835`) + `requireSuperAdmin` (`routes.ts:3033`). The `DashboardLayout` "System Admin" section keys off `api.isSuperAdmin()` → this env var, **tenant-independent**. The `super_admin` *role* in `user_tenant_roles` is a SEPARATE thing that only feeds scattered route `allowedRoles` arrays — it does NOT light up the admin UI. Added `me@timbutts.com` to `SUPER_ADMIN_EMAILS` (user did it in Replit Secrets) → System Admin now visible. See [[super-admin-mechanism]].
+
+### DB changes made this session (production Neon)
+- Renamed Sarah-Chen demo user `169dea19-…-user-board` email `me@timbutts.com` → `me+old@timbutts.com` (freed the email; not hardcoded anywhere).
+- `me@timbutts.com` (real, id `474b0150-…`) created by user via new register flow. Granted then **reverted** a `super_admin` role on Apex (wrong lever, caused a confusing mgmt-company switcher). Granted `poa_board_member` on Markland `markland-bd9bb688` (`4df4dbf6-…`, 23 apps) for MCP testing.
+
+### Client fixes (HMR-live)
+- `useUserTenants.ts`: added `else` branch clearing stale `currentTenant`/roles for roleless users (phantom-community bug); store `version` 2→3 in `store.ts` to flush stale `poassociation-state`.
+- `WorkflowSection.tsx`: **pre-existing** Rules-of-Hooks bug — `useFormatRoleLabel()` was called AFTER the `isLoading`/`!workflow` early returns; hoisted it above them.
+
+### MCP OAuth (claude.ai connector) — 3 real bugs fixed, now works E2E
+Client = "Claude", redirect_uri `https://claude.ai/api/mcp/auth_callback`. Bugs (all client-integration paths the manual browser E2E never hit):
+1. **CSRF origin check** rejected the consent POST's `Origin: null` → carved out `/oauth/authorize/approve` in `server/index.ts` (alongside `/oauth/register`,`/oauth/token`).
+2. **CSP `form-action 'self'`** silently blocked the post-approve 302 redirect to claude.ai → in `handleAuthorize` set a per-response CSP allowing `form-action 'self' <client redirect origin>`.
+3. "No pending authorization" was a red herring — double-submit after #2 stalled the page.
+Verified: full DCR→login→consent→code→token chain; `submit_comment` posted a comment (as Sarah Chen `me+1@timbutts.com`, since that account was logged into the portal in the OAuth browser — identity = portal session at `/oauth/authorize`). MCP reviewer needs a `REVIEWER_ROLES` membership; email-super_admin does NOT count for MCP. See [[mcp-oauth-claude-connector]].
+- Cleanup done: stripped all temp `dbg()` logging from `oauth/index.ts`; simplified `resolveUserId` to session-only (killed dead Passport ref / tsc error). Real fixes (CSRF carve-out + CSP override) retained. `tsc` clean on both files.
+
+### In-flight
+- **Deep-research workflow** (Google Photorealistic 3D Tiles eval, 3 use cases) running in background — NOT yet complete when session paused. Run dir under `…/subagents/workflows/wf_25d867d7-1e9`. Read its final report when done.
+
+### NEXT
+1. ~~Read the 3D-Tiles research report.~~ Run dir gone — unrecoverable.
+2. ~~Commit everything~~ — DONE: branch `feat/self-hosted-auth`, commit `c9b833c`. Remaining: **push the branch + open a PR** (or merge to `main`) when ready — user to trigger.
+3. Optional: re-bind MCP connector to `me@timbutts.com` (has reviewer role on `markland-bd9bb688`) instead of Sarah — log into portal as me@ then re-add connector.
+4. Optional latent: `establishSession` (`routes.ts:143`) sets `currentUserRole = userTenants[0].role` (first row, not highest-privilege) — frontend self-corrects, but worth hardening.
 
 ---
 
 ## CURRENT STATE SUMMARY
+
+### MCP Reviewer Server + OAuth (2026-04-20 → 2026-05) — MERGED to `main`
+
+Built a Model Context Protocol server so external LLM clients (Claude Desktop, Cursor, claude.ai) can review ARC applications. Landed across 4 commits (`5e2a141` → `cd4c9a1`), all merged; the `feat/mcp-oauth` branch is fully merged into `main` (main is 1 deploy commit ahead). ~3,600 insertions.
+
+**MCP server (`server/mcp/`)**
+- `index.ts` — stateless Streamable HTTP transport (`POST /mcp`), fresh `McpServer` per request (no in-memory session map to leak across Replit redeploys). Server name `poa-reviewer`.
+- `tools.ts` — **7 reviewer tools**: `list_applications`, `get_application`, `get_application_documents` (OCR text), `get_bylaws_and_context` (delegates to `aiContextService`), `get_application_workflow`, `get_application_comments`, `submit_comment` (authors as `ctx.userId`, never client-supplied). Formal decisions (approve/reject/table) intentionally stay in the web UI.
+- `resources.ts` — bylaw resources exposed via custom URI scheme.
+- `auth.ts` — `bearerAuthMiddleware` (validates `mcp_tokens`), `assertReviewerAccess` re-verifies reviewer role + tenant scope on every call (cross-tenant IDs fail closed). 401s emit `WWW-Authenticate: Bearer ... resource_metadata=...` per RFC 9728 §5.1.
+- `rateLimit.ts` — per-IP, per-token (minute + hour), and auth-failure limiters.
+- `audit.ts` — fire-and-forget audit log; records `argumentKeys` only, never values (PII-safe, incl. `submit_comment` body).
+
+**OAuth 2.1 + DCR authorization server (`server/oauth/index.ts`, 508 lines)**
+- `GET /.well-known/oauth-protected-resource` (RFC 9728) + `GET /.well-known/oauth-authorization-server` (RFC 8414)
+- `POST /oauth/register` (RFC 7591 DCR; redirect_uri allowlist = https-or-loopback)
+- `GET /oauth/authorize` → **bounces unauthed users through `/api/login`** (Replit auth), then renders a server-rendered HTML consent page (inline-styled, no Tailwind/React boot) with client name, scope summary, and a radio picker of every tenant where the user holds a reviewer role. Signed pending request stashed in session (nonce + 10-min TTL).
+- `POST /oauth/authorize/approve` — verifies nonce/expiry, re-checks reviewer role on submitted tenant, mints one-shot code, redirects with code+state. Deny path → `error=access_denied`.
+- `POST /oauth/token` — PKCE S256 verify, code expiry + one-shot reuse checks, reviewer-role re-verification, deactivates prior OAuth token for same (user, tenant, client) before minting.
+- CSRF carve-out for `/oauth/register` + `/oauth/token` (PKCE + client state protect them); all behind `MCP_ENABLED`.
+
+**Schema (`shared/schema.ts`, +111)**
+- `oauth_clients` (RFC 7591 DCR, public PKCE clients), `oauth_authorization_codes` (one-shot, atomic consume via conditional UPDATE on `consumed_at`), `mcp_tokens` gained `source` ('plaintext' | 'oauth') + `oauth_client_id`, with two scoped partial unique indexes.
+
+**Frontend**
+- `client/src/components/settings/McpReviewerPanel.tsx` (273) + `McpTokenGeneratedDialog.tsx` (152), wired into `ProfileSettings.tsx`. API: `listMcpTokens` / `createMcpToken` / `revokeMcpToken` (`api.ts:2121+`).
+
+**Tests** — `test/server/mcp-auth.test.ts` (13) + `mcp-tools.test.ts` (12) = 25 tests on the highest-risk surfaces (auth fail-closed, cross-tenant isolation, audit redaction). E2E verified manually (Sarah Chen / Markland board member): DCR → login → consent → approve → token exchange → Bearer `/mcp` → tools/list returns all 7. Deny + nonce-replay fail closed.
+
+---
+
+### DONE: Migrated portal human login OFF Replit Auth → self-hosted email + password (2026-05-29)
+
+**Status:** COMPLETE and E2E-verified against the production build (`node dist/index.js`). NOT yet committed — working tree has the changes. Decisions: email/password only (no social), fresh start (no prod users migrated). The MCP OAuth work (above) is unchanged and still federates through `/api/login`.
+
+**What changed:**
+- NEW `server/auth.ts` replaces `server/replitAuth.ts` (deleted). Exports same `setupAuth` + `isAuthenticated` (now session-only: `session.userId`). Adds `getSession()` (verbatim, reuses `sessions` table), `hashPassword`/`verifyPassword` (bcryptjs cost 12), `generateToken`/`hashToken` (SHA-256), and a `GET /api/login` shim → `302 /login?returnTo=` so MCP `/oauth/authorize` federation keeps working.
+- `routes.ts:6` imports `./auth`. New routes: `POST /api/auth/register|login|forgot-password|reset-password|verify-email`. `register`/`login` set `session.userId` + `currentUserRole` via `establishSession()` (mirrors demo-login). Generic 401s (no account enumeration), per-account lockout (5 attempts → 15-min lock), `express-rate-limit` (10/15min/IP) on credential routes. Verification = soft gate. `/api/auth/user` claims branch removed; `resolveSessionUserId` reduced to session-only.
+- Schema: `users` gained `passwordHash`, `emailVerifiedAt`, `failedLoginAttempts`, `lockedUntil`; NEW `password_reset_tokens` + `email_verification_tokens` (store SHA-256 hash only, single-use). Applied via psql DDL (drizzle-kit push is interactive — needs a TTY; equivalent idempotent DDL run directly).
+- Storage: `createUserWithPassword`, `setUserPassword`, `setEmailVerified`, `incrementFailedLogins`/`resetFailedLogins`/`setLockedUntil`, token CRUD.
+- Client: NEW pages `Login`/`Register`/`ForgotPassword`/`ResetPassword`/`VerifyEmail` (wired as public routes in `App.tsx`). All `window.location.href='/api/login'` → `/login` (Landing, PricingPage, ManagementLanding, CommunityLanding, InvitationAccept w/ returnTo). `api.ts` got `register`/`login`/`forgotPassword`/`resetPassword`/`verifyEmail`. `useAuth`/`ProtectedRoute`/`DemoCodeEntry` unchanged.
+- Cleanup: removed deps `openid-client`, `passport`, `passport-local`, `memoizee` (+ @types). Added `bcryptjs`. Updated `.env.example` (SESSION_SECRET required, SMTP2GO_API_KEY), `CLAUDE.md`, `README.md`, `replit.md`. Email links use the existing app-wide `APP_URL` env var (already set), not a new var.
+- The ~82 inline `req.session?.userId || req.user?.claims?.sub` callsites left as dead-but-safe (req.user now undefined → falls through to session). **Follow-up (optional):** a handful of `req.user?.id` audit-actor callsites (routes.ts ~7175-7327, 1442) have no session fallback — they were ALREADY undefined under Replit OIDC (pre-existing), so behavior-preserving; could be upgraded to `req.session?.userId` to populate audit fields.
+
+**E2E verified (curl, simulated `X-Forwarded-Proto: https` since prod cookies are Secure):** register→201+bcrypt hash, session read→200, logout→401, login→200+`HttpOnly;Secure;SameSite=Lax`, wrong-pw→401, rate-limit→429, forgot-password→200 (no enumeration), demo validate-code→200 intact, `/api/login` shim→302. Test users cleaned from DB.
+
+**NEXT:** commit the change (branch first per CLAUDE.md); confirm `SESSION_SECRET` set in prod (it is); have the user click Run in Replit + smoke-test in the real browser over HTTPS.
+
+---
+
+### (superseded) Pre-migration auth surface notes
+
+**Auth surface to migrate (mapped this session):**
+- `server/replitAuth.ts` — Replit OIDC via `openid-client` + Passport, strategy `replitauth:${domain}`, `setupAuth(app)` called at `routes.ts:80`. Routes: `/api/login`, `/api/callback`, `/api/logout` (calls Replit end-session), token refresh inside `isAuthenticated`.
+- **Two parallel auth paths today:** (1) Replit OIDC → identity in `req.user.claims.sub`; (2) demo-session → `req.session.userId` set directly (demo-code sandbox system, no Passport).
+- **The identity seam:** every protected handler reads `req.session?.userId || req.user?.claims?.sub`. This exact pattern appears **82×** in `routes.ts`; there are **284** `isAuthenticated` references; helper `getUserId` at `routes.ts:133`. **This seam, plus demo-session coexistence, is the real migration surface — not the login button.**
+- `users.id` is currently the Replit `claims.sub`. **No `passwordHash` column exists** on `users` today (the old global-memory note is stale) — a local-credentials approach would need a schema add + backfill/ID-mapping strategy for existing users.
+- `/api/auth/user` (`routes.ts:100`) returns the current user (session-first, then claims).
+- Sessions: `sessions` table via `connect-pg-simple`, 1-week TTL, `SESSION_SECRET` env.
+
+**Provider/approach: TBD — decision pending (see plan).** Migration plan to be appended once approach is chosen.
+
+---
 
 ### Catch-Up Commit (2026-04-19)
 

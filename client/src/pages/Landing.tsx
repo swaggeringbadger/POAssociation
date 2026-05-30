@@ -53,7 +53,7 @@ function Navbar({ onScheduleDemo }: { onScheduleDemo: () => void }) {
           <Button variant="outline" onClick={onScheduleDemo}>
             Schedule Demo
           </Button>
-          <Button onClick={() => window.location.href = '/api/login'} data-testid="button-login">
+          <Button onClick={() => window.location.href = '/login'} data-testid="button-login">
             Sign In <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -80,7 +80,7 @@ function HeroSection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
             architectural reviews, compliance tracking, and resident communications.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <Button size="lg" className="text-lg px-8 h-12" onClick={() => window.location.href = '/api/login'} data-testid="button-get-started">
+            <Button size="lg" className="text-lg px-8 h-12" onClick={() => window.location.href = '/login'} data-testid="button-get-started">
               Get Started
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 h-12" onClick={onScheduleDemo}>
@@ -412,7 +412,7 @@ function PricingSection({ onContact }: { onContact: () => void }) {
                 <Button
                   className="w-full"
                   variant={tier.popular ? 'default' : 'outline'}
-                  onClick={() => window.location.href = '/api/login'}
+                  onClick={() => window.location.href = '/login'}
                 >
                   Get Started
                 </Button>
@@ -460,7 +460,7 @@ function CTASection({ onScheduleDemo }: { onScheduleDemo: () => void }) {
             size="lg"
             variant="outline"
             className="text-lg px-8 h-12 bg-transparent border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary"
-            onClick={() => window.location.href = '/api/login'}
+            onClick={() => window.location.href = '/login'}
           >
             Sign In
           </Button>

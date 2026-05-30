@@ -53,7 +53,7 @@
 - Backend: Express.js + TypeScript + Drizzle ORM
 - Database: PostgreSQL (Neon serverless)
 - Storage: Azure Blob Storage
-- Auth: Replit Auth
+- Auth: Self-hosted email + password (session-based; `server/auth.ts`)
 - AI: Anthropic Claude SDK
 
 ### Key Patterns

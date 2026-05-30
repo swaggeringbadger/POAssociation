@@ -19,6 +19,11 @@ import ApplicationEdit from "@/pages/ApplicationEdit";
 import MarklandExample from "@/pages/MarklandExample";
 import DemoCodeEntry from "@/pages/DemoCodeEntry";
 import DemoPersonaSelect from "@/pages/DemoPersonaSelect";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import VerifyEmail from "@/pages/VerifyEmail";
 import Directory from "@/pages/Directory";
 import Properties from "@/pages/Properties";
 import Team from "@/pages/Team";
@@ -130,6 +135,13 @@ function Router() {
           return null;
         }}
       </Route>
+
+      {/* Auth routes - accessible without auth */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
 
       {/* Demo routes - accessible without auth */}
       <Route path="/demo" component={DemoCodeEntry} />

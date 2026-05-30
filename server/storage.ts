@@ -19,6 +19,19 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<schema.User | undefined>;
   upsertUser(user: schema.UpsertUser): Promise<schema.User>;
   updateUserProfile(userId: string, updates: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string; notificationPreferences?: any }): Promise<schema.User>;
+  // Email + password auth
+  createUserWithPassword(data: { email: string; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<schema.User>;
+  setUserPassword(userId: string, passwordHash: string): Promise<void>;
+  setEmailVerified(userId: string): Promise<void>;
+  incrementFailedLogins(userId: string): Promise<number>;
+  resetFailedLogins(userId: string): Promise<void>;
+  setLockedUntil(userId: string, lockedUntil: Date | null): Promise<void>;
+  createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.PasswordResetToken>;
+  getPasswordResetTokenByHash(tokenHash: string): Promise<schema.PasswordResetToken | undefined>;
+  markPasswordResetTokenUsed(id: string): Promise<void>;
+  createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.EmailVerificationToken>;
+  getEmailVerificationTokenByHash(tokenHash: string): Promise<schema.EmailVerificationToken | undefined>;
+  markEmailVerificationTokenUsed(id: string): Promise<void>;
   
   // Tenants
   getTenant(id: string): Promise<schema.Tenant | undefined>;
@@ -492,6 +505,103 @@ export class DbStorage implements IStorage {
       .where(eq(schema.users.id, userId))
       .returning();
     return user;
+  }
+
+  // Email + password auth
+  async createUserWithPassword(data: { email: string; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<schema.User> {
+    const [user] = await db
+      .insert(schema.users)
+      .values({
+        email: data.email,
+        passwordHash: data.passwordHash,
+        firstName: data.firstName ?? null,
+        lastName: data.lastName ?? null,
+      })
+      .returning();
+    return user;
+  }
+
+  async setUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ passwordHash, failedLoginAttempts: 0, lockedUntil: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async setEmailVerified(userId: string): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async incrementFailedLogins(userId: string): Promise<number> {
+    const [user] = await db
+      .update(schema.users)
+      .set({ failedLoginAttempts: sql`${schema.users.failedLoginAttempts} + 1`, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning({ failedLoginAttempts: schema.users.failedLoginAttempts });
+    return user?.failedLoginAttempts ?? 0;
+  }
+
+  async resetFailedLogins(userId: string): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ failedLoginAttempts: 0, lockedUntil: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async setLockedUntil(userId: string, lockedUntil: Date | null): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ lockedUntil, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.PasswordResetToken> {
+    const [row] = await db
+      .insert(schema.passwordResetTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning();
+    return row;
+  }
+
+  async getPasswordResetTokenByHash(tokenHash: string): Promise<schema.PasswordResetToken | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.passwordResetTokens)
+      .where(eq(schema.passwordResetTokens.tokenHash, tokenHash));
+    return row;
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await db
+      .update(schema.passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(schema.passwordResetTokens.id, id));
+  }
+
+  async createEmailVerificationToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.EmailVerificationToken> {
+    const [row] = await db
+      .insert(schema.emailVerificationTokens)
+      .values({ userId, tokenHash, expiresAt })
+      .returning();
+    return row;
+  }
+
+  async getEmailVerificationTokenByHash(tokenHash: string): Promise<schema.EmailVerificationToken | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.emailVerificationTokens)
+      .where(eq(schema.emailVerificationTokens.tokenHash, tokenHash));
+    return row;
+  }
+
+  async markEmailVerificationTokenUsed(id: string): Promise<void> {
+    await db
+      .update(schema.emailVerificationTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(schema.emailVerificationTokens.id, id));
   }
 
   // Tenants

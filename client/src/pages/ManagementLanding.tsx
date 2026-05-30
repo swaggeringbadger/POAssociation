@@ -98,7 +98,7 @@ export default function ManagementLanding({ subdomain }: ManagementLandingProps)
               <p className="text-xs text-muted-foreground">Property Management</p>
             </div>
           </div>
-          <Button onClick={() => window.location.href = '/api/login'}>
+          <Button onClick={() => window.location.href = '/login'}>
             Sign In <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>

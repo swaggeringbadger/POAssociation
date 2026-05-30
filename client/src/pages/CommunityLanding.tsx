@@ -164,7 +164,7 @@ export default function CommunityLanding({ subdomain }: CommunityLandingProps) {
             <span className="text-xl font-bold text-primary font-heading">{tenant.name}</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={() => window.location.href = '/api/login'}>
+            <Button onClick={() => window.location.href = '/login'}>
               Sign In <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>

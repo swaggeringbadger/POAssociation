@@ -48,7 +48,10 @@ export const insertDemoCodeSchema = createInsertSchema(demoCodes).omit({
 export type InsertDemoCode = z.infer<typeof insertDemoCodeSchema>;
 export type DemoCode = typeof demoCodes.$inferSelect;
 
-// User storage table - updated for Replit Auth compatibility
+// User storage table - self-hosted email + password auth.
+// id is a generated uuid for real users; demo users use synthetic ids
+// (`${demoCodeId}-user-*`). passwordHash is null for demo users (they sign in
+// via the demo-code flow, not credentials).
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
@@ -56,6 +59,10 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   phoneNumber: varchar("phone_number"),
   profileImageUrl: varchar("profile_image_url"),
+  passwordHash: varchar("password_hash"),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until"),
   notificationPreferences: jsonb("notification_preferences").default(sql`'{"applicationSubmitted":true,"applicationApproved":true,"applicationRejected":true,"commentsAdded":true,"stepAssigned":true}'`),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
@@ -64,6 +71,29 @@ export const users = pgTable("users", {
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// Password reset + email verification tokens. We store only a SHA-256 hash of
+// the token; the raw token is emailed to the user and never persisted.
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("IDX_password_reset_token_hash").on(table.tokenHash)]);
+
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("IDX_email_verification_token_hash").on(table.tokenHash)]);
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 
 // Legal entity type - distinguishes between POA and HOA communities
 export const legalEntityTypeSchema = z.enum(['poa', 'hoa']);

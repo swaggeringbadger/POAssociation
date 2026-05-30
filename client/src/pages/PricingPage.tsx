@@ -234,7 +234,7 @@ function Navbar() {
           <Button variant="ghost" onClick={() => navigate("/")}>
             Back to Home
           </Button>
-          <Button onClick={() => window.location.href = '/api/login'}>
+          <Button onClick={() => window.location.href = '/login'}>
             Get Started <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -404,7 +404,7 @@ function TierCards({ isAnnual }: { isAnnual: boolean }) {
                 <Button
                   className="w-full mt-6"
                   variant={tier.popular ? "default" : "outline"}
-                  onClick={() => window.location.href = '/api/login'}
+                  onClick={() => window.location.href = '/login'}
                 >
                   Start Free Trial
                 </Button>

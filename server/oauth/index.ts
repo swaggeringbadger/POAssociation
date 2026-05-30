@@ -44,10 +44,10 @@ function canonicalIssuer(req: Request): string {
 }
 
 function resolveUserId(req: Request): string | null {
-  const sessionUserId = (req as any).session?.userId;
-  if (sessionUserId) return sessionUserId;
-  const passportUser = req.user as any;
-  return passportUser?.claims?.sub ?? null;
+  // Session-only auth (self-hosted email+password / demo flow). The previous
+  // Passport `req.user.claims.sub` fallback is dead since the Replit OIDC
+  // migration — identity lives entirely in the session.
+  return (req as any).session?.userId ?? null;
 }
 
 function base64url(buf: Buffer): string {
@@ -210,6 +210,24 @@ async function handleAuthorize(req: Request, res: Response) {
   });
 
   // Step 4: render the consent page.
+  //
+  // The global app CSP sets `form-action 'self'`, which blocks the browser from
+  // following the post-approve 302 redirect out to the OAuth client's callback
+  // (e.g. https://claude.ai/api/mcp/auth_callback) — the flow silently stalls
+  // on the consent page. Override the CSP for *this* response so the consent
+  // form may submit to ourselves and redirect to the registered client origin.
+  const clientOrigin = new URL(q.redirect_uri).origin;
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "style-src 'unsafe-inline'",
+      "img-src 'self' data:",
+      `form-action 'self' ${clientOrigin}`,
+      "base-uri 'self'",
+      "frame-ancestors 'self'",
+    ].join("; "),
+  );
   res.type("html").send(renderConsentPage({
     clientName: client.clientName,
     nonce: pending.nonce,

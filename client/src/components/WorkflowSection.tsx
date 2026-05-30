@@ -71,6 +71,11 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
     },
   });
 
+  // Format role names for display using central role label system.
+  // Must be called before the early returns below — React hooks cannot run
+  // conditionally, or the hook count differs between renders.
+  const formatRole = useFormatRoleLabel();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -91,9 +96,6 @@ export function WorkflowSection({ applicationId, tenantId }: WorkflowSectionProp
 
   const steps = workflow.template?.steps || [];
   const currentStep = steps[workflow.currentStepIndex];
-
-  // Format role names for display using central role label system
-  const formatRole = useFormatRoleLabel();
 
   // Check if user has role for current step
   const stepRequiresRole = currentStep?.role && currentStep.role !== "system";

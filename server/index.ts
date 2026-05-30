@@ -53,10 +53,19 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // MCP endpoint uses bearer-token auth, not session cookies — carve out first.
   if (req.path === "/mcp" || req.path.startsWith("/mcp/")) return next();
 
-  // OAuth 2.1 endpoints — DCR and token exchange are called by external MCP
-  // clients (Claude Desktop, Cursor) which don't send a same-origin Origin
-  // header. PKCE + client-side state protect these flows, not CSRF tokens.
-  if (req.path === "/oauth/register" || req.path === "/oauth/token") return next();
+  // OAuth 2.1 endpoints — DCR, consent approval, and token exchange are driven
+  // by external MCP clients (Claude Desktop, Cursor). Their embedded auth views
+  // submit with a missing or "null" Origin header, so a same-origin check can't
+  // apply. These flows are protected instead by a signed, session-bound consent
+  // nonce (authorize/approve) and PKCE + client state (register/token), not by
+  // CSRF origin checks.
+  if (
+    req.path === "/oauth/register" ||
+    req.path === "/oauth/token" ||
+    req.path === "/oauth/authorize/approve"
+  ) {
+    return next();
+  }
 
   // Exclude webhook endpoints (they use signature-based auth)
   if (req.path.startsWith("/api/webhooks/")) return next();

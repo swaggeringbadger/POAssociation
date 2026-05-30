@@ -3,7 +3,10 @@ import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertTenantSchema, insertFormTemplateSchema, insertApplicationSchema, insertDemoCodeSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, hashPassword, verifyPassword, generateToken, hashToken } from "./auth";
+import rateLimit from "express-rate-limit";
+import { emailService } from "./emailService";
+import { buildEmailTemplate } from "./emailTemplates";
 import { provisionDemoEcosystem } from "./provision";
 import { seedWorkflowTemplates } from "./seed-workflows";
 import { AdditionalInfoService } from "./additionalInfoService";
@@ -99,26 +102,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', async (req: any, res) => {
     try {
-      // Check for demo session first (session-based auth)
       if (req.session?.userId) {
         const user = await storage.getUser(req.session.userId);
         if (user) {
           return res.json(user);
         }
       }
-
-      // Check for Replit auth (OAuth-based auth)
-      if (req.user?.claims?.sub) {
-        const userId = req.user.claims.sub;
-        const user = await storage.getUser(userId);
-        return res.json(user);
-      }
-
       // Not authenticated
       res.status(401).json({ message: "Not authenticated" });
     } catch (error: any) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // ============================================
+  // Email + password authentication
+  // ============================================
+  const LOCKOUT_THRESHOLD = 5;
+  const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+  const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+  const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Brute-force / abuse floor on the credential endpoints. Per-account lockout
+  // (failedLoginAttempts / lockedUntil) is the second layer.
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again later." },
+  });
+
+  // Matches the app-wide convention for email links (invites, billing, etc.).
+  // APP_URL is set in the environment; fall back to the request host.
+  const baseUrl = (req: any): string =>
+    process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+
+  // Establish the authenticated session (mirrors the demo-login flow).
+  async function establishSession(req: any, user: schema.User): Promise<void> {
+    req.session.userId = user.id;
+    const userTenants = await storage.getUserTenants(user.id);
+    if (userTenants.length > 0) {
+      req.session.currentUserRole = userTenants[0].role;
+    }
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err: any) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  app.post('/api/auth/register', authLimiter, async (req: any, res) => {
+    try {
+      const bodySchema = z.object({
+        email: z.string().trim().email().toLowerCase(),
+        password: z.string().min(8).max(200),
+        firstName: z.string().trim().min(1).max(100).optional(),
+        lastName: z.string().trim().min(1).max(100).optional(),
+      });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).toString() });
+      }
+      const { email, password, firstName, lastName } = parsed.data;
+
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(409).json({ error: "An account with this email already exists" });
+      }
+
+      const passwordHash = await hashPassword(password);
+      const user = await storage.createUserWithPassword({
+        email,
+        passwordHash,
+        firstName: firstName ?? null,
+        lastName: lastName ?? null,
+      });
+
+      // Email verification (soft gate — login is allowed immediately).
+      const rawToken = generateToken();
+      await storage.createEmailVerificationToken(
+        user.id,
+        hashToken(rawToken),
+        new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
+      );
+      const verifyUrl = `${baseUrl(req)}/verify-email?token=${rawToken}`;
+      emailService
+        .send({
+          to: email,
+          subject: "Verify your POAssociation email",
+          html: buildEmailTemplate({
+            title: "Welcome to POAssociation",
+            preheader: "Confirm your email address to finish setting up your account.",
+            mainContent: "Thanks for signing up. Please confirm your email address to secure your account.",
+            actionButton: { text: "Verify email", url: verifyUrl },
+            recipientName: firstName || undefined,
+            status: "action",
+          }),
+        })
+        .catch((e) => console.error("[auth] verification email failed (non-fatal):", e));
+
+      await establishSession(req, user);
+      res.status(201).json(user);
+    } catch (error: any) {
+      console.error("Error during registration:", error);
+      res.status(500).json({ error: "Failed to register" });
+    }
+  });
+
+  app.post('/api/auth/login', authLimiter, async (req: any, res) => {
+    try {
+      const bodySchema = z.object({
+        email: z.string().trim().email().toLowerCase(),
+        password: z.string().min(1).max(200),
+      });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).toString() });
+      }
+      const { email, password } = parsed.data;
+
+      const user = await storage.getUserByEmail(email);
+      // Generic error — never reveal whether the account/credential exists.
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      if (user.lockedUntil && user.lockedUntil > new Date()) {
+        return res.status(429).json({ error: "Account temporarily locked. Try again later." });
+      }
+
+      const ok = await verifyPassword(password, user.passwordHash);
+      if (!ok) {
+        const attempts = await storage.incrementFailedLogins(user.id);
+        if (attempts >= LOCKOUT_THRESHOLD) {
+          await storage.setLockedUntil(user.id, new Date(Date.now() + LOCKOUT_MS));
+        }
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      await storage.resetFailedLogins(user.id);
+      await establishSession(req, user);
+      res.json(user);
+    } catch (error: any) {
+      console.error("Error during login:", error);
+      res.status(500).json({ error: "Failed to log in" });
+    }
+  });
+
+  app.post('/api/auth/forgot-password', authLimiter, async (req: any, res) => {
+    try {
+      const bodySchema = z.object({ email: z.string().trim().email().toLowerCase() });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      // Always respond 200 — never reveal whether an account exists.
+      if (!parsed.success) {
+        return res.json({ success: true });
+      }
+      const user = await storage.getUserByEmail(parsed.data.email);
+      if (user && user.passwordHash) {
+        const rawToken = generateToken();
+        await storage.createPasswordResetToken(
+          user.id,
+          hashToken(rawToken),
+          new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        );
+        const resetUrl = `${baseUrl(req)}/reset-password?token=${rawToken}`;
+        emailService
+          .send({
+            to: parsed.data.email,
+            subject: "Reset your POAssociation password",
+            html: buildEmailTemplate({
+              title: "Reset your password",
+              preheader: "A password reset was requested for your account.",
+              mainContent: "We received a request to reset your password. This link expires in 1 hour. If you didn't request this, you can safely ignore this email.",
+              actionButton: { text: "Reset password", url: resetUrl },
+              recipientName: user.firstName || undefined,
+              status: "action",
+            }),
+          })
+          .catch((e) => console.error("[auth] reset email failed (non-fatal):", e));
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error during forgot-password:", error);
+      // Still respond success to avoid leaking state.
+      res.json({ success: true });
+    }
+  });
+
+  app.post('/api/auth/reset-password', authLimiter, async (req: any, res) => {
+    try {
+      const bodySchema = z.object({
+        token: z.string().min(1),
+        password: z.string().min(8).max(200),
+      });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).toString() });
+      }
+      const row = await storage.getPasswordResetTokenByHash(hashToken(parsed.data.token));
+      if (!row || row.usedAt || row.expiresAt < new Date()) {
+        return res.status(400).json({ error: "Invalid or expired reset link" });
+      }
+      const passwordHash = await hashPassword(parsed.data.password);
+      await storage.setUserPassword(row.userId, passwordHash);
+      await storage.markPasswordResetTokenUsed(row.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error during reset-password:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  app.post('/api/auth/verify-email', async (req: any, res) => {
+    try {
+      const bodySchema = z.object({ token: z.string().min(1) });
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid verification link" });
+      }
+      const row = await storage.getEmailVerificationTokenByHash(hashToken(parsed.data.token));
+      if (!row || row.usedAt || row.expiresAt < new Date()) {
+        return res.status(400).json({ error: "Invalid or expired verification link" });
+      }
+      await storage.setEmailVerified(row.userId);
+      await storage.markEmailVerificationTokenUsed(row.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error during verify-email:", error);
+      res.status(500).json({ error: "Failed to verify email" });
     }
   });
 
@@ -130,9 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reviewer-role gate is enforced per-endpoint against the :tenantId param.
 
   async function resolveSessionUserId(req: any): Promise<string | null> {
-    if (req.session?.userId) return req.session.userId;
-    if (req.user?.claims?.sub) return req.user.claims.sub;
-    return null;
+    return req.session?.userId ?? null;
   }
 
   async function requireReviewerInTenant(req: any, res: any, tenantId: string): Promise<string | null> {

@@ -62,7 +62,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'poassociation-state',
-      version: 2, // Increment this to clear old cached state
+      version: 3, // Increment this to clear old cached state
     }
   )
 );

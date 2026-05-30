@@ -151,6 +151,16 @@ export function useUserTenants() {
         hasInitializedRole.current = true;
         syncRoleWithBackend(currentUserRole);
       }
+    } else if (userTenants && userTenants.length === 0) {
+      // Roleless user (e.g. freshly registered account with no tenant
+      // assignments): clear any stale tenant/role state left in persisted
+      // localStorage from a previous session, so they don't see a phantom
+      // community they don't actually belong to.
+      if (currentTenant) {
+        setAvailableTenants([]);
+        setCurrentTenant(null);
+        setAvailableRolesForCurrentTenant([]);
+      }
     }
   }, [userTenants, setAvailableTenants, setCurrentTenant, setCurrentUserRole, setAvailableRolesForCurrentTenant, currentTenant, currentUserRole]);
 
