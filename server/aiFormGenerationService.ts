@@ -19,6 +19,7 @@ import type {
   FormValidationResult,
   StageBreakdown,
 } from '../shared/formTypes';
+import { AI_MODELS } from '../shared/aiModels';
 import { aiContextService, type AggregatedContext, type FetchedDocument } from './services/aiContextService';
 import { promptRegistry } from './prompts/promptRegistry';
 import crypto from 'crypto';
@@ -236,7 +237,7 @@ export class AIFormGenerationService {
       });
 
       const message = await anthropic.messages.create({
-        model: 'claude-opus-4-6',
+        model: AI_MODELS.FORM_GENERATION,
         max_tokens: 16000,
         temperature: 0.3, // Lower temperature for more consistent, structured output
         system: systemPrompt,
@@ -491,7 +492,7 @@ export class AIFormGenerationService {
       const generationTimeMs = endTime - startTime;
 
       const estimatedCost = this.calculateCost([{
-        stage: 'generation', model: 'claude-opus-4-6',
+        stage: 'generation', model: AI_MODELS.FORM_GENERATION,
         inputTokens: tokensUsed, outputTokens: 0, durationMs: generationTimeMs,
       }]);
 
@@ -568,7 +569,7 @@ export class AIFormGenerationService {
     messageContent.push({ type: 'text', text: userPrompt });
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: AI_MODELS.DOCUMENT_EXTRACTION,
       max_tokens: 8000,
       temperature: 0.1,
       system: systemPrompt,
@@ -687,7 +688,7 @@ export class AIFormGenerationService {
             generationId: '',
             tokensUsed: apiResult.tokensUsed,
             estimatedCost: this.calculateCost([{
-              stage: 'generation', model: 'claude-opus-4-6',
+              stage: 'generation', model: AI_MODELS.FORM_GENERATION,
               inputTokens: apiResult.inputTokens, outputTokens: apiResult.outputTokens, durationMs: generationTimeMs,
             }]),
             generationTimeMs,
@@ -725,7 +726,7 @@ export class AIFormGenerationService {
 
         stageBreakdown.push({
           stage: 'generation',
-          model: 'claude-opus-4-6',
+          model: AI_MODELS.FORM_GENERATION,
           inputTokens: genResult.inputTokens,
           outputTokens: genResult.outputTokens,
           durationMs: Date.now() - genStart,
@@ -771,7 +772,7 @@ export class AIFormGenerationService {
 
           stageBreakdown.push({
             stage: `extraction:${doc.source.name}`,
-            model: 'claude-sonnet-4-5-20250929',
+            model: AI_MODELS.DOCUMENT_EXTRACTION,
             inputTokens: extractionResult.inputTokens,
             outputTokens: extractionResult.outputTokens,
             durationMs: extractionResult.durationMs,
@@ -824,7 +825,7 @@ export class AIFormGenerationService {
 
       stageBreakdown.push({
         stage: 'generation',
-        model: 'claude-opus-4-6',
+        model: AI_MODELS.FORM_GENERATION,
         inputTokens: genResult.inputTokens,
         outputTokens: genResult.outputTokens,
         durationMs: Date.now() - genStart,
@@ -910,7 +911,7 @@ export class AIFormGenerationService {
       });
 
       const message = await anthropic.messages.create({
-        model: 'claude-opus-4-6',
+        model: AI_MODELS.FORM_GENERATION,
         max_tokens: 16000,
         temperature: 0.3,
         system: systemPrompt,

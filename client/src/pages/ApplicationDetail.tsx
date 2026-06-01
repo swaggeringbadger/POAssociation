@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/store";
-import { listApplicationSignatures, listApplicationAnalyses, type AiAnalysis, api } from "@/lib/api";
+import { listApplicationSignatures, listApplicationAnalyses, listResearchDossier, type AiAnalysis, api } from "@/lib/api";
+import { ResearchDossierPanel } from "@/components/research-dossier/ResearchDossierPanel";
 import { InviteContractorDialog } from "@/components/InviteContractorDialog";
 import { useLegalEntityLabel } from "@/hooks/useLegalEntityLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,7 +79,7 @@ export default function ApplicationDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const legalEntityLabel = useLegalEntityLabel();
-  const [activeTab, setActiveTab] = useState<'form' | 'documents'>('form');
+  const [activeTab, setActiveTab] = useState<'form' | 'documents' | 'research_dossier'>('form');
   const [viewMode, setViewMode] = useState<'all' | 'filled' | 'empty'>('all');
   const [docViewMode, setDocViewMode] = useState<'list' | 'small-grid' | 'large-grid'>('list');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
@@ -172,6 +173,13 @@ export default function ApplicationDetail() {
     },
     enabled: !!applicationId,
   });
+
+  const { data: dossierData } = useQuery({
+    queryKey: ['research-dossier', applicationId],
+    queryFn: () => listResearchDossier(applicationId!),
+    enabled: !!applicationId,
+  });
+  const dossierCount = dossierData?.entries?.length ?? 0;
 
   const { data: formTemplate } = useQuery({
     queryKey: [`/api/form-templates/${application?.formTemplateId}`],
@@ -936,6 +944,17 @@ export default function ApplicationDetail() {
                   >
                     Documents ({documents.length})
                   </button>
+                  <button
+                    onClick={() => setActiveTab('research_dossier')}
+                    className={`text-sm font-medium pb-2 px-1 transition-colors ${
+                      activeTab === 'research_dossier'
+                        ? 'text-foreground border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    data-testid="tab-research-dossier"
+                  >
+                    Research Dossier{dossierCount > 0 ? ` (${dossierCount})` : ''}
+                  </button>
                 </div>
                 
                 {/* View Filter - only show on Form Data tab */}
@@ -1521,6 +1540,13 @@ export default function ApplicationDetail() {
                       <p className="text-sm">No documents uploaded yet</p>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Research Dossier Tab */}
+              {activeTab === 'research_dossier' && (
+                <div className="space-y-4" data-testid="research-dossier-content">
+                  <ResearchDossierPanel applicationId={application.id} />
                 </div>
               )}
             </div>

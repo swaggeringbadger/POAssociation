@@ -1,7 +1,104 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-05-30
-**Current Session:** Self-hosted auth go-live debugging + MCP OAuth client-integration fixes + 3D-Tiles research
+**Last Updated:** 2026-06-01
+**Current Session:** Token/model audit + AI model centralization & bump
+
+---
+
+## SESSION 2026-06-01 (later) — Pre-commit cleanup + COMMITTED LOCALLY (not pushed)
+
+**Branch `feat/self-hosted-auth`. Build green, 35 MCP tests green.**
+
+- **Cleanup DONE:** removed the throwaway `diagnostic_image_probe` MCP tool, deleted `server/mcp/probeImage.ts`, and dropped its `tools/list` test entry (now asserts the 9 real reviewer tools). No probe refs remain.
+- **COMMITTED (`e89bb39`):** the full accumulated working tree (3 threads — MCP connector doc/image read-path rebuild incl. PDF rasterizer, Research Dossier feature, AI model centralization `shared/aiModels.ts`) committed on top of `298f055`. Branch is now **2 commits ahead of `main`**.
+- **NOT pushed — no remote target.** The only git remote is Replit's `gitsafe-backup`, whose pre-receive hook **rejects every branch except `main`** ("Only pushes to main branch are allowed"). There is **no GitHub origin** for this repo yet (confirmed by user). So pushing requires either fast-forwarding `main` (= deploy) or adding a GitHub remote — both deferred. Work stays committed locally.
+- **STILL OPEN:** set up GitHub remote + push/PR when ready (or ff-merge to main to deploy); security handoff to Officer Allen (SSRF DNS-rebinding in `fetchBinaryFromUrl`, prompt-injection via admin `instructions`, documents IDOR); user E2E of rasterized bylaws/doc images; OCR-to-text fallback for scanned bylaws (quote/cite).
+
+---
+
+## SESSION 2026-06-01 — AI token/model audit + centralized model registry
+
+**Branch still `feat/self-hosted-auth`, uncommitted. Build green.**
+
+### Audit findings (token/credit system)
+- **Two cost systems:** customer-facing **credits** (`shared/subscriptionTypes.ts` `CREDIT_COSTS`) vs. internal **USD estimate** (`shared/aiAnalysisTypes.ts` `calculateAnalysisCosts`, NOT billed).
+- **Only real charge path = AI analysis:** `analysisQueueService.ts:217 logAiAnalysis` → `communitySubscriptionService.deductCredit` → `usage_events` + `aiCreditsUsed`. Charged on completion; `includeSatellite` defaults TRUE if unset.
+- **Charge-gaps (left as-is per user — report only):** AI Form Generation defines `AI_FORM_GENERATION:2` but is **only feature-gated, never deducted** (the const is referenced solely by the historical billing backfill at routes.ts:8050). Image Sharpening explicitly free (routes.ts:980). Public-resources gen has no gate/charge. USD estimator still hardcodes "Claude 3.5 Sonnet" $3/$15 + Stability AI rates (stale, harmless).
+
+### Model centralization (DONE)
+NEW `shared/aiModels.ts` = single source of truth (`AI_MODELS`). Replaced all scattered literals:
+- Form generation: `claude-opus-4-6` → **`claude-opus-4-8`** (`AI_MODELS.FORM_GENERATION`)
+- Form-gen doc extraction / analysis / public-resources: `claude-sonnet-4-5-20250929` → **`claude-sonnet-4-6`** (`DOCUMENT_EXTRACTION`/`ANALYSIS`/`PUBLIC_RESOURCES`)
+- OCR vision: `gemini-1.5-flash` → **`gemini-3.5-flash`** (`OCR_VISION`) — 1.5/2.0 Flash retired 2026-06-01
+- Wired: `aiFormGenerationService.ts`, `aiAnalysisService.ts` (ANALYSIS_MODEL const), `routes.ts:1121`, `ocrService.ts`. Image-gen Flux/Gemini-3-pro-image left untouched (out of scope).
+- Log-label `model:` fields in form-gen updated too, so telemetry stays accurate.
+
+### NEXT (OCR-for-MCP, under discussion)
+Wiring scanned **bylaws/guidelines** OCR into the connector read path so Claude gets quotable TEXT, not just rasterized images. See discussion: ingest-time OCR (reuse `documents` worker pattern, persist per `ai_context_sources`) vs on-demand in `get_bylaws_and_context`. Recommended hybrid: ingest-time persisted OCR + keep raster images as visual fallback.
+
+---
+
+## (prior) SESSION 2026-05-31 — Connector doc/image READ-PATH rebuild (Phases 0–3)
+
+---
+
+## SESSION 2026-05-31 (later) — claude.ai connector can't read docs: root-caused + rebuilt the read path
+
+**Branch still `feat/self-hosted-auth`. All work uncommitted.** Build green, 34 MCP tests green. Rasterizer verified in-env. **E2E via the live connector confirmed for the image probe + bylaws-structure; the scanned-bylaws→images and app-doc→images E2E is pending the user's Run.**
+
+### THE ROOT CAUSE (why the connector couldn't read docs)
+Empirically verified against the live `…worf.replit.dev/mcp` endpoint by the claude.ai connector agent. Three hard constraints — **last session's signed-URL approach is DEAD for the claude.ai connector**:
+1. **Connector does NOT dereference MCP resources** — `mcp-poa://…` arrives as an inert string.
+2. **Connector's `web_fetch` REFUSES any URL minted inside an MCP tool result** (provenance rule). This killed the bylaw `viewUrl` AND the dossier `signedUrl`s. Anything Claude must read has to arrive **inline** — as text or as **MCP image content blocks**.
+3. Claude can't hand-type large base64 into a tool ARG (small ok). Large artifacts must be server-fetched by `url` or browser-uploaded.
+4. ✅ **CONFIRMED: image content blocks in tool RESULTS forward to the model** (probe: 4 colored quadrants read back correctly). So inline images are a viable read path on the connector.
+
+### What was built this session
+- **Phase 0 — `diagnostic_image_probe`** (THROWAWAY): tiny 4-quadrant PNG via `server/mcp/probeImage.ts`. Confirmed forwarding. **TODO: remove this tool + its entry in `mcp-tools.test.ts` tools/list before prod cleanup.**
+- **Phase 1 — dossier `url`**: `add_research_dossier_entry` image/file items now accept `url` OR `contentBase64` (exactly one); server fetches via new `fetchBinaryFromUrl()` (SSRF-guarded: http(s) only, blocks localhost/private IP literals, 15s timeout, 8MB cap), stores in Azure, returns signedUrl, preserves source url for provenance. Web `<input type=file>` for Claude-in-Chrome already existed (`AddDossierItem.tsx:119`).
+- **Phase 2 — `get_bylaws_and_context` inlines full TEXT**: new `aiContextService.gatherReviewText()` (no token-drop exclusion — unlike `gatherContext`; text-extracts PDFs via `pdf-parse`; per-doc 200K-char chunk cap). Output reshaped to `documents:[{id,name,text,…}]` + scoped by `form_type`. **Markland's two guideline PDFs are SCANNED/image-only → native text empty.**
+- **Phase 3 — RASTERIZER** (user approved adding the dep): added `pdf-to-png-converter` (pdfjs-dist + @napi-rs/canvas, prebuilt, no node-gyp — verified renders in this env). New `server/services/pdfRasterService.ts` (`rasterizePdf()`, 1.5x scale ≈918×1188px, sha1-keyed 15-min cache, over-request-by-1 truncation detection — does NOT trust pdf-parse page count). `wrapTool` extended with a `__appendBlocks` mechanism to append text-label + image content blocks after the JSON block.
+  - `get_bylaws_and_context`: scanned PDFs (empty text) → rasterized page images appended as image blocks.
+  - `get_application_documents`: image docs returned inline as image blocks; PDF docs (surveys/site plans) rasterized; OCR text retained; overall 20-image cap.
+- **Phase 3b — PAGINATION + page-range** (connector agent flagged the fixed first-N-pages window made later sections, e.g. R2.21 setbacks pp.24–45, UNREACHABLE). Both image tools now take `document_id` (scope to one doc), `page_offset`+`page_limit` (window), and `pages:[…]` (explicit page list, overrides window). Responses report per-doc `totalPages`/`pageOffset`/`pageImages`/`hasMorePages` so the caller can walk a long doc in bounded batches or jump to TOC-identified sections. `pdfRasterService` rewritten: accurate page count via **pdfjs-dist** (added direct dep, pinned `5.6.205` to MATCH pdf-to-png-converter's nested copy — a 5.4.296/5.6.205 main-vs-worker mismatch threw "API version… does not match Worker version"; aligning deduped it), window/range modes, HARD_MAX_PAGES=12 ceiling per call, sha1+selection cache. Verified: window walk (p1→8, p9→16, tail), range dedup/clamp, hardMax. 35 MCP tests green.
+- **CRITICAL dev-mode note:** this session's server runs `tsx server/index.ts` (DEV), which loads source ONCE at startup and does **NOT** hot-reload. After ANY server edit you MUST kill the tsx process so the user's next Replit **Run** reloads source — `dist/` rebuilds are IRRELEVANT in dev mode. (Lost a test cycle to this: Phase 3 edits didn't take effect until the tsx restart.)
+
+### DB change made (prod Neon) — AUTHORIZED
+Deactivated leftover test data: `ai_instructions` row `b573d397-35d0-4e2f-aa6e-e596579169db` ("Testing Overrides" → *"replace the placeholder with Swagger"*), community-scoped on **Markland POA** (`4df4dbf6-…`, subdomain `markland-bd9bb688`). Was the ONLY active ai_instructions row DB-wide; was polluting form generation + leaking "Swagger" into the connector `instructions` field. Set `is_active=false` (reversible). 0 active rows remain.
+
+### Files touched (all uncommitted, on top of the dossier/MCP-URL work)
+- NEW: `server/mcp/probeImage.ts` (throwaway), `server/services/pdfRasterService.ts`
+- MOD: `server/mcp/tools.ts` (probe tool, dossier url + fetchBinaryFromUrl, gatherReviewText wiring, rasterized image blocks in bylaws+documents, `__appendBlocks` in jsonContent/wrapTool), `server/services/aiContextService.ts` (`gatherReviewText` + `extractPdfText`), `test/server/mcp-tools.test.ts` (+probe entry, +bylaws-rasterize, +documents-images, aiContextService/azure/raster mocks), `test/server/mcp-dossier.test.ts` (+4 url tests)
+- `package.json` + lockfile (`pdf-to-png-converter`)
+
+### NEXT
+1. **User E2E** (after Run): `get_bylaws_and_context` form_type 'pool' → scanned guideline page-images render & are readable; `get_application_documents` for a survey app → OCR text + plan page-images.
+2. **Security for Officer Allen** (NEW findings this session): (a) **SSRF** — `fetchBinaryFromUrl` blocks literal private IPs/localhost but does NOT resolve DNS (rebinding/hostname-to-internal still possible); (b) **prompt-injection** — `instructions` field is admin free-text fed verbatim into AI prompts AND the connector; consider labeling it as untrusted-config / restricting who can write it. Plus carry-over: documents IDOR [[documents-endpoint-idor]], the dossier write surface.
+3. **Follow-up: OCR-to-text fallback** for scanned bylaws (Gemini Vision via `ocrService` already exists) — image blocks let Claude READ scanned rules, but there's no text to QUOTE/cite. Wire when citation matters; mind latency (cache/persist).
+4. **Cleanup before commit**: remove `diagnostic_image_probe` (+ test entry). Then commit + push + PR (long-pending).
+
+---
+
+## SESSION 2026-05-31 — MCP document URLs + Research Dossier feature
+
+Branch still **`feat/self-hosted-auth`** (1 commit ahead of main, NOT pushed). All work below is **uncommitted** in the working tree. Server rebuilt (`npm run build`, dist/index.js 1.2mb) — **user must click Run in Replit** to serve it.
+
+### 1. MCP tool URLs — made documents/bylaws retrievable by the claude.ai connector
+The connector can't resolve `mcp-poa://` resource URIs, so `get_bylaws_and_context` returned an unretrievable link. Fixes:
+- `get_bylaws_and_context` pdfResources now include `viewUrl` → existing public proxy `/api/public/tenants/:tid/guidelines/:id/view`.
+- `get_application_documents` now returns `viewUrl` (authed `/api/documents/:id/preview`, for humans) + `signedUrl` (short-lived HMAC, Claude-fetchable) → NEW route `/api/mcp/documents/:id/view`.
+- Signing helper: `server/mcp/urls.ts` (HMAC-SHA256 keyed by SESSION_SECRET, 15-min TTL, id+kind bound). Tests: `test/server/mcp-signed-url.test.ts`.
+- Rejected SAS tokens (no machinery; auth-mode-dependent; expiry). See memory [[mcp-document-url-exposure]].
+
+### 2. Research Dossier — NEW feature (full stack, plan approved + executed)
+Flexible external-research collection per application (links/text/images/files), contributable by MCP agents AND humans, surfaced as a new **Research Dossier** tab beside AI Analysis. Reference-only, provenance-labeled ("AI-gathered · unverified" until a board member marks reviewed). Full detail in memory [[research-dossier-feature]]. Touched: `shared/schema.ts` (+2 tables, applied via psql DDL), `server/storage.ts`, `server/mcp/tools.ts` (+`add_research_dossier_entry`, `get_research_dossier` — now 9 MCP tools), `server/mcp/urls.ts` (generalized to `signBlobUrl(kind,id)`), `server/routes.ts` (REST + signed view), `client/src/lib/api.ts`, `client/src/pages/ApplicationDetail.tsx`, new `client/src/components/research-dossier/*`. 28 MCP tests green, build green, no new tsc errors.
+
+### NEXT
+1. **E2E verify** Research Dossier (user clicks Run): claude.ai connector `add_research_dossier_entry` (link+text+image) → confirm tab + unverified badge + image via signed URL + "Mark reviewed". Human path: add link/upload image in the tab.
+2. **Commit** all of today's work (still uncommitted on `feat/self-hosted-auth`).
+3. Push branch + open PR (carried over from last session — still pending).
+4. Hand the new MCP write surface to Officer Allen (security-reviewer).
+5. Pre-existing follow-ups noted: `/api/documents/:id/download|preview` IDOR ([[documents-endpoint-idor]]); 5 pre-existing `mcp-auth.test.ts` failures (mock missing `res.setHeader`); optional PDF export (dossier Phase 7).
 
 ---
 

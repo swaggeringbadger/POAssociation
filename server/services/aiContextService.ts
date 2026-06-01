@@ -88,6 +88,101 @@ class AiContextService {
   }
 
   /**
+   * Gather every active source as INLINE TEXT for an external reviewer (the MCP
+   * connector). Unlike gatherContext(), this does NOT drop sources to fit the
+   * analyzer's token budget — the connector needs the full governing text inline
+   * because it cannot dereference resource URIs or fetch minted URLs. PDFs are
+   * text-extracted here (gatherContext only carries them as base64 for the
+   * Anthropic document-block API). Per-doc text is capped (chunked, not dropped)
+   * so a single huge document can't blow up one tool result.
+   */
+  async gatherReviewText(
+    tenantId: string,
+    formType?: string,
+  ): Promise<{
+    documents: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      type: 'text' | 'pdf';
+      text: string;
+      charCount: number;
+      truncated: boolean;
+      // Raw PDF bytes (base64) for pdf docs — lets the caller rasterize scanned
+      // pages to images when there's no native text layer. Undefined for text.
+      pdfBase64?: string;
+    }>;
+    instructions: string;
+    failedSources: string[];
+  }> {
+    const PER_DOC_CHAR_CAP = 200_000; // ~50K tokens; chunk rather than exclude
+
+    const sources = await storage.getActiveAiContextSourcesForForm(tenantId, formType);
+    const instructions = await storage.getActiveInstructionsForAnalysis(tenantId, formType);
+
+    const documents: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      type: 'text' | 'pdf';
+      text: string;
+      charCount: number;
+      truncated: boolean;
+      pdfBase64?: string;
+    }> = [];
+    const failedSources: string[] = [];
+
+    for (const source of sources) {
+      try {
+        const doc = await this.fetchSourceContent(source);
+        let text =
+          doc.type === 'pdf'
+            ? await this.extractPdfText(Buffer.from(doc.content, 'base64'))
+            : doc.content;
+
+        let truncated = false;
+        if (text.length > PER_DOC_CHAR_CAP) {
+          text = text.slice(0, PER_DOC_CHAR_CAP);
+          truncated = true;
+        }
+
+        documents.push({
+          id: source.id,
+          name: source.name,
+          description: source.description ?? null,
+          type: doc.type,
+          text,
+          charCount: text.length,
+          truncated,
+          pdfBase64: doc.type === 'pdf' ? doc.content : undefined,
+        });
+      } catch (error) {
+        console.error(`[AiContext] Review-text fetch failed for "${source.name}":`, error);
+        failedSources.push(source.name);
+      }
+    }
+
+    return { documents, instructions, failedSources };
+  }
+
+  /**
+   * Extract native text from a PDF buffer (digital PDFs). Returns '' for
+   * scanned/image-only PDFs — callers should treat empty text as "no native
+   * text" (an OCR fallback could be added later for scanned guidelines).
+   */
+  private async extractPdfText(buffer: Buffer): Promise<string> {
+    try {
+      // require for CJS/ESM compatibility — same approach as ocrService.
+      const pdfParse = require('pdf-parse') as (b: Buffer) => Promise<{ text: string }>;
+      const data = await pdfParse(buffer);
+      return (data.text || '').trim();
+    } catch (error) {
+      console.warn('[AiContext] PDF text extraction failed:', error);
+      return '';
+    }
+  }
+
+  /**
    * Fetch content from a single source (URL or blob storage)
    */
   private async fetchSourceContent(source: AiContextSource): Promise<FetchedDocument> {

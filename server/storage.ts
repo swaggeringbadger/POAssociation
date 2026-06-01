@@ -166,6 +166,18 @@ export interface IStorage {
   deleteDocument(id: string): Promise<void>;
   getDocumentsByRequirement(applicationId: string, requirementName: string): Promise<schema.Document[]>;
 
+  // Research Dossier
+  createDossierEntry(entry: schema.InsertResearchDossierEntry): Promise<schema.ResearchDossierEntry>;
+  getDossierEntry(id: string): Promise<schema.ResearchDossierEntry | undefined>;
+  listDossierEntriesByApplication(applicationId: string): Promise<schema.ResearchDossierEntry[]>;
+  deleteDossierEntry(id: string): Promise<void>;
+  setDossierEntryVerified(id: string, userId: string): Promise<schema.ResearchDossierEntry | undefined>;
+  addDossierItem(item: schema.InsertResearchDossierItem): Promise<schema.ResearchDossierItem>;
+  getDossierItem(id: string): Promise<schema.ResearchDossierItem | undefined>;
+  listDossierItemsByEntry(entryId: string): Promise<schema.ResearchDossierItem[]>;
+  deleteDossierItem(id: string): Promise<void>;
+  getDossierForApplication(applicationId: string): Promise<(schema.ResearchDossierEntry & { items: schema.ResearchDossierItem[] })[]>;
+
   // Document Upload Tokens (QR Code Mobile Upload)
   createDocumentUploadToken(token: schema.InsertDocumentUploadToken): Promise<schema.DocumentUploadToken>;
   getDocumentUploadToken(token: string): Promise<schema.DocumentUploadToken | undefined>;
@@ -1819,6 +1831,86 @@ export class DbStorage implements IStorage {
         )
       )
       .orderBy(schema.documents.uploadedAt);
+  }
+
+  // Research Dossier
+  async createDossierEntry(entry: schema.InsertResearchDossierEntry): Promise<schema.ResearchDossierEntry> {
+    const [created] = await db.insert(schema.researchDossierEntries)
+      .values(entry)
+      .returning();
+    return created;
+  }
+
+  async getDossierEntry(id: string): Promise<schema.ResearchDossierEntry | undefined> {
+    const [entry] = await db.select()
+      .from(schema.researchDossierEntries)
+      .where(eq(schema.researchDossierEntries.id, id))
+      .limit(1);
+    return entry;
+  }
+
+  async listDossierEntriesByApplication(applicationId: string): Promise<schema.ResearchDossierEntry[]> {
+    return await db.select()
+      .from(schema.researchDossierEntries)
+      .where(eq(schema.researchDossierEntries.applicationId, applicationId))
+      .orderBy(desc(schema.researchDossierEntries.createdAt));
+  }
+
+  async deleteDossierEntry(id: string): Promise<void> {
+    await db.delete(schema.researchDossierEntries)
+      .where(eq(schema.researchDossierEntries.id, id));
+  }
+
+  async setDossierEntryVerified(id: string, userId: string): Promise<schema.ResearchDossierEntry | undefined> {
+    const [updated] = await db.update(schema.researchDossierEntries)
+      .set({ verifiedByUserId: userId, verifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.researchDossierEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async addDossierItem(item: schema.InsertResearchDossierItem): Promise<schema.ResearchDossierItem> {
+    const [created] = await db.insert(schema.researchDossierItems)
+      .values(item)
+      .returning();
+    return created;
+  }
+
+  async getDossierItem(id: string): Promise<schema.ResearchDossierItem | undefined> {
+    const [item] = await db.select()
+      .from(schema.researchDossierItems)
+      .where(eq(schema.researchDossierItems.id, id))
+      .limit(1);
+    return item;
+  }
+
+  async listDossierItemsByEntry(entryId: string): Promise<schema.ResearchDossierItem[]> {
+    return await db.select()
+      .from(schema.researchDossierItems)
+      .where(eq(schema.researchDossierItems.entryId, entryId))
+      .orderBy(asc(schema.researchDossierItems.position));
+  }
+
+  async deleteDossierItem(id: string): Promise<void> {
+    await db.delete(schema.researchDossierItems)
+      .where(eq(schema.researchDossierItems.id, id));
+  }
+
+  async getDossierForApplication(applicationId: string): Promise<(schema.ResearchDossierEntry & { items: schema.ResearchDossierItem[] })[]> {
+    const entries = await this.listDossierEntriesByApplication(applicationId);
+    if (entries.length === 0) return [];
+    const entryIds = entries.map((e) => e.id);
+    const items = await db.select()
+      .from(schema.researchDossierItems)
+      .where(inArray(schema.researchDossierItems.entryId, entryIds))
+      .orderBy(asc(schema.researchDossierItems.position));
+    const byEntry = new Map<string, schema.ResearchDossierItem[]>();
+    for (const item of items) {
+      const list = byEntry.get(item.entryId) ?? [];
+      list.push(item);
+      byEntry.set(item.entryId, list);
+    }
+    return entries.map((e) => ({ ...e, items: byEntry.get(e.id) ?? [] }));
   }
 
   // Document Upload Tokens (QR Code Mobile Upload)

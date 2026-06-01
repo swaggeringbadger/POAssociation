@@ -3655,3 +3655,98 @@ export async function deleteAiInstruction(tenantId: string, id: string): Promise
 export async function toggleAiInstruction(tenantId: string, id: string, isActive: boolean): Promise<AiInstruction> {
   return apiRequest('POST', `/api/tenants/${tenantId}/ai-instructions/${id}/toggle`, { isActive });
 }
+
+// ─── Research Dossier ───────────────────────────────────
+export type DossierItemType = 'link' | 'text' | 'image' | 'file';
+
+export interface DossierItem {
+  id: string;
+  entryId: string;
+  tenantId: string;
+  type: DossierItemType;
+  label: string;
+  caption: string | null;
+  url: string | null;
+  content: string | null;
+  blobPath: string | null;
+  containerName: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  fileSize: number | null;
+  position: number;
+  createdAt: string;
+}
+
+export interface DossierEntry {
+  id: string;
+  applicationId: string;
+  tenantId: string;
+  title: string;
+  summary: string | null;
+  source: 'mcp' | 'manual';
+  mcpClientName: string | null;
+  createdByUserId: string;
+  verifiedByUserId: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: DossierItem[];
+}
+
+export async function listResearchDossier(applicationId: string): Promise<{ entries: DossierEntry[] }> {
+  return apiRequest('GET', `/api/applications/${applicationId}/research-dossier`);
+}
+
+export async function createDossierEntry(
+  applicationId: string,
+  data: { title: string; summary?: string; items?: Array<Partial<DossierItem> & { type: 'link' | 'text' }> }
+): Promise<DossierEntry> {
+  return apiRequest('POST', `/api/applications/${applicationId}/research-dossier`, data);
+}
+
+export async function addDossierItem(
+  applicationId: string,
+  entryId: string,
+  data: { type: 'link' | 'text'; label?: string; url?: string; content?: string; caption?: string }
+): Promise<DossierItem> {
+  return apiRequest('POST', `/api/applications/${applicationId}/research-dossier/${entryId}/items`, data);
+}
+
+export async function uploadDossierItem(
+  applicationId: string,
+  entryId: string,
+  file: File,
+  meta?: { label?: string; caption?: string }
+): Promise<DossierItem> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (meta?.label) formData.append('label', meta.label);
+  if (meta?.caption) formData.append('caption', meta.caption);
+  const response = await fetch(`/api/applications/${applicationId}/research-dossier/${entryId}/items/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `Upload failed with status ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function verifyDossierEntry(applicationId: string, entryId: string): Promise<DossierEntry> {
+  return apiRequest('PATCH', `/api/applications/${applicationId}/research-dossier/${entryId}/verify`);
+}
+
+export async function deleteDossierItem(applicationId: string, itemId: string): Promise<{ success: boolean }> {
+  return apiRequest('DELETE', `/api/applications/${applicationId}/research-dossier/items/${itemId}`);
+}
+
+export async function deleteDossierEntry(applicationId: string, entryId: string): Promise<{ success: boolean }> {
+  return apiRequest('DELETE', `/api/applications/${applicationId}/research-dossier/${entryId}`);
+}
+
+/** Authenticated inline view URL for an image/file dossier item. */
+export function dossierItemViewUrl(itemId: string): string {
+  return `/api/research-dossier/items/${itemId}/view`;
+}

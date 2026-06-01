@@ -13,9 +13,10 @@
  */
 
 import { storage } from '../storage';
+import { AI_MODELS } from '@shared/aiModels';
 
 // Gemini API configuration
-const GEMINI_VISION_MODEL = 'gemini-1.5-flash';
+const GEMINI_VISION_MODEL = AI_MODELS.OCR_VISION;
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VISION_MODEL}:generateContent`;
 
 function getGeminiApiKey(): string {

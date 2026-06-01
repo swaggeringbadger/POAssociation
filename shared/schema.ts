@@ -365,6 +365,63 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
 
+// Research Dossier - flexible external-research collection per application.
+// Each entry is one research contribution (e.g. one MCP-agent session); each
+// entry holds an ordered list of typed items (link | text | image | file).
+// Reference material only — provenance-labeled, never feeds decisions.
+export const researchDossierEntries = pgTable("research_dossier_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  source: text("source").notNull().default("manual"), // 'mcp' | 'manual'
+  mcpClientName: text("mcp_client_name"), // provenance, e.g. "Claude Desktop + Chrome MCP"
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  verifiedByUserId: varchar("verified_by_user_id").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("research_dossier_entries_application_idx").on(table.applicationId),
+  index("research_dossier_entries_tenant_idx").on(table.tenantId),
+]);
+
+export const researchDossierItems = pgTable("research_dossier_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entryId: varchar("entry_id").notNull().references(() => researchDossierEntries.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'link' | 'text' | 'image' | 'file'
+  label: text("label").notNull(),
+  caption: text("caption"),
+  url: text("url"), // 'link' items, or source provenance of a file
+  content: text("content"), // 'text' items (markdown)
+  // image/file items (blob in Azure):
+  blobPath: text("blob_path"),
+  containerName: text("container_name"),
+  fileName: text("file_name"),
+  mimeType: text("mime_type"),
+  fileSize: integer("file_size"),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("research_dossier_items_entry_idx").on(table.entryId),
+]);
+
+export const insertResearchDossierEntrySchema = createInsertSchema(researchDossierEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertResearchDossierItemSchema = createInsertSchema(researchDossierItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertResearchDossierEntry = z.infer<typeof insertResearchDossierEntrySchema>;
+export type ResearchDossierEntry = typeof researchDossierEntries.$inferSelect;
+export type InsertResearchDossierItem = z.infer<typeof insertResearchDossierItemSchema>;
+export type ResearchDossierItem = typeof researchDossierItems.$inferSelect;
+
 // Document Upload Tokens table - for QR code mobile uploads
 export const documentUploadTokens = pgTable("document_upload_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

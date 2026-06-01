@@ -14,6 +14,7 @@ import { azureBlobStorage } from "./azureBlobStorage";
 import { workflowEngine } from "./workflowEngine";
 import { z } from "zod";
 import * as schema from "@shared/schema";
+import { AI_MODELS } from "@shared/aiModels";
 import { eq, and, desc } from "drizzle-orm";
 import multer from "multer";
 import crypto from "crypto";
@@ -21,6 +22,7 @@ import { promptRegistry } from "./prompts/promptRegistry";
 import { sanitizeText, sanitizeFormData } from "./lib/sanitize";
 import { createMcpRouter } from "./mcp";
 import { REVIEWER_ROLES } from "./mcp/auth";
+import { verifyDocumentToken, verifyBlobToken } from "./mcp/urls";
 import {
   authorizationServerMetadata,
   createOauthRouter,
@@ -1117,7 +1119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5-20250929',
+        model: AI_MODELS.PUBLIC_RESOURCES,
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -2445,6 +2447,311 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(fileBuffer);
     } catch (error: any) {
       console.error("Error previewing document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Signed document view for MCP clients. No session — access is granted by a
+  // short-lived, per-document HMAC signature minted in `get_application_documents`
+  // (which already re-verifies reviewer access to the owning application). Lets an
+  // external LLM fetch the actual file (plans, photos) when OCR text is unavailable.
+  app.get("/api/mcp/documents/:id/view", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { exp, sig } = req.query as { exp?: string; sig?: string };
+
+      if (!verifyDocumentToken(id, exp, sig)) {
+        return res.status(403).json({ error: "Invalid or expired document link" });
+      }
+
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: "Document storage is not configured" });
+      }
+
+      const document = await storage.getDocument(id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const fileBuffer = await azureBlobStorage.downloadFile(
+        document.containerName,
+        document.blobPath
+      );
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
+      res.setHeader('Cache-Control', 'private, max-age=900');
+      res.send(fileBuffer);
+    } catch (error: any) {
+      console.error("Error serving signed MCP document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Research Dossier ───────────────────────────────────
+  // Flexible external-research collection per application. Reviewers (and MCP
+  // agents via the MCP tool) contribute typed items (link/text/image/file).
+  const DOSSIER_REVIEWER_ROLES = new Set<string>(REVIEWER_ROLES);
+
+  // Resolve + tenant-scope the caller for a dossier request. Returns the
+  // application + the caller's role on its tenant, or sends an error response.
+  async function resolveDossierAccess(
+    req: any,
+    res: any,
+    applicationId: string,
+    requireReviewer: boolean,
+  ): Promise<{ application: any; userId: string; role?: string } | null> {
+    const application = await storage.getApplication(applicationId);
+    if (!application) {
+      res.status(404).json({ error: "Application not found" });
+      return null;
+    }
+    const userId = req.session?.userId || req.user?.claims?.sub;
+    if (!userId) {
+      res.status(401).json({ error: "Not authenticated" });
+      return null;
+    }
+    const userTenants = await storage.getUserTenants(userId);
+    const membership = userTenants.find((ut: any) => ut.tenantId === application.tenantId);
+    if (!membership) {
+      res.status(403).json({ error: "Access denied" });
+      return null;
+    }
+    if (requireReviewer && !DOSSIER_REVIEWER_ROLES.has(membership.role)) {
+      res.status(403).json({ error: "Reviewer role required" });
+      return null;
+    }
+    return { application, userId, role: membership.role };
+  }
+
+  // List the dossier (entries + items) for an application.
+  app.get("/api/applications/:applicationId/research-dossier", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, false);
+      if (!access) return;
+      const entries = await storage.getDossierForApplication(req.params.applicationId);
+      res.json({ entries });
+    } catch (error: any) {
+      console.error("Error listing research dossier:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create a manual entry (optionally with inline link/text items).
+  app.post("/api/applications/:applicationId/research-dossier", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const { title, summary, items } = req.body ?? {};
+      if (!title || typeof title !== "string") {
+        return res.status(400).json({ error: "title is required" });
+      }
+      const entry = await storage.createDossierEntry({
+        applicationId: req.params.applicationId,
+        tenantId: access.application.tenantId,
+        title,
+        summary: summary ?? null,
+        source: "manual",
+        mcpClientName: null,
+        createdByUserId: access.userId,
+        verifiedByUserId: null,
+        verifiedAt: null,
+      });
+      if (Array.isArray(items)) {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (it?.type !== "link" && it?.type !== "text") continue;
+          await storage.addDossierItem({
+            entryId: entry.id,
+            tenantId: access.application.tenantId,
+            type: it.type,
+            label: it.label ?? (it.type === "link" ? it.url : "Note"),
+            caption: it.caption ?? it.note ?? null,
+            url: it.type === "link" ? it.url ?? null : null,
+            content: it.type === "text" ? it.content ?? null : null,
+            blobPath: null, containerName: null, fileName: null, mimeType: null, fileSize: null,
+            position: i,
+          });
+        }
+      }
+      res.json(entry);
+    } catch (error: any) {
+      console.error("Error creating dossier entry:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Add a link/text item to an existing entry.
+  app.post("/api/applications/:applicationId/research-dossier/:entryId/items", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const entry = await storage.getDossierEntry(req.params.entryId);
+      if (!entry || entry.applicationId !== req.params.applicationId) {
+        return res.status(404).json({ error: "Dossier entry not found" });
+      }
+      const { type, label, url, content, caption } = req.body ?? {};
+      if (type !== "link" && type !== "text") {
+        return res.status(400).json({ error: "type must be 'link' or 'text'" });
+      }
+      const existing = await storage.listDossierItemsByEntry(entry.id);
+      const item = await storage.addDossierItem({
+        entryId: entry.id,
+        tenantId: entry.tenantId,
+        type,
+        label: label ?? (type === "link" ? url : "Note"),
+        caption: caption ?? null,
+        url: type === "link" ? url ?? null : null,
+        content: type === "text" ? content ?? null : null,
+        blobPath: null, containerName: null, fileName: null, mimeType: null, fileSize: null,
+        position: existing.length,
+      });
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error adding dossier item:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload an image/file item to an existing entry.
+  app.post("/api/applications/:applicationId/research-dossier/:entryId/items/upload", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const entry = await storage.getDossierEntry(req.params.entryId);
+      if (!entry || entry.applicationId !== req.params.applicationId) {
+        return res.status(404).json({ error: "Dossier entry not found" });
+      }
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: "Document storage is not configured" });
+      }
+      const itemId = crypto.randomUUID();
+      const ext = file.originalname.split(".").pop() || "bin";
+      const blobPath = `${entry.tenantId}/${req.params.applicationId}/dossier/${itemId}.${ext}`;
+      const upload2 = await azureBlobStorage.uploadFile("application-documents", file.buffer, file.originalname, file.mimetype, blobPath);
+      const existing = await storage.listDossierItemsByEntry(entry.id);
+      const item = await storage.addDossierItem({
+        id: itemId,
+        entryId: entry.id,
+        tenantId: entry.tenantId,
+        type: file.mimetype.startsWith("image/") ? "image" : "file",
+        label: req.body?.label || file.originalname,
+        caption: req.body?.caption ?? null,
+        url: null,
+        content: null,
+        blobPath: upload2.blobName,
+        containerName: upload2.containerName,
+        fileName: file.originalname,
+        mimeType: upload2.contentType,
+        fileSize: upload2.size,
+        position: existing.length,
+      } as any);
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error uploading dossier item:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark an entry as reviewed by a board member.
+  app.patch("/api/applications/:applicationId/research-dossier/:entryId/verify", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const entry = await storage.getDossierEntry(req.params.entryId);
+      if (!entry || entry.applicationId !== req.params.applicationId) {
+        return res.status(404).json({ error: "Dossier entry not found" });
+      }
+      const updated = await storage.setDossierEntryVerified(entry.id, access.userId);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error verifying dossier entry:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a single item.
+  app.delete("/api/applications/:applicationId/research-dossier/items/:itemId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const item = await storage.getDossierItem(req.params.itemId);
+      if (!item || item.tenantId !== access.application.tenantId) {
+        return res.status(404).json({ error: "Dossier item not found" });
+      }
+      await storage.deleteDossierItem(item.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting dossier item:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete a whole entry (cascades to items).
+  app.delete("/api/applications/:applicationId/research-dossier/:entryId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await resolveDossierAccess(req, res, req.params.applicationId, true);
+      if (!access) return;
+      const entry = await storage.getDossierEntry(req.params.entryId);
+      if (!entry || entry.applicationId !== req.params.applicationId) {
+        return res.status(404).json({ error: "Dossier entry not found" });
+      }
+      await storage.deleteDossierEntry(entry.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting dossier entry:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Authenticated inline view of a dossier image/file item (for humans).
+  app.get("/api/research-dossier/items/:itemId/view", isAuthenticated, async (req: any, res) => {
+    try {
+      const item = await storage.getDossierItem(req.params.itemId);
+      if (!item || !item.blobPath || !item.containerName) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      const userTenants = await storage.getUserTenants(req.session?.userId || req.user?.claims?.sub);
+      if (!userTenants.some((ut: any) => ut.tenantId === item.tenantId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: "Document storage is not configured" });
+      }
+      const buffer = await azureBlobStorage.downloadFile(item.containerName, item.blobPath);
+      res.setHeader("Content-Type", item.mimeType || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${item.fileName || "file"}"`);
+      res.send(buffer);
+    } catch (error: any) {
+      console.error("Error viewing dossier item:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Signed (no-session) view of a dossier item — for MCP clients fetching the
+  // short-lived signedUrl from add_research_dossier_entry / get_research_dossier.
+  app.get("/api/mcp/dossier-items/:id/view", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { exp, sig } = req.query as { exp?: string; sig?: string };
+      if (!verifyBlobToken("dossier-item", id, exp, sig)) {
+        return res.status(403).json({ error: "Invalid or expired link" });
+      }
+      const item = await storage.getDossierItem(id);
+      if (!item || !item.blobPath || !item.containerName) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      if (!azureBlobStorage.isAvailable()) {
+        return res.status(503).json({ error: "Document storage is not configured" });
+      }
+      const buffer = await azureBlobStorage.downloadFile(item.containerName, item.blobPath);
+      res.setHeader("Content-Type", item.mimeType || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${item.fileName || "file"}"`);
+      res.setHeader("Cache-Control", "private, max-age=900");
+      res.send(buffer);
+    } catch (error: any) {
+      console.error("Error serving signed dossier item:", error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -35,15 +35,31 @@ vi.mock("../../server/storage", () => ({
 vi.mock("../../server/services/aiContextService", () => ({
   aiContextService: {
     gatherContext: vi.fn(),
+    gatherReviewText: vi.fn(),
   },
+}));
+
+vi.mock("../../server/azureBlobStorage", () => ({
+  azureBlobStorage: {
+    isAvailable: vi.fn(() => true),
+    downloadFile: vi.fn(),
+  },
+}));
+
+vi.mock("../../server/services/pdfRasterService", () => ({
+  rasterizePdf: vi.fn(),
 }));
 
 const { storage } = await import("../../server/storage");
 const { aiContextService } = await import("../../server/services/aiContextService");
+const { azureBlobStorage } = await import("../../server/azureBlobStorage");
+const { rasterizePdf } = await import("../../server/services/pdfRasterService");
 const { registerTools } = await import("../../server/mcp/tools");
 
 type StorageMock = Record<string, ReturnType<typeof vi.fn>>;
 const s = storage as unknown as StorageMock;
+const blob = azureBlobStorage as unknown as Record<string, ReturnType<typeof vi.fn>>;
+const raster = rasterizePdf as unknown as ReturnType<typeof vi.fn>;
 
 const REVIEWER_CTX = {
   tokenId: "tok-1",
@@ -107,17 +123,19 @@ function lastLoggedCall(toolName: string) {
 }
 
 describe("tools/list", () => {
-  it("exposes the 7 reviewer tools", async () => {
+  it("exposes the 9 reviewer tools", async () => {
     const { client } = await buildClient();
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "add_research_dossier_entry",
         "get_application",
         "get_application_comments",
         "get_application_documents",
         "get_application_workflow",
         "get_bylaws_and_context",
+        "get_research_dossier",
         "list_applications",
         "submit_comment",
       ].sort(),
@@ -313,25 +331,173 @@ describe("audit logging", () => {
 });
 
 describe("get_bylaws_and_context", () => {
-  it("delegates to aiContextService.gatherContext with tenantId and form_type", async () => {
-    (aiContextService.gatherContext as any).mockResolvedValue({
-      documents: [],
+  it("delegates to gatherReviewText and inlines full document text", async () => {
+    (aiContextService.gatherReviewText as any).mockResolvedValue({
+      documents: [
+        {
+          id: "src-1",
+          name: "Design Guidelines R2.21",
+          description: "Pool rules",
+          type: "pdf",
+          text: "Pools must observe a 10ft rear setback.",
+          charCount: 39,
+          truncated: false,
+        },
+      ],
       instructions: "Be thorough",
-      totalEstimatedTokens: 100,
-      truncated: false,
-      includedSources: [],
-      excludedSources: [],
+      failedSources: [],
     });
     const { client } = await buildClient();
     const result = await client.callTool({
       name: "get_bylaws_and_context",
-      arguments: { form_type: "exterior-modifications" },
+      arguments: { form_type: "pool" },
     });
-    expect(aiContextService.gatherContext).toHaveBeenCalledWith(
+    expect(aiContextService.gatherReviewText).toHaveBeenCalledWith(
       "tenant-1",
-      "exterior-modifications",
+      "pool",
     );
     const payload = parseToolJson(result);
     expect(payload.instructions).toBe("Be thorough");
+    // Full text is inline, not behind a URI/URL.
+    expect(payload.documents[0].text).toContain("10ft rear setback");
+    expect(payload.documents[0].name).toBe("Design Guidelines R2.21");
+    expect(payload.truncated).toBe(false);
+    expect(payload.formTypeScope).toBe("pool");
+  });
+
+  it("rasterizes a scanned (text-empty) PDF guideline into image blocks", async () => {
+    (aiContextService.gatherReviewText as any).mockResolvedValue({
+      documents: [
+        {
+          id: "scan-1",
+          name: "Scanned Guidelines",
+          description: null,
+          type: "pdf",
+          text: "", // scanned: no native text layer
+          charCount: 0,
+          truncated: false,
+          pdfBase64: Buffer.from("%PDF-fake").toString("base64"),
+        },
+      ],
+      instructions: "",
+      failedSources: [],
+    });
+    raster.mockResolvedValue({
+      pages: [{ page: 1, base64: "AAAA", mimeType: "image/png" }],
+      totalPages: 12,
+      pageOffset: 1,
+      pagesReturned: 1,
+      hasMore: true,
+      mode: "window",
+    });
+
+    const { client } = await buildClient();
+    const result: any = await client.callTool({
+      name: "get_bylaws_and_context",
+      arguments: { form_type: "pool" },
+    });
+    expect(raster).toHaveBeenCalledTimes(1);
+    const payload = parseToolJson(result);
+    expect(payload.documents[0].pageImages).toBe(1);
+    expect(payload.documents[0].totalPages).toBe(12);
+    expect(payload.documents[0].hasMorePages).toBe(true);
+    expect(payload.imagePagesAttached).toBe(1);
+    // An image content block is appended after the JSON text block.
+    const imageBlocks = result.content.filter((c: any) => c.type === "image");
+    expect(imageBlocks).toHaveLength(1);
+    expect(imageBlocks[0].mimeType).toBe("image/png");
+  });
+
+  it("scopes rasterization to document_id and forwards page-range params", async () => {
+    (aiContextService.gatherReviewText as any).mockResolvedValue({
+      documents: [
+        { id: "scan-A", name: "Doc A", description: null, type: "pdf", text: "", charCount: 0, truncated: false, pdfBase64: Buffer.from("A").toString("base64") },
+        { id: "scan-B", name: "Doc B", description: null, type: "pdf", text: "", charCount: 0, truncated: false, pdfBase64: Buffer.from("B").toString("base64") },
+      ],
+      instructions: "",
+      failedSources: [],
+    });
+    raster.mockResolvedValue({
+      pages: [
+        { page: 24, base64: "P24", mimeType: "image/png" },
+        { page: 25, base64: "P25", mimeType: "image/png" },
+      ],
+      totalPages: 45,
+      pageOffset: 24,
+      pagesReturned: 2,
+      hasMore: false,
+      mode: "range",
+    });
+
+    const { client } = await buildClient();
+    const result: any = await client.callTool({
+      name: "get_bylaws_and_context",
+      arguments: { form_type: "pool", document_id: "scan-B", pages: [24, 25] },
+    });
+
+    // Only the targeted doc was rasterized.
+    expect(raster).toHaveBeenCalledTimes(1);
+    expect(raster).toHaveBeenCalledWith(expect.any(Buffer), expect.objectContaining({ pages: [24, 25] }));
+    const payload = parseToolJson(result);
+    expect(payload.documentIdScope).toBe("scan-B");
+    expect(payload.documents.find((d: any) => d.id === "scan-A").pageImages).toBe(0);
+    expect(payload.documents.find((d: any) => d.id === "scan-B").pageImages).toBe(2);
+    expect(result.content.filter((c: any) => c.type === "image")).toHaveLength(2);
+  });
+});
+
+describe("get_application_documents", () => {
+  it("returns OCR text plus inline image blocks for image docs and rasterized PDFs", async () => {
+    s.listDocumentsByApplication.mockResolvedValue([
+      {
+        id: "doc-img",
+        fileName: "survey.jpg",
+        mimeType: "image/jpeg",
+        fileSize: 100,
+        documentRequirementName: "Survey",
+        uploadedAt: new Date("2026-05-01"),
+        ocrStatus: "completed",
+        ocrText: "lot 12",
+        blobPath: "t/a/survey.jpg",
+        containerName: "application-documents",
+      },
+      {
+        id: "doc-pdf",
+        fileName: "siteplan.pdf",
+        mimeType: "application/pdf",
+        fileSize: 200,
+        documentRequirementName: "Site Plan",
+        uploadedAt: new Date("2026-05-02"),
+        ocrStatus: "completed",
+        ocrText: null,
+        blobPath: "t/a/siteplan.pdf",
+        containerName: "application-documents",
+      },
+    ]);
+    blob.isAvailable.mockReturnValue(true);
+    blob.downloadFile.mockResolvedValue(Buffer.from("bytes"));
+    raster.mockResolvedValue({
+      pages: [{ page: 1, base64: "PG1", mimeType: "image/png" }],
+      totalPages: 1,
+      pageOffset: 1,
+      pagesReturned: 1,
+      hasMore: false,
+      mode: "window",
+    });
+
+    const { client } = await buildClient();
+    const result: any = await client.callTool({
+      name: "get_application_documents",
+      arguments: { application_id: "app-1" },
+    });
+
+    const payload = parseToolJson(result);
+    expect(payload.count).toBe(2);
+    // image doc → 1 image block; pdf doc → 1 rasterized page block = 2 images.
+    expect(payload.imagesAttached).toBe(2);
+    expect(payload.documents.find((d: any) => d.id === "doc-img").extractedText).toBe("lot 12");
+    const imageBlocks = result.content.filter((c: any) => c.type === "image");
+    expect(imageBlocks).toHaveLength(2);
+    expect(imageBlocks.map((b: any) => b.mimeType).sort()).toEqual(["image/jpeg", "image/png"]);
   });
 });

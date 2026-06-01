@@ -29,6 +29,7 @@ import {
   calculateAnalysisCosts,
 } from '@shared/aiAnalysisTypes';
 import type { AiAnalysis } from '@shared/schema';
+import { AI_MODELS } from '@shared/aiModels';
 
 // Initialize Anthropic client with timeout
 const anthropic = new Anthropic({
@@ -37,7 +38,7 @@ const anthropic = new Anthropic({
 });
 
 // Model to use for analysis
-const ANALYSIS_MODEL = 'claude-sonnet-4-5-20250929';
+const ANALYSIS_MODEL = AI_MODELS.ANALYSIS;
 
 // Helper to wrap API calls with timeout
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
