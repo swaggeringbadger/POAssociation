@@ -19,7 +19,7 @@ const PERSONA_INFO = {
       'User role management',
       'Analytics and reporting',
     ],
-    gradient: 'from-blue-500 to-blue-600',
+    gradient: 'from-teal-600 to-teal-800',
   },
   'Sarah': {
     title: 'Board Member',
@@ -31,7 +31,7 @@ const PERSONA_INFO = {
       'Inline bylaw guidance',
       'Comment and request changes',
     ],
-    gradient: 'from-purple-500 to-purple-600',
+    gradient: 'from-rose-700 to-rose-900',
   },
   'Jordan': {
     title: 'Management Rep',
@@ -43,7 +43,7 @@ const PERSONA_INFO = {
       'Process applications for your communities',
       'See restricted access on unassigned properties',
     ],
-    gradient: 'from-teal-500 to-teal-600',
+    gradient: 'from-cyan-600 to-cyan-800',
   },
   'Alex': {
     title: 'ARC Committee Member & Contractor',
@@ -55,7 +55,7 @@ const PERSONA_INFO = {
       'View applications across communities',
       'Cross-community contractor work',
     ],
-    gradient: 'from-orange-500 to-orange-600',
+    gradient: 'from-orange-700 to-orange-900',
   },
 };
 

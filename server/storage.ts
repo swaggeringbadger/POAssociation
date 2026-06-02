@@ -26,6 +26,7 @@ export interface IStorage {
   incrementFailedLogins(userId: string): Promise<number>;
   resetFailedLogins(userId: string): Promise<void>;
   setLockedUntil(userId: string, lockedUntil: Date | null): Promise<void>;
+  markUserMcpConnected(userId: string): Promise<boolean>;
   createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.PasswordResetToken>;
   getPasswordResetTokenByHash(tokenHash: string): Promise<schema.PasswordResetToken | undefined>;
   markPasswordResetTokenUsed(id: string): Promise<void>;
@@ -568,6 +569,21 @@ export class DbStorage implements IStorage {
       .update(schema.users)
       .set({ lockedUntil, updatedAt: new Date() })
       .where(eq(schema.users.id, userId));
+  }
+
+  /**
+   * Stamp the first-MCP-connect timestamp. Idempotent + cheap: the WHERE clause
+   * only matches when mcp_connected_at IS NULL, so repeat MCP calls are no-ops
+   * (no write). Returns true when this call was the one that set it (first
+   * connect), which the caller may use to fire a one-time welcome.
+   */
+  async markUserMcpConnected(userId: string): Promise<boolean> {
+    const rows = await db
+      .update(schema.users)
+      .set({ mcpConnectedAt: new Date() })
+      .where(and(eq(schema.users.id, userId), isNull(schema.users.mcpConnectedAt)))
+      .returning({ id: schema.users.id });
+    return rows.length > 0;
   }
 
   async createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date): Promise<schema.PasswordResetToken> {

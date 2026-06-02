@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LevelUpButton } from "@/components/level-up/LevelUpButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -162,16 +163,19 @@ function ManagementDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-teal-600 to-teal-800 text-white border-none">
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <Building className="h-8 w-8" />
-            <div>
-              <CardTitle className="text-2xl">Management Dashboard</CardTitle>
-              <CardDescription className="text-blue-100">
-                {selectedTenant?.name || 'All Communities'}
-              </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Building className="h-8 w-8" />
+              <div>
+                <CardTitle className="text-2xl">Management Dashboard</CardTitle>
+                <CardDescription className="text-teal-100">
+                  {selectedTenant?.name || 'All Communities'}
+                </CardDescription>
+              </div>
             </div>
+            <LevelUpButton />
           </div>
         </CardHeader>
       </Card>
@@ -432,16 +436,19 @@ function BoardMemberDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-rose-700 to-rose-900 text-white border-none">
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-8 w-8" />
-            <div>
-              <CardTitle className="text-2xl">Board Member Dashboard</CardTitle>
-              <CardDescription className="text-purple-100">
-                {currentTenant?.name || 'Your Community'}
-              </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-8 w-8" />
+              <div>
+                <CardTitle className="text-2xl">Board Member Dashboard</CardTitle>
+                <CardDescription className="text-rose-100">
+                  {currentTenant?.name || 'Your Community'}
+                </CardDescription>
+              </div>
             </div>
+            <LevelUpButton />
           </div>
         </CardHeader>
       </Card>
@@ -595,16 +602,19 @@ function ContributorDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-orange-700 to-orange-900 text-white border-none">
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <Users className="h-8 w-8" />
-            <div>
-              <CardTitle className="text-2xl">ARC Committee Member Dashboard</CardTitle>
-              <CardDescription className="text-orange-100">
-                {currentTenant?.name || 'Your Community'}
-              </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Users className="h-8 w-8" />
+              <div>
+                <CardTitle className="text-2xl">ARC Committee Member Dashboard</CardTitle>
+                <CardDescription className="text-orange-100">
+                  {currentTenant?.name || 'Your Community'}
+                </CardDescription>
+              </div>
             </div>
+            <LevelUpButton />
           </div>
         </CardHeader>
       </Card>
@@ -775,13 +785,13 @@ function HomeownerDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-emerald-600 to-green-800 text-white border-none">
         <CardHeader>
           <div className="flex items-center gap-3">
             <Home className="h-8 w-8" />
             <div>
               <CardTitle className="text-2xl">Homeowner Dashboard</CardTitle>
-              <CardDescription className="text-green-100">
+              <CardDescription className="text-emerald-100">
                 {currentTenant?.name || 'Your Community'}
               </CardDescription>
             </div>

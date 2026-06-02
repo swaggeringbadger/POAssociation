@@ -236,10 +236,14 @@ export class AIFormGenerationService {
         text: userPrompt,
       });
 
-      const message = await anthropic.messages.create({
+      // Stream + collect the final message. Required by the SDK for large
+      // max_tokens (its worst-case-duration guard rejects non-streaming calls that
+      // could exceed 10 min). finalMessage() returns the same Message shape.
+      const message = await anthropic.messages.stream({
         model: AI_MODELS.FORM_GENERATION,
-        max_tokens: 16000,
-        temperature: 0.3, // Lower temperature for more consistent, structured output
+        // Large comprehensive forms (many sections × fields with descriptions +
+        // bylaw citations) can exceed 16K output and truncate mid-JSON → unparseable.
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [
           {
@@ -247,7 +251,7 @@ export class AIFormGenerationService {
             content: messageContent,
           },
         ],
-      });
+      }).finalMessage();
 
       const endTime = Date.now();
       console.log(`AI generation took ${endTime - startTime}ms`);
@@ -547,9 +551,14 @@ export class AIFormGenerationService {
     const systemPrompt = promptRegistry.getPrompt('document-extraction-system', {
       APPLICATION_TYPE: applicationType,
     });
+    // For PDFs, doc.content is base64 — it must NOT be interpolated into the text
+    // prompt (that tokenizes the raw base64 as ~millions of tokens and blows the
+    // context limit). The PDF arrives as a separate document block below instead.
     const userPrompt = promptRegistry.getPrompt('document-extraction-user', {
       APPLICATION_TYPE: applicationType,
-      DOCUMENT_CONTENT: doc.content,
+      DOCUMENT_CONTENT: doc.type === 'pdf'
+        ? '(The full document is attached as a PDF in this message — read it directly.)'
+        : doc.content,
     });
 
     const messageContent: any[] = [];
@@ -571,7 +580,6 @@ export class AIFormGenerationService {
     const message = await anthropic.messages.create({
       model: AI_MODELS.DOCUMENT_EXTRACTION,
       max_tokens: 8000,
-      temperature: 0.1,
       system: systemPrompt,
       messages: [{ role: 'user', content: messageContent }],
     });
@@ -648,7 +656,8 @@ export class AIFormGenerationService {
   async generateFormWithContext(
     tenantId: string,
     applicationType: ApplicationType,
-    fallbackDesignGuidelinesUrl?: string
+    fallbackDesignGuidelinesUrl?: string,
+    selectedSourceIds?: string[]
   ): Promise<GenerateFormResponse> {
     const startTime = Date.now();
 
@@ -659,7 +668,11 @@ export class AIFormGenerationService {
       let guidelinesContent: { type: 'text' | 'pdf'; content: string | Buffer; mediaType?: string };
 
       try {
-        aggregatedContext = await aiContextService.gatherContext(tenantId, applicationType);
+        // Merge the General-tab design guidelines URL (if any) WITH the AI-tab sources.
+        // noBudgetDrop: form generation never drops docs to fit a single-call
+        // budget — when the set is large it routes to the staged map-reduce
+        // pipeline (condense each doc, then combine) instead.
+        aggregatedContext = await aiContextService.gatherContext(tenantId, applicationType, fallbackDesignGuidelinesUrl, selectedSourceIds, { noBudgetDrop: true });
 
         if (aggregatedContext.documents.length === 0 && !aggregatedContext.instructions) {
           throw new Error('No AI context sources configured');
@@ -701,7 +714,7 @@ export class AIFormGenerationService {
       }
 
       // Step 2: Check if context fits in a single call or needs staged pipeline
-      const contextEstimate = await aiContextService.estimateContextSize(tenantId, applicationType);
+      const contextEstimate = await aiContextService.estimateContextSize(tenantId, applicationType, fallbackDesignGuidelinesUrl, selectedSourceIds);
       const stageBreakdown: StageBreakdown[] = [];
       let totalTokensUsed = 0;
 
@@ -760,6 +773,9 @@ export class AIFormGenerationService {
       // Threshold: documents over 20K tokens get extracted, small ones pass through
       const EXTRACTION_THRESHOLD = 20000;
       const condensedParts: string[] = [];
+      // Small PDFs that pass through un-extracted must ride along as document
+      // blocks, not as base64 text in condensedParts (which would blow the limit).
+      const passthroughPdfs: Array<{ name: string; base64: string }> = [];
       let sourceNum = 0;
 
       for (const doc of aggregatedContext.documents) {
@@ -790,12 +806,19 @@ export class AIFormGenerationService {
           condensedParts.push('');
         } else {
           // Small document → pass through directly
-          condensedParts.push(`--- SOURCE ${sourceNum}: ${doc.source.name} ---`);
+          const isPdf = doc.type === 'pdf';
+          condensedParts.push(`--- SOURCE ${sourceNum}: ${doc.source.name}${isPdf ? ' (PDF attached)' : ''} ---`);
           if (doc.source.description) {
             condensedParts.push(`Type/Description: ${doc.source.description}`);
           }
           condensedParts.push('');
-          condensedParts.push(doc.content);
+          if (isPdf) {
+            // base64 rides as a document block — never inline it as text
+            condensedParts.push('(Full PDF content is provided as a separate document block in this request.)');
+            passthroughPdfs.push({ name: doc.source.name, base64: doc.content });
+          } else {
+            condensedParts.push(doc.content);
+          }
           condensedParts.push('');
           condensedParts.push(`--- END SOURCE ${sourceNum} ---`);
           condensedParts.push('');
@@ -820,7 +843,7 @@ export class AIFormGenerationService {
 
       const genStart = Date.now();
       const genResult = await this.callAnthropicAPIWithPdfs(
-        systemPrompt, userPrompt, guidelinesContent, []
+        systemPrompt, userPrompt, guidelinesContent, passthroughPdfs
       );
 
       stageBreakdown.push({
@@ -910,10 +933,14 @@ export class AIFormGenerationService {
         text: userPrompt,
       });
 
-      const message = await anthropic.messages.create({
+      // Stream + collect the final message. Required by the SDK for large
+      // max_tokens (its worst-case-duration guard rejects non-streaming calls that
+      // could exceed 10 min). finalMessage() returns the same Message shape.
+      const message = await anthropic.messages.stream({
         model: AI_MODELS.FORM_GENERATION,
-        max_tokens: 16000,
-        temperature: 0.3,
+        // Large comprehensive forms (many sections × fields with descriptions +
+        // bylaw citations) can exceed 16K output and truncate mid-JSON → unparseable.
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [
           {
@@ -921,10 +948,14 @@ export class AIFormGenerationService {
             content: messageContent,
           },
         ],
-      });
+      }).finalMessage();
 
       const endTime = Date.now();
       console.log(`[FormGeneration] Anthropic API call completed in ${endTime - startTime}ms`);
+
+      if (message.stop_reason === 'max_tokens') {
+        console.warn('[FormGeneration] Output hit max_tokens — the generated form was truncated mid-JSON. Form is too large for the output budget; raise max_tokens or narrow the context.');
+      }
 
       const textContent = message.content.find(block => block.type === 'text');
       if (!textContent || textContent.type !== 'text') {

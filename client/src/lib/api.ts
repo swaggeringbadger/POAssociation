@@ -295,6 +295,31 @@ export interface GenerateFormResult {
   documentsProcessed?: number;
 }
 
+// One selectable context source for the "Generate New Version with AI" modal.
+export interface GenerateFormSource {
+  id: string;
+  name: string;
+  url: string | null;
+  sourceType: 'url' | 'uploaded_document';
+  isPdf: boolean;
+  origin: 'legacy' | 'ai-tab' | 'expanded';
+  parentId: string | null;
+  parentName: string | null;
+  appliesToAllForms: boolean;
+  appliesToFormTypes: string[] | null;
+  estimatedTokens: number;
+  fetchError: boolean;
+  tooLarge: boolean;
+  defaultSelected: boolean;
+}
+
+export interface GenerateFormSourcesResult {
+  sources: GenerateFormSource[];
+  formType: string | null;
+  instructionTokens: number;
+  maxContextTokens: number;
+}
+
 class ApiClient {
   private baseUrl = "/api";
 
@@ -879,17 +904,54 @@ class ApiClient {
     return response.json();
   }
 
-  async generateForm(tenantId: string, applicationType: string): Promise<GenerateFormResult> {
+  // Preview the context sources a generation would use (legacy + AI-tab, with hub
+  // URLs expanded into their linked docs) so the user can deselect irrelevant ones.
+  async getGenerateFormSources(tenantId: string, applicationType: string): Promise<GenerateFormSourcesResult> {
+    const params = new URLSearchParams({ tenantId, applicationType });
+    const response = await fetch(`${this.baseUrl}/ai/generate-form/sources?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to load context sources" }));
+      throw new Error(error.error || "Failed to load context sources");
+    }
+    return response.json();
+  }
+
+  async generateForm(tenantId: string, applicationType: string, selectedSourceIds?: string[]): Promise<GenerateFormResult> {
+    // Generation runs in the background server-side (it can take 60-120s, which
+    // would otherwise get the request aborted by a proxy/socket timeout). POST
+    // returns a jobId; we poll until it's done.
     const response = await fetch(`${this.baseUrl}/ai/generate-form`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tenantId, applicationType }),
+      credentials: 'include',
+      body: JSON.stringify({ tenantId, applicationType, selectedSourceIds }),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: "Form generation failed" }));
       throw new Error(error.error || "Form generation failed");
     }
-    return response.json();
+    const { jobId } = await response.json();
+    if (!jobId) throw new Error("Form generation failed to start");
+
+    const POLL_INTERVAL_MS = 2500;
+    const MAX_ATTEMPTS = 240; // ~10 minutes
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const poll = await fetch(`${this.baseUrl}/ai/generate-form/jobs/${jobId}`, {
+        credentials: 'include',
+      });
+      if (!poll.ok) {
+        const err = await poll.json().catch(() => ({ error: "Form generation failed" }));
+        throw new Error(err.error || "Form generation failed");
+      }
+      const data = await poll.json();
+      if (data.status === 'done') return data.result as GenerateFormResult;
+      if (data.status === 'error') throw new Error(data.error || "Form generation failed");
+      // status === 'pending' → keep polling
+    }
+    throw new Error("Form generation timed out");
   }
 
   async listAiGenerations(tenantId?: string, startDate?: string, endDate?: string): Promise<any[]> {

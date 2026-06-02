@@ -63,6 +63,10 @@ export const users = pgTable("users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
   lockedUntil: timestamp("locked_until"),
+  // First time this user successfully authenticated to the MCP server from an
+  // LLM client (set fire-and-forget in bearerAuthMiddleware). Drives the
+  // "level up" dashboard CTA: null = show connect guide, set = show usage intro.
+  mcpConnectedAt: timestamp("mcp_connected_at"),
   notificationPreferences: jsonb("notification_preferences").default(sql`'{"applicationSubmitted":true,"applicationApproved":true,"applicationRejected":true,"commentsAdded":true,"stepAssigned":true}'`),
   demoCodeId: varchar("demo_code_id").references(() => demoCodes.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),

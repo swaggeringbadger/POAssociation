@@ -1,0 +1,37 @@
+[
+  {
+    "name": "login-craftsman-door-dusk",
+    "aspect_ratio": "3:4",
+    "prompt": "Warm intimate documentary photograph, blue-hour dusk turning to night. A welcoming craftsman cottage front door painted deep teal, brass house numbers, a glowing amber porch lantern casting warm light, a small potted fern and a worn welcome mat, soft autumn leaves on the steps. Close, human-scale, the feeling of coming home. Cinematic warm color grade, honey and amber tones against cool blue dusk, shallow depth of field, 35mm film look, gentle grain, cozy and inviting, photojournalistic."
+  },
+  {
+    "name": "demo-block-party-stringlights",
+    "aspect_ratio": "3:4",
+    "prompt": "Warm intimate documentary photograph, golden hour into dusk. A small neighborhood gathering in a backyard, a few neighbors of mixed ages and ethnicities laughing around a wooden table with lemonade and a shared meal, warm string lights crisscrossing overhead just beginning to glow, a kid running with a dog in soft background bokeh. Joyful, candid, lived-in. Cinematic warm color grade, amber and honey tones, shallow depth of field, 35mm film look, gentle grain, authentic community moment, photojournalistic."
+  },
+  {
+    "name": "section-architectural-door",
+    "aspect_ratio": "4:3",
+    "prompt": "Warm intimate close-up documentary photograph, soft morning light. A homeowner's hand holding paint color swatches up against the clapboard siding of a charming craftsman house, choosing a new exterior color, a few fan-deck samples and a small notebook. Tactile, real, the small joy of improving a home. Cinematic warm color grade, honey and sage tones, very shallow depth of field, 35mm film look, gentle grain, photojournalistic detail."
+  },
+  {
+    "name": "section-kitchen-plans",
+    "aspect_ratio": "4:3",
+    "prompt": "Warm intimate documentary photograph, soft morning light through a kitchen window. A homeowner sitting at a wooden kitchen table sketching a backyard deck plan on paper beside an open laptop and a steaming coffee mug, a houseplant nearby, reading glasses. Calm, focused, hopeful. Cinematic warm color grade, amber and cream tones, shallow depth of field, 35mm film look, gentle grain, authentic candid moment, photojournalistic."
+  },
+  {
+    "name": "section-board-table",
+    "aspect_ratio": "4:3",
+    "prompt": "Warm intimate documentary photograph, cozy evening lamplight. A small group of four neighbors of mixed ages and ethnicities seated around a round wooden table reviewing printed house plans and a tablet together, mugs of tea, nodding in agreement, a sense of care and fairness. Community board meeting that feels human, not bureaucratic. Cinematic warm color grade, amber and honey tones, soft shadows, shallow depth of field, 35mm film look, gentle grain, photojournalistic."
+  },
+  {
+    "name": "section-evening-walk",
+    "aspect_ratio": "16:9",
+    "prompt": "Warm intimate documentary photograph, golden hour. A parent and young child walking a friendly dog down a tree-lined neighborhood sidewalk dappled with low sun, neighbors waving from a porch in the soft background, long warm shadows. Peaceful, the neighborhood you actually want to live in. Cinematic warm color grade, honey and amber tones, shallow depth of field, 35mm film look, gentle grain, authentic candid moment, photojournalistic."
+  },
+  {
+    "name": "cta-stringlights-band",
+    "aspect_ratio": "21:9",
+    "prompt": "Warm dreamy documentary photograph, dusk. Backyard string lights and a craftsman home glowing softly in the background, heavily out of focus warm golden bokeh orbs filling the frame, a hint of porch and trees. Atmospheric, cozy, inviting, mostly soft glow. Cinematic warm color grade, deep amber and honey tones against twilight blue, very shallow depth of field, 35mm film look, gentle grain, ambient and abstract, photojournalistic."
+  }
+]

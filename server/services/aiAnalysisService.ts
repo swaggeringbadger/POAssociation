@@ -71,9 +71,14 @@ export class AiAnalysisService {
     let designGuidelines = '';
 
     try {
+      // Merge the General-tab design guidelines URL (if any) WITH the AI-tab
+      // sources, exactly like form generation does — so analysis and form-gen
+      // see the same effective context. The catch-fallback below stays as a
+      // true fallback for when the new context system itself fails.
       aggregatedContext = await aiContextService.gatherContext(
         analysisRecord.tenantId,
-        context.application.projectType
+        context.application.projectType,
+        context.tenant.designGuidelinesUrl
       );
       designGuidelines = aiContextService.formatContextForPrompt(aggregatedContext);
 
@@ -590,7 +595,6 @@ export class AiAnalysisService {
         anthropic.messages.create({
           model: ANALYSIS_MODEL,
           max_tokens: 8000,
-          temperature: 0.2, // Low temperature for consistent, structured output
           system: systemPrompt,
           messages: [
             {

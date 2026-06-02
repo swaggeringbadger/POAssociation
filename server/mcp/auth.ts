@@ -115,6 +115,13 @@ export async function bearerAuthMiddleware(
     roles,
   };
 
+  // First successful MCP auth from an LLM client → stamp the user's profile so
+  // the dashboard can flip from "connect your AI" to "what to ask it". Idempotent
+  // (no-op once set) and fire-and-forget so it never adds latency or fails auth.
+  void storage
+    .markUserMcpConnected(tokenRow.userId)
+    .catch((err) => console.error("[mcp-auth] markUserMcpConnected failed", err));
+
   next();
 }
 

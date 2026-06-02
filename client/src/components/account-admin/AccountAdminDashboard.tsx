@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LevelUpButton } from "@/components/level-up/LevelUpButton";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building, Sparkles, FileCheck, AlertTriangle, CheckCircle, DollarSign } from "lucide-react";
@@ -102,23 +103,26 @@ function DashboardHeader({
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-violet-700 to-purple-900 text-white border-none">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Building className="h-8 w-8" />
               <div>
                 <CardTitle className="text-2xl">Account Admin Dashboard</CardTitle>
-                <CardDescription className="text-indigo-100">
+                <CardDescription className="text-violet-100">
                   Managing {summary.totalProperties} {summary.totalProperties === 1 ? 'property' : 'properties'}
                 </CardDescription>
               </div>
             </div>
-            {hasIssues && (
-              <Badge variant="outline" className="bg-white/20 text-white border-white/30">
-                {summary.propertiesAtLimit + summary.propertiesWarning} need attention
-              </Badge>
-            )}
+            <div className="flex items-center gap-3">
+              {hasIssues && (
+                <Badge variant="outline" className="bg-white/20 text-white border-white/30">
+                  {summary.propertiesAtLimit + summary.propertiesWarning} need attention
+                </Badge>
+              )}
+              <LevelUpButton />
+            </div>
           </div>
         </CardHeader>
       </Card>
@@ -194,13 +198,13 @@ function SinglePropertyDashboard({ property }: { property: any }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border-none">
+      <Card className="bg-gradient-to-r from-violet-700 to-purple-900 text-white border-none">
         <CardHeader>
           <div className="flex items-center gap-3">
             <Building className="h-8 w-8" />
             <div>
               <CardTitle className="text-2xl">Account Admin Dashboard</CardTitle>
-              <CardDescription className="text-indigo-100">
+              <CardDescription className="text-violet-100">
                 {property.name}
               </CardDescription>
             </div>
@@ -322,13 +326,13 @@ export function AccountAdminDashboard() {
   if (properties.length === 0) {
     return (
       <div className="space-y-6">
-        <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border-none">
+        <Card className="bg-gradient-to-r from-violet-700 to-purple-900 text-white border-none">
           <CardHeader>
             <div className="flex items-center gap-3">
               <Building className="h-8 w-8" />
               <div>
                 <CardTitle className="text-2xl">Account Admin Dashboard</CardTitle>
-                <CardDescription className="text-indigo-100">
+                <CardDescription className="text-violet-100">
                   No properties found
                 </CardDescription>
               </div>

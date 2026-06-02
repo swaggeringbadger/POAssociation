@@ -247,14 +247,18 @@ export class AdditionalInfoService {
    * Validate config structure
    */
   private isValidConfig(config: any): config is AdditionalInfoConfig {
+    // Only the essentials are required. `required_documents` is optional/DEPRECATED
+    // (see additionalInfoTypes.ts — "Use documents instead") and `scoring_weights`
+    // is optional too; every consumer already guards both with `|| []` / `|| {}` and
+    // calculateCompletenessScore falls back when scoring_weights is absent. Hard-
+    // requiring them here rejected valid AI-generated forms → "No active form
+    // configuration found" 404 even with an active template.
     return (
       config &&
       typeof config === 'object' &&
       typeof config.title === 'string' &&
       typeof config.description === 'string' &&
-      Array.isArray(config.sections) &&
-      Array.isArray(config.required_documents) &&
-      typeof config.scoring_weights === 'object'
+      Array.isArray(config.sections)
     );
   }
 

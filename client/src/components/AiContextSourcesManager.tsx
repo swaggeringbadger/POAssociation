@@ -48,9 +48,16 @@ import {
 interface AiContextSourcesManagerProps {
   tenantId: string;
   readOnly?: boolean;
+  /**
+   * The legacy "Design Guidelines URL" saved on the property's General settings
+   * tab. When set, the backend folds it in as a top-priority context source for
+   * AI form generation and analysis — so we surface a read-only note here to
+   * make that injection visible (it isn't an editable source in this list).
+   */
+  designGuidelinesUrl?: string | null;
 }
 
-export function AiContextSourcesManager({ tenantId, readOnly = false }: AiContextSourcesManagerProps) {
+export function AiContextSourcesManager({ tenantId, readOnly = false, designGuidelinesUrl }: AiContextSourcesManagerProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -211,6 +218,25 @@ export function AiContextSourcesManager({ tenantId, readOnly = false }: AiContex
         </div>
       </CardHeader>
       <CardContent>
+        {designGuidelinesUrl ? (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+            <Globe className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+            <div className="min-w-0">
+              <span className="font-medium">Also in use: </span>
+              the <span className="font-medium">Design Guidelines URL</span> from
+              the General settings tab is automatically included as a top-priority
+              source for AI form generation and analysis.
+              <a
+                href={designGuidelinesUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 break-all underline underline-offset-2"
+              >
+                {designGuidelinesUrl}
+              </a>
+            </div>
+          </div>
+        ) : null}
         {isLoading ? (
           <div className="text-center py-8 text-muted-foreground">Loading...</div>
         ) : sources.length === 0 ? (

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "login-craftsman-door-dusk",
+    "aspect_ratio": "3:4",
+    "prompt": "Warm intimate documentary photograph, blue-hour dusk turning to night. A welcoming craftsman cottage front entry. The deep teal painted front door is centered and plain with just a simple brass handle and NO lights mounted on the door. TWO matching warm-glowing lantern wall sconces are mounted on the clapboard wall, ONE on each side of the door at head height, symmetrically flanking the entry, each casting a soft pool of amber light. A single tidy brass house-number plaque is mounted on the wall beside the door showing one two-digit number on ONE single line (not stacked). A small potted fern and a worn welcome mat on the step, soft autumn leaves. Close, human-scale, the feeling of coming home. Cinematic warm color grade, honey and amber tones against cool blue dusk, shallow depth of field, 35mm film look, gentle grain, cozy and inviting, photojournalistic.",
+    "negative": "light fixture on the door, lamp mounted on door, stacked numbers, two-line house numbers, asymmetric"
+  },
+  {
+    "name": "section-evening-walk",
+    "aspect_ratio": "16:9",
+    "prompt": "Warm intimate documentary photograph, golden hour, seen from behind. A parent and young child walk away from the camera down a tree-lined neighborhood sidewalk dappled with low sun, their backs to us. A friendly golden retriever walks alongside them on a leash, the DOG ALSO facing AWAY from the camera and walking in the SAME forward direction as the family, its tail toward the viewer, all three moving together down the path. Neighbors waving from a porch in the soft background, long warm shadows stretching toward the camera. Peaceful, the neighborhood you actually want to live in. Cinematic warm color grade, honey and amber tones, shallow depth of field, 35mm film look, gentle grain, authentic candid moment, photojournalistic.",
+    "negative": "dog facing camera, dog looking backward, dog facing wrong way, dog turned around"
+  }
+]

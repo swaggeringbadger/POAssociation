@@ -1121,7 +1121,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = await anthropic.messages.create({
         model: AI_MODELS.PUBLIC_RESOURCES,
         max_tokens: 4096,
-        temperature: 0.3,
         messages: [{
           role: 'user',
           content: promptContent,
@@ -1532,6 +1531,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/forms/:id", isAuthenticated, async (req, res) => {
     try {
       const form = await storage.updateFormTemplate(req.params.id, req.body);
+      // The schema may have changed — drop the cached active config so the next
+      // application load reflects the edit without a server restart.
+      additionalInfoService.clearCache();
       res.json(form);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -4306,12 +4308,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate AI form
-  app.post("/api/ai/generate-form", isAuthenticated, async (req: any, res) => {
+  // ── Async form-generation jobs ──────────────────────────────────────────────
+  // Generation can take 60-120s (large scanned PDFs especially). Holding the HTTP
+  // request open that long risks the proxy/socket aborting it ("request aborted").
+  // POST kicks the work off and returns a jobId; the client polls /jobs/:jobId.
+  // In-memory is fine — single-process Run; jobs drop on restart but the resulting
+  // formTemplate is persisted by the background task regardless.
+  const formGenJobs = new Map<string, { status: 'pending' | 'done' | 'error'; result?: any; error?: string; createdAt: number }>();
+  const FORM_GEN_JOB_TTL_MS = 30 * 60 * 1000;
+  const gcFormGenJobs = () => {
+    const now = Date.now();
+    formGenJobs.forEach((job, id) => {
+      if (now - job.createdAt > FORM_GEN_JOB_TTL_MS) formGenJobs.delete(id);
+    });
+  };
+
+  // Preview the exact set of context sources that a form generation WOULD use —
+  // legacy General-tab guidelines URL + AI-tab sources, with hub/index URLs
+  // expanded one level into their linked docs. Powers the confirmation modal's
+  // per-source checkboxes so a user can drop irrelevant docs (e.g. a pool-house
+  // doc on a landscaping form) before generating.
+  app.get("/api/ai/generate-form/sources", isAuthenticated, async (req: any, res) => {
     try {
-      const { tenantId, applicationType } = req.body;
+      const tenantId = req.query.tenantId as string;
+      const applicationType = req.query.applicationType as string;
 
       if (!tenantId || !applicationType) {
         return res.status(400).json({ error: "tenantId and applicationType are required" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+
+      const featureAccess = await storage.checkFeatureAccess(tenantId, 'ai_form_generation');
+      if (!featureAccess.hasAccess) {
+        return res.status(403).json({
+          error: "AI Form Generation is not available in your subscription plan",
+        });
+      }
+
+      const { aiContextService } = await import('./services/aiContextService');
+      const result = await aiContextService.resolveSelectableSources(
+        tenantId,
+        applicationType,
+        tenant.designGuidelinesUrl || undefined,
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[generate-form/sources] Failed to resolve sources:', error);
+      res.status(500).json({ error: error?.message || "Failed to resolve context sources" });
+    }
+  });
+
+  app.post("/api/ai/generate-form", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId, applicationType, selectedSourceIds } = req.body;
+
+      if (!tenantId || !applicationType) {
+        return res.status(400).json({ error: "tenantId and applicationType are required" });
+      }
+
+      // Optional: a user-curated subset of source ids from the confirmation modal.
+      if (selectedSourceIds !== undefined &&
+        (!Array.isArray(selectedSourceIds) || !selectedSourceIds.every((s: unknown) => typeof s === 'string'))) {
+        return res.status(400).json({ error: "selectedSourceIds must be an array of strings" });
       }
 
       // Get tenant to fetch design guidelines URL
@@ -4338,81 +4401,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Import AI generation service
-      const { aiFormGenerationService } = await import('./aiFormGenerationService');
+      // Kick generation off in the background and return a jobId immediately — the
+      // request no longer stays open for the whole (possibly 60-120s) generation,
+      // so it can't be aborted by a proxy/socket timeout. Capture everything the
+      // background task needs up front (don't touch `req` after responding).
+      const jobId = `fg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const userId = req.session?.userId || req.user?.id;
+      const legacyUrl = tenant.designGuidelinesUrl || undefined;
+      const selectionIds = Array.isArray(selectedSourceIds) ? selectedSourceIds : undefined;
+      formGenJobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+      gcFormGenJobs();
 
-      // Generate form using new multi-source context system (with legacy fallback)
-      const result = await aiFormGenerationService.generateFormWithContext(
-        tenantId,
-        applicationType,
-        tenant.designGuidelinesUrl || undefined
-      );
+      void (async () => {
+        try {
+          const { aiFormGenerationService } = await import('./aiFormGenerationService');
 
-      // Save generation to database
-      const generation = await storage.createAiFormGeneration({
-        tenantId,
-        applicationType,
-        designGuidelinesUrl: tenant.designGuidelinesUrl,
-        generatedSchema: result.generatedForm as any,
-        status: 'draft',
-        tokensUsed: result.tokensUsed,
-        estimatedCost: result.estimatedCost,
-        generationTimeMs: result.generationTimeMs,
-        createdByUserId: req.session?.userId || req.user?.id,
-      });
-
-      // Get the next version number for this tenant + project type
-      const existingTemplates = await db.select()
-        .from(schema.formTemplates)
-        .where(and(
-          eq(schema.formTemplates.tenantId, tenantId),
-          eq(schema.formTemplates.projectType, applicationType)
-        ))
-        .orderBy(desc(schema.formTemplates.version));
-
-      const nextVersion = existingTemplates.length > 0 ? existingTemplates[0].version + 1 : 1;
-
-      // Create form template (inactive by default)
-      const formTemplate = await storage.createFormTemplate({
-        tenantId,
-        projectType: applicationType,
-        version: nextVersion,
-        name: result.generatedForm.title || `${applicationType} - v${nextVersion}`,
-        description: result.generatedForm.description,
-        schema: result.generatedForm as any,
-        isActive: false, // New generations are NOT active by default
-        createdByUserId: req.session?.userId || req.user?.id,
-      });
-
-      // Link the template to the generation
-      await storage.linkFormTemplateToGeneration(generation.id, formTemplate.id);
-
-      // Log usage event for AI-generated form creation
-      try {
-        const { usageTrackingService } = await import('./services/usageTrackingService');
-        const userId = req.session?.userId || req.user?.id;
-        if (userId) {
-          await usageTrackingService.logFormCreated(
+          // Generate form using new multi-source context system (with legacy fallback)
+          const result = await aiFormGenerationService.generateFormWithContext(
             tenantId,
-            formTemplate.id,
-            userId
+            applicationType,
+            legacyUrl,
+            selectionIds
           );
-          console.log(`[UsageTracking] Logged AI-generated form created for tenant ${tenantId}`);
-        }
-      } catch (trackingError) {
-        console.error("[UsageTracking] Error logging AI form creation:", trackingError);
-      }
 
-      res.json({
-        ...result,
-        generationId: generation.id,
-        formTemplateId: formTemplate.id,
-        version: nextVersion,
-      });
+          // Save generation to database
+          const generation = await storage.createAiFormGeneration({
+            tenantId,
+            applicationType,
+            designGuidelinesUrl: tenant.designGuidelinesUrl,
+            generatedSchema: result.generatedForm as any,
+            status: 'draft',
+            tokensUsed: result.tokensUsed,
+            estimatedCost: result.estimatedCost,
+            generationTimeMs: result.generationTimeMs,
+            createdByUserId: userId,
+          });
+
+          // Get the next version number for this tenant + project type
+          const existingTemplates = await db.select()
+            .from(schema.formTemplates)
+            .where(and(
+              eq(schema.formTemplates.tenantId, tenantId),
+              eq(schema.formTemplates.projectType, applicationType)
+            ))
+            .orderBy(desc(schema.formTemplates.version));
+
+          const nextVersion = existingTemplates.length > 0 ? existingTemplates[0].version + 1 : 1;
+
+          // Create form template (inactive by default)
+          const formTemplate = await storage.createFormTemplate({
+            tenantId,
+            projectType: applicationType,
+            version: nextVersion,
+            name: result.generatedForm.title || `${applicationType} - v${nextVersion}`,
+            description: result.generatedForm.description,
+            schema: result.generatedForm as any,
+            isActive: false, // New generations are NOT active by default
+            createdByUserId: userId,
+          });
+
+          // Link the template to the generation
+          await storage.linkFormTemplateToGeneration(generation.id, formTemplate.id);
+
+          // Log usage event for AI-generated form creation
+          try {
+            const { usageTrackingService } = await import('./services/usageTrackingService');
+            if (userId) {
+              await usageTrackingService.logFormCreated(tenantId, formTemplate.id, userId);
+              console.log(`[UsageTracking] Logged AI-generated form created for tenant ${tenantId}`);
+            }
+          } catch (trackingError) {
+            console.error("[UsageTracking] Error logging AI form creation:", trackingError);
+          }
+
+          formGenJobs.set(jobId, {
+            status: 'done',
+            createdAt: Date.now(),
+            result: { ...result, generationId: generation.id, formTemplateId: formTemplate.id, version: nextVersion },
+          });
+        } catch (error: any) {
+          console.error("Error generating form:", error);
+          formGenJobs.set(jobId, { status: 'error', createdAt: Date.now(), error: error?.message || 'Form generation failed' });
+        }
+      })();
+
+      return res.status(202).json({ jobId });
     } catch (error: any) {
-      console.error("Error generating form:", error);
+      console.error("Error starting form generation:", error);
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // Poll an async form-generation job (see POST /api/ai/generate-form).
+  app.get("/api/ai/generate-form/jobs/:jobId", isAuthenticated, async (req: any, res) => {
+    const job = formGenJobs.get(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ status: 'not_found', error: "Generation job not found or expired" });
+    }
+    if (job.status === 'error') {
+      return res.json({ status: 'error', error: job.error });
+    }
+    if (job.status === 'done') {
+      return res.json({ status: 'done', result: job.result });
+    }
+    return res.json({ status: 'pending' });
   });
 
   // List AI form generations (for admin dashboard)
@@ -4489,6 +4581,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("[UsageTracking] Error logging form approval:", trackingError);
       }
 
+      // New active config — clear the cache so it's served immediately.
+      additionalInfoService.clearCache();
+
       res.json({
         message: "Form approved and activated",
         formTemplateId: formTemplate.id
@@ -4553,6 +4648,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(schema.formTemplates.id, id))
         .returning();
+
+      // Which version is active just changed — clear the cached config so the app
+      // serves the newly-activated form immediately.
+      additionalInfoService.clearCache();
 
       res.json({
         message: "Form template activated successfully",

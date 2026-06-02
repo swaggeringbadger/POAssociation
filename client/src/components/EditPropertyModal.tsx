@@ -24,10 +24,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
-import { Building, MapPin, Scale, Settings, Loader2, Phone, Globe, Mail, Sparkles, Image, Upload, X, Crosshair } from "lucide-react";
+import { Building, MapPin, Scale, Settings, Loader2, Phone, Globe, Mail, Sparkles, Image, Upload, X, Crosshair, Check } from "lucide-react";
 import type { CommunitySettings, LegalEntityType } from "@shared/schema";
 import { AiContextSourcesManager } from "./AiContextSourcesManager";
 import { AiInstructionsEditor } from "./AiInstructionsEditor";
+import { HERO_TEMPLATES } from "@/lib/heroTemplates";
+import { cn } from "@/lib/utils";
 
 interface EditPropertyModalProps {
   open: boolean;
@@ -111,6 +113,10 @@ export default function EditPropertyModal({
   const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
   const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
   const [sharpenImage, setSharpenImage] = useState(true);
+  // Local mirror of the saved hero URL so the preview updates immediately —
+  // the parent passes a frozen `property` snapshot that query invalidation
+  // doesn't refresh, so we can't rely on the prop reflecting our changes.
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(property?.heroImageUrl ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form data when property changes
@@ -147,6 +153,7 @@ export default function EditPropertyModal({
     setHeroImageFile(null);
     setHeroImagePreview(null);
     setSharpenImage(true);
+    setHeroImageUrl(property?.heroImageUrl ?? null);
   }, [property, isCreating]);
 
   const saveMutation = useMutation({
@@ -205,6 +212,10 @@ export default function EditPropertyModal({
       queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
       setHeroImageFile(null);
       setHeroImagePreview(null);
+      setHeroImageUrl(data.heroImageUrl ?? null);
+      // A freshly uploaded image shouldn't inherit the previous focus — recenter.
+      updateCommunitySettings("heroImageFocusX", undefined);
+      updateCommunitySettings("heroImageFocusY", undefined);
 
       if (data.wasSharpened) {
         toast({
@@ -249,6 +260,7 @@ export default function EditPropertyModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      setHeroImageUrl(null);
       toast({
         title: "Hero image removed",
         description: "The community hero image has been deleted.",
@@ -257,6 +269,31 @@ export default function EditPropertyModal({
     onError: (error: Error) => {
       toast({
         title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Apply a starter-library hero image (just points heroImageUrl at the static
+  // template — no upload needed; focus point is set afterwards via the picker).
+  const selectTemplateMutation = useMutation({
+    mutationFn: (url: string) => api.updateTenant(property!.id, { heroImageUrl: url }),
+    onSuccess: (data, url) => {
+      queryClient.invalidateQueries({ queryKey: ["managedProperties"] });
+      clearSelectedFile();
+      setHeroImageUrl(data?.heroImageUrl ?? url);
+      // A fresh image shouldn't inherit the previous one's focus — recenter it.
+      updateCommunitySettings("heroImageFocusX", undefined);
+      updateCommunitySettings("heroImageFocusY", undefined);
+      toast({
+        title: "Starter image applied",
+        description: "Set the focus point above, then save your changes.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Couldn't apply image",
         description: error.message,
         variant: "destructive",
       });
@@ -504,7 +541,7 @@ export default function EditPropertyModal({
                     id="modal-hero-image-input"
                   />
 
-                  {property.heroImageUrl && !heroImageFile ? (
+                  {heroImageUrl && !heroImageFile ? (
                     <>
                       {/* Current hero image with focus point picker */}
                       <div
@@ -518,7 +555,8 @@ export default function EditPropertyModal({
                         }}
                       >
                         <img
-                          src={property.heroImageUrl}
+                          key={heroImageUrl}
+                          src={heroImageUrl}
                           alt="Current hero image"
                           className="w-full h-full object-cover"
                           style={{
@@ -624,6 +662,67 @@ export default function EditPropertyModal({
                       </p>
                     </label>
                   )}
+
+                  {/* Starter image library — pick an on-brand image instead of uploading */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <Separator className="flex-1" />
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        or choose a starter image
+                      </span>
+                      <Separator className="flex-1" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {HERO_TEMPLATES.map((t) => {
+                        const selected = heroImageUrl === t.url;
+                        const isApplying =
+                          selectTemplateMutation.isPending &&
+                          selectTemplateMutation.variables === t.url;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            title={t.description}
+                            onClick={() => selectTemplateMutation.mutate(t.url)}
+                            disabled={selectTemplateMutation.isPending}
+                            className={cn(
+                              "group relative aspect-video w-full overflow-hidden rounded border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60",
+                              selected
+                                ? "ring-2 ring-primary border-primary"
+                                : "hover:border-primary",
+                            )}
+                            data-testid={`hero-template-${t.id}`}
+                          >
+                            <img
+                              src={t.url}
+                              alt={t.label}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
+                              <span className="block text-[10px] font-medium leading-tight text-white">
+                                {t.label}
+                              </span>
+                            </div>
+                            {selected && (
+                              <div className="absolute right-1 top-1 rounded-full bg-primary p-0.5 shadow">
+                                <Check className="h-3 w-3 text-primary-foreground" />
+                              </div>
+                            )}
+                            {isApplying && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                <Loader2 className="h-4 w-4 animate-spin text-white" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Hand-picked images that match the POA Association look. Pick one,
+                      then click it above to set the focus point.
+                    </p>
+                  </div>
                 </div>
               </>
             )}
@@ -893,7 +992,7 @@ export default function EditPropertyModal({
               <div className="text-sm text-muted-foreground mb-4">
                 Configure AI document sources and custom instructions for form generation and application analysis.
               </div>
-              <AiContextSourcesManager tenantId={property.id} />
+              <AiContextSourcesManager tenantId={property.id} designGuidelinesUrl={property.designGuidelinesUrl} />
               <AiInstructionsEditor tenantId={property.id} />
             </TabsContent>
           )}

@@ -188,7 +188,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Sidebar */}
         <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
           <SidebarHeader className="flex-col gap-2 p-2 border-b border-sidebar-border">
-            <div className="flex items-center gap-2 font-bold text-lg text-sidebar-primary-foreground">
+            <div className="flex items-center gap-2 font-bold text-lg text-sidebar-foreground">
               <img src={logoImage} className="w-8 h-8 rounded" alt="Logo" />
               <span>POAssociation.com</span>
             </div>

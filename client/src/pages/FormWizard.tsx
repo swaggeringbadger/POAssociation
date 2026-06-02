@@ -48,6 +48,7 @@ import {
 import { toast } from "sonner";
 import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, type ApplicationType } from "@shared/formTypes";
 import DynamicForm from "@/components/DynamicForm";
+import { GenerateFormConfirmModal } from "@/components/GenerateFormConfirmModal";
 
 interface FormStatus {
   type: ApplicationType;
@@ -66,6 +67,8 @@ export default function FormWizard() {
   const [previewVersion, setPreviewVersion] = useState<any>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [newlyGeneratedVersionId, setNewlyGeneratedVersionId] = useState<string | null>(null);
+  // Application type whose source-selection confirmation modal is currently open.
+  const [sourceModalType, setSourceModalType] = useState<ApplicationType | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -180,16 +183,22 @@ export default function FormWizard() {
     setLocation(`/form-builder/${templateId}`);
   };
 
-  const handleGenerateForm = async (applicationType: ApplicationType) => {
+  // Step 1: open the source-selection confirmation modal. The user picks which
+  // links/docs to consider before we actually generate.
+  const handleGenerateForm = (applicationType: ApplicationType) => {
     if (!effectiveTenantId) {
       toast.error("No property selected");
       return;
     }
+    setSourceModalType(applicationType);
+  };
 
-    if (!guidelinesData?.designGuidelinesUrl) {
-      toast.error("Please add a Design Guidelines URL in Properties settings first", {
-        duration: 5000,
-      });
+  // Step 2: run the generation with the user's curated source selection.
+  const runGeneration = async (applicationType: ApplicationType, selectedSourceIds: string[]) => {
+    setSourceModalType(null);
+
+    if (!effectiveTenantId) {
+      toast.error("No property selected");
       return;
     }
 
@@ -208,7 +217,7 @@ export default function FormWizard() {
     );
 
     try {
-      const result = await api.generateForm(effectiveTenantId, applicationType);
+      const result = await api.generateForm(effectiveTenantId, applicationType, selectedSourceIds);
 
       toast.dismiss(loadingToast);
 
@@ -613,6 +622,18 @@ export default function FormWizard() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Source-selection confirmation before generating */}
+      {sourceModalType && effectiveTenantId && (
+        <GenerateFormConfirmModal
+          open={!!sourceModalType}
+          tenantId={effectiveTenantId}
+          applicationType={sourceModalType}
+          applicationTypeLabel={APPLICATION_TYPE_LABELS[sourceModalType]}
+          onConfirm={(ids) => runGeneration(sourceModalType, ids)}
+          onCancel={() => setSourceModalType(null)}
+        />
+      )}
     </div>
   );
 }
