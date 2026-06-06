@@ -35,9 +35,19 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies (incl. devDeps for the build)
-        run: npm ci --include=dev
+        run: npm ci --include=dev --no-audit --no-fund
         env:
           NODE_ENV: development
+          NPM_CONFIG_PRODUCTION: "false"
+          NPM_CONFIG_OMIT: ""
+          NPM_CONFIG_INCLUDE: dev
+
+      - name: Diagnose dev-dep install
+        run: |
+          echo "omit=$(npm config get omit) production=$(npm config get production) include=$(npm config get include)"
+          env | grep -iE 'npm_config|node_env' || true
+          npm ls vite esbuild || true
+          echo "--- .bin (vite/esbuild) ---"; ls node_modules/.bin 2>/dev/null | grep -E 'vite|esbuild' || echo "NONE"
 
       - name: Build client + server
         run: npm run build
