@@ -5,17 +5,16 @@
  * Based on the reference architecture from the single-community app
  */
 
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import { eq } from "drizzle-orm";
 import { formTemplates, tenants } from '@shared/schema';
 import type { AdditionalInfoConfig } from '@shared/additionalInfoTypes';
-import ws from "ws";
 
-neonConfig.webSocketConstructor = ws;
+const { Pool } = pg;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
-const db = drizzle({ client: pool });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+const db = drizzle(pool);
 
 /**
  * Form configurations for each project type

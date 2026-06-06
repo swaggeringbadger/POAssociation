@@ -4,16 +4,15 @@
  * Updates existing form templates to use the new documents field
  */
 
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import { eq, and } from "drizzle-orm";
 import { formTemplates, tenants } from '@shared/schema';
-import ws from "ws";
 
-neonConfig.webSocketConstructor = ws;
+const { Pool } = pg;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
-const db = drizzle({ client: pool });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+const db = drizzle(pool);
 
 async function updateFormDocuments() {
   console.log('Updating form templates with new document format...\n');

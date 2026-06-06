@@ -20,7 +20,12 @@ Wired every cleared ruling from Jim's legal fact-check (`persistent-memory/legal
 - **#9** role count → no number. **lastUpdated** → June 3, 2026.
 - **Confirmed for Jim:** `purgeExpiredDemos.ts` is NOT scheduled (manual script only) — demo-deletion commitment honored manually.
 
-**NEXT:** (1) #2 self-serve cancel feature is a separate build task; (2) DPA draft §11/preamble Delaware→Florida + entity name (deferred with the DPA artifact); (3) commit + push the working tree.
+### Same session — GitHub push + Azure-migration prep
+- **GitHub:** legal work committed (`dfa9e76`) + `.gitignore` rule (`08ccbba`) on local Replit git. Pushed `dfa9e76` → `swaggeringbadger/POAssociation` **main** (was empty; verified SHA match). PAT lives in gitignored `persistent-memory/gh-credentials`; push via one-shot tokenized URL (no persistent remote). **New rule: local Replit git = day-to-day; GitHub push = PROD-release prep only.** See harness memory `github-deploy-setup`.
+- **Mitch/dev-ops dropped the Azure-migration handbook** (SB task `94eac9fc`) — POA prod moving Replit→shared Azure (Flex + VNet). Captured in **`persistent-memory/poa-azure-migration-handbook.md`** + harness memory `prod-migration-off-replit`. Core shift: **stop `db:push` in prod → versioned `drizzle-kit generate` + commit + journaled ACI `migrate`, gated backup→migrate→deploy.** Three don'ts: no migrate-on-boot, no migrate-from-runner (Flex is private), no push-in-prod. Journal will be **baselined at cutover** (existing `migrations/`+`_journal.json` are out of sync — discard, start clean).
+- **✅ DB driver swap DONE (ahead of cutover):** Neon serverless → **node-postgres**. New centralized **`server/db.ts`** (pg Pool + `ssl:{rejectUnauthorized:false}` unless sslmode=disable + keepAlive + non-fatal idle-error handler + max:10). `storage.ts` imports `db` from it; all 6 maintenance scripts swapped inline. `pg@^8.21.0`+`@types/pg` added as deps. **Verified node-postgres connects to live DB** (heliumdb, 19 tenants, TCP+SSL). `auth.ts` session store already used node-pg (unchanged). Full build green; stale server killed (click Run). **UNCOMMITTED** (server change — needs commit; do NOT push to GH unless cutting a release).
+
+**NEXT:** (1) commit the Azure driver-swap server change to local Replit git; (2) await Mitch's deliverables (`poassociation-release.mjs`, `deploy.yml`, HS `db.ts` reference to diff vs mine, `required-settings.yml`); (3) #2 self-serve cancel feature build task; (4) DPA draft §11/preamble Delaware→Florida + entity (deferred w/ DPA artifact).
 
 ---
 

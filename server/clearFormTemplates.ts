@@ -1,13 +1,12 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import { formTemplates } from '@shared/schema';
-import ws from "ws";
 
-neonConfig.webSocketConstructor = ws;
+const { Pool } = pg;
 
 async function clearFormTemplates() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
-  const db = drizzle({ client: pool });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+  const db = drizzle(pool);
 
   console.log('Clearing form_templates table...');
   await db.delete(formTemplates);
