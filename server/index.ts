@@ -175,10 +175,13 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  // NOTE: `reusePort: true` was removed for Azure App Service — SO_REUSEPORT is a
+  // Replit-environment feature; on the Azure Linux container the socket fails to
+  // bind, the startup warmup probe never gets a response, and the container
+  // crash-loops (ContainerTimeout after 230s). 0.0.0.0 binding is what Azure needs.
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
 
