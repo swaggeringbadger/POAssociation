@@ -1,7 +1,74 @@
 # Session Handoff Document
 
-**Last Updated:** 2026-06-02
-**Current Session:** Community Hero Image starter library (Kim / UX)
+**Last Updated:** 2026-06-06
+**Current Session:** Wired Jim's legal fact-check rulings (Edward / dev-lead)
+
+---
+
+## SESSION 2026-06-06 (Edward / dev-lead) — Legal fact-check rulings WIRED
+
+**Branch `feat/self-hosted-auth`. UNCOMMITTED (on top of all prior uncommitted work). Client-only — `npx vite build` green, no server rebuild. Redeploy = owner's normal Run/deploy.**
+
+Wired every cleared ruling from Jim's legal fact-check (`persistent-memory/legal-factcheck-2026-06-03.md` → see new "✅ WIRED" section at bottom for the per-item diff). Counsel gate items (#1 data-export, #3 auth/OIDC→bcrypt, #5 SMS tab) all corrected — the affirmatively-false published claims are gone.
+
+- **#3 auth:** `SecurityPage.tsx` (overview card + Authentication section) and `AboutPage.tsx:216` rewritten from "Zero Passwords/OIDC/Replit" → email+password, salted bcrypt cost 12, HttpOnly/Secure/SameSite=Lax.
+- **#1/#8:** all self-serve "download/export your data" copy → "request a copy" (LegalPage ×5 spots + SecurityPage CCPA card); automation implications dropped.
+- **#5 SMS tab fully removed** (trigger + content + allowlist + grid-cols-5→4 + unused imports).
+- **#4:** "Audit Logs — 2 years" retention row removed.
+- **#6:** entity = **Swaggering Badger LLC d/b/a POAssociation**, **Florida** governing law + AAA arbitration seated in **St. Johns County, Florida** wired into Terms; "Our Property" names the entity.
+- **#7 backups softened** to provider terms (LegalPage grid + SecurityPage bullet).
+- **#9** role count → no number. **lastUpdated** → June 3, 2026.
+- **Confirmed for Jim:** `purgeExpiredDemos.ts` is NOT scheduled (manual script only) — demo-deletion commitment honored manually.
+
+**NEXT:** (1) #2 self-serve cancel feature is a separate build task; (2) DPA draft §11/preamble Delaware→Florida + entity name (deferred with the DPA artifact); (3) commit + push the working tree.
+
+---
+
+## SESSION 2026-06-03 (Edward / dev-lead) — Implemented Jim's AI-compliance handoff
+
+**Branch `feat/self-hosted-auth`. UNCOMMITTED. Build green (client vite + `dist/index.js` 1.2mb). `test/server/mcp-auth.test.ts` 20/20 green. Servers killed — user must click Run.** (3 unrelated pre-existing test failures remain: subdomain ×2, email-template branding ×1 — untouched files.)
+
+Worked from `persistent-memory/legal-ai-compliance-handoff.md` (Jim/Legal → me). Full dev→legal response appended to the BOTTOM of that doc (vendor audit + per-item status + residuals). Prior big working tree is now committed/published (`9b59785`); this session started clean except that handoff file.
+
+**Decision captured:** product chose **Option C** for the MCP egress posture (per-tenant toggle, third-party AI OFF by default).
+
+### Done
+- **P0-3 (fair-housing):** applicant name no longer sent to the LLM. `server/services/aiAnalysisService.ts` — stopped fetching the name for the breakdown prompt; inject neutral `"the applicant"` (only `breakdown-report-user/v1.md` ever had `{APPLICANT_NAME}`; main `analysis-user` never did). Human PDF still shows real name (separate fetch in `analysisWorker.ts`). Verified no MCP/AI path sets app status. Governance bullets added to ToS AI section.
+  - **Residual (Jim's call):** `FORM_DATA` can contain a homeowner-name field that still reaches the model — not auto-scrubbed.
+- **P0-1:** added Google(Gemini) + fal.ai rows to Privacy "Third-Party Services" (`client/src/pages/LegalPage.tsx`), `TODO(legal)` placeholders. Stability omitted (dead code, receives no data).
+- **P0-2 (Option C):** `communitySettings.allowThirdPartyAiClients` (Zod flag, no migration). **Server enforcement** `server/mcp/auth.ts` (`isAnthropicOauthClient` classifies OAuth clients by redirect-URI host; non-Anthropic hosted connectors 403 unless tenant opted in). **UI** `LevelUpModal.tsx` hides ChatGPT/Grok/Cursor tabs + egress acknowledgement; `LevelUpButton.tsx` threads the flag from `tenant.communitySettings`. **Admin toggle** Switch in `EditPropertyModal.tsx` AI tab. Tests added (`test/server/mcp-auth.test.ts`, also fixed pre-existing mock gaps: `markUserMcpConnected`, `getOauthClient`, `getTenant`, `res.setHeader`).
+  - **Enforcement limit:** hard server block only covers OAuth hosted connectors; plaintext tokens (Desktop/Cursor) are client-opaque → governed by UI + acknowledgement only.
+- **P1-5:** dismissible AI-processing notice on `ApplicationWizard.tsx` review step → `/legal?tab=privacy`.
+- **P1-4:** `TODO(legal)` flag at Security page AI section (published copy inaccurate — names only Anthropic).
+
+### Not done (follow-ups)
+- **P1-6 DPA tab** — not scaffolded (needs Jim's content; would add `'dpa'` to LegalPage tab allowlist).
+- **P2 micro-copy** — Jim-owned.
+- **Recommend deleting dead Stability AI image path** in `imageGenerationService.ts`.
+- **NEXT:** Jim supplies final copy for the `TODO(legal)` placeholders; user E2E of the third-party toggle (flip on in a community → ChatGPT tab appears + connects; off → 403); commit.
+
+### Round 2 (same session) — AI image generation DISABLED + comprehensive report default
+Per product decisions:
+- **GEMINI_API_KEY confirmed paid Tier 2/Postpay (no-training)** — P1-4 supportable for Anthropic + Gemini. fal.ai's terms checked: no-training is enterprise-only → unfavorable.
+- **AI image generation pulled** (mockups/renderings + blueprint "never worked well"). `server/services/imageGenerationService.ts` replaced with a **no-op stub** (keeps types + singleton interface; zero external calls — removes fal.ai/Flux, Stability, AND Gemini-image). `routes.ts` residence `generate-mockup` route now returns **410**. Analysis blueprint block self-skips (getActiveProvider→null). Client: `AIAnalysisButton.tsx` mockup checkbox removed + `includeMockups` default false; NeighborhoodDetail mockup UI was already hidden. **Result: fal.ai + Stability receive NO resident data → dropped from the Privacy subprocessor list (only Anthropic + Gemini-OCR remain).** Restore path: reinstate a provider impl (git history) + re-enable the two callers.
+- **Comprehensive (breakdown) report ON by default:** server `routes.ts:6737` `includeBreakdownReport=true`; client `AIAnalysisButton.tsx:57` default true. (This is the breakdown path already fixed for fair-housing in Round 1.)
+- Build green, server tests 251 pass / 3 pre-existing unrelated fails. Servers killed — click Run.
+- **Latent cleanup:** dead `mockupMutation`/`generateResidenceMockup` API method still exist client-side (unused); `STABILITY_API_KEY`/`FAL_AI_API_KEY` env still set (build scripts use FAL). Harmless.
+
+### Round 4 (same session) — Jim / Legal: ALL ToS/PP copy APPLIED to code (redeploy-ready)
+Per user ("get all the TOS and PP squared away so I can redeploy"): I applied every finalized copy item **directly into the client files** (Edward's `TODO(legal)` placeholders all filled — `grep TODO(legal)` now returns none). **`npx vite build` green.** Client-only — no server rebuild; redeploy = user's normal Run/deploy.
+- `SecurityPage.tsx` — AI section rewritten per-vendor (Anthropic + Gemini, no-training + retention caveats); fixed the inaccurate "only Anthropic" copy. Disclaimer adds "AI assists — does not make decisions."
+- `LegalPage.tsx` — Privacy subprocessor list (Anthropic (Claude) + Google (Gemini), fal.ai absent); ToS "Human Review & Fair Housing" full governance statement (names protected classes, allocates responsibility to associations); removed phantom "AI visualizations are approximations" bullet; IP "Your Content" now covers AI-subprocessor processing + no-train.
+- `LevelUpModal.tsx` — final MCP egress acknowledgement. `ApplicationWizard.tsx` — final resident point-of-collection notice. `AboutPage.tsx` — "AI-Powered" → "AI-Assisted," "Claude powers" → "Claude assists reviewers."
+- **DPA NOT in this redeploy** (separate artifact; correctly deferred until after the Neon→Azure migration). **Uncommitted** in working tree.
+
+### Round 3 (same session) — Jim / Legal: final copy delivered + DPA drafted
+Picking up Edward's dev→legal response in `legal-ai-compliance-handoff.md`:
+- **All 5 `TODO(legal)` copy items DELIVERED** (paste-ready, bottom of that doc): (1) **PRIORITY** Security AI-section per-vendor rewrite (current published copy is *inaccurate* — names only Anthropic, omits the live Gemini OCR resident-PII flow); (2) fair-housing/human-review ToS statement; (3) MCP egress disclosure + in-product acknowledgement (honest about the OAuth-block vs. plaintext-token-governed limit); (4) subprocessor list — **remove the fal.ai row Edward scaffolded** (no data flow now) + final Anthropic/Gemini entries; (5) resident point-of-collection one-liner. Plus **P2 micro-copy** (IP license, AUP line).
+- **Residual rulings:** `FORM_DATA` name leak = acceptable, not a blocker (advisory AI, applicant's own data; roadmap to redact identity fields). Stability = don't disclose, delete dead path. Remove the now-phantom "AI visualizations are approximations" ToS bullet. Reword AboutPage "AI-Powered" → "AI-Assisted."
+- **DPA drafted:** `persistent-memory/legal-dpa-draft.md` (v0.1, processor-side, Annexes A/B/C). **Needs Edward:** confirm SMS provider (Twilio?), Azure/SMTP2GO regions, and **Neon as the DB subprocessor**; then scaffold `/legal?tab=dpa`. Needs licensed-attorney review before any customer executes.
+- **SB task** `0a7c2a12-08d1-4f25-81ee-2c2f4f720d50` → dev-lead@poassociation (filed via REST — MCP/SSE session was dead all session, `Unknown session`). My legal-counsel inbox: empty.
+- Identity note: ran as **Jim/legal-counsel** though `.sb-identity` says Edward/dev-lead (human confirmed) — memory `session-role-legal-counsel`.
 
 ---
 

@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Shield, FileText, Database, MessageSquare, Mail, Clock, Globe, Lock, CreditCard, Server, MapPin, Bot, Bell, Trash2, Archive, AlertCircle, Phone, CheckCircle } from "lucide-react";
+import { Shield, FileText, Database, Mail, Clock, Globe, Lock, CreditCard, Server, MapPin, Bot, Trash2, Archive, AlertCircle, CheckCircle, ScanText, FileCheck } from "lucide-react";
 import { Link } from "wouter";
 import { ContactModal } from "@/components/ContactModal";
 
@@ -27,7 +27,7 @@ function getSubdomain(): string | null {
 function getDefaultTab(): string {
   const urlParams = new URLSearchParams(window.location.search);
   const tab = urlParams.get('tab');
-  if (tab && ['privacy', 'terms', 'data-retention', 'sms'].includes(tab)) {
+  if (tab && ['privacy', 'terms', 'data-retention', 'dpa'].includes(tab)) {
     return tab;
   }
   return 'privacy';
@@ -108,7 +108,7 @@ function DataTable({ rows }: { rows: { type: string; period: string; reason: str
 export default function LegalPage() {
   const subdomain = getSubdomain();
   const currentYear = new Date().getFullYear();
-  const lastUpdated = "December 8, 2025";
+  const lastUpdated = "June 3, 2026";
   const defaultTab = getDefaultTab();
   const [contactModalOpen, setContactModalOpen] = useState(false);
 
@@ -161,9 +161,9 @@ export default function LegalPage() {
               <Database className="h-4 w-4" />
               <span className="hidden sm:inline">Data</span>
             </TabsTrigger>
-            <TabsTrigger value="sms" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">SMS</span>
+            <TabsTrigger value="dpa" className="flex items-center gap-2">
+              <FileCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">DPA</span>
             </TabsTrigger>
           </TabsList>
 
@@ -245,7 +245,8 @@ export default function LegalPage() {
                       { icon: Server, name: "Microsoft Azure", desc: "Document storage" },
                       { icon: Mail, name: "SMTP2GO", desc: "Email delivery" },
                       { icon: MapPin, name: "Google Maps", desc: "Address verification" },
-                      { icon: Bot, name: "Anthropic", desc: "AI-powered analysis" }
+                      { icon: Bot, name: "Anthropic (Claude)", desc: "AI-assisted application analysis and form generation" },
+                      { icon: ScanText, name: "Google (Gemini)", desc: "Document text recognition (OCR) from uploaded documents" }
                     ].map((service, i) => (
                       <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
                         <service.icon className="h-5 w-5 text-muted-foreground" />
@@ -255,6 +256,21 @@ export default function LegalPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="bg-muted/50 rounded-lg p-4 mt-4 text-sm">
+                    <p className="font-medium text-foreground mb-2">Optional third-party AI connections</p>
+                    <p className="text-muted-foreground">
+                      Reviewers may connect external AI assistants to retrieve application data through our
+                      reviewer connector. Connections to Anthropic's Claude are covered by the data
+                      protections described in this policy. With an account administrator's opt-in,
+                      reviewers may also connect third-party AI tools (such as ChatGPT, Grok, or Cursor);
+                      when they do, application data — including documents and the personal information they
+                      contain — is transmitted to those providers, which are not our subprocessors and are
+                      governed by their own terms and privacy policies. This option is off by default and is
+                      enabled only at the association's choice. The association and the connecting reviewer
+                      are responsible for data shared through such tools.
+                    </p>
                   </div>
                 </Section>
 
@@ -288,11 +304,11 @@ export default function LegalPage() {
                     <InfoCard
                       title="All Users Can"
                       items={[
-                        "Access and download your personal data",
+                        "Request a copy of your personal data",
                         "Correct inaccurate information",
                         "Request deletion of your data",
                         "Opt out of non-essential communications",
-                        "Export your data in portable format"
+                        "Request a portable copy of your data"
                       ]}
                     />
 
@@ -410,8 +426,9 @@ export default function LegalPage() {
 
                     <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
                       <p className="text-sm">
-                        <span className="font-medium">AI Credits:</span> Each plan includes monthly AI analysis credits.
-                        Additional usage is billed at $1.25–$2.00 per analysis.
+                        <span className="font-medium">AI Credits:</span> Each plan includes monthly AI credits.
+                        Additional usage is billed at $1.25–$2.00 per credit (varies by plan tier). A single
+                        AI analysis may use multiple credits depending on the options selected.
                       </p>
                     </div>
                   </div>
@@ -428,13 +445,39 @@ export default function LegalPage() {
                         <ul className="space-y-1 text-muted-foreground">
                           <li>• AI analyses are for <strong>informational purposes only</strong></li>
                           <li>• Results do not constitute legal, architectural, or professional advice</li>
-                          <li>• AI-generated visualizations are approximations</li>
+                          <li>• AI assists human reviewers — it does not make decisions</li>
                           <li>• Always verify property research data independently</li>
                           <li>• Consult qualified professionals for important decisions</li>
                         </ul>
                       </div>
                     </div>
                   </div>
+
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2 mt-3">
+                    <p className="font-medium text-foreground text-sm">Human Review &amp; Fair Housing</p>
+                    <p className="text-sm text-muted-foreground">
+                      Our AI tools assist human reviewers — they never make or finalize decisions.
+                      Every approval, denial, or other formal decision on an application is made by an
+                      authorized member of your association or its management. AI output is advisory only
+                      and is one input a reviewer may consider.
+                    </p>
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      <li>• Formal decisions cannot be executed by AI or through any automated channel</li>
+                      <li>• We minimize the personal information sent to AI providers and do not send an applicant's name to the model for its compliance analysis</li>
+                      <li>• AI output must not be used as the sole basis for any decision, and must never be used to discriminate against any person on the basis of race, color, religion, sex, disability, familial status, national origin, or any other characteristic protected by the federal Fair Housing Act or applicable state or local law</li>
+                    </ul>
+                    <p className="text-sm text-muted-foreground">
+                      Associations and their reviewers remain solely responsible for their decisions and for
+                      compliance with the Fair Housing Act and all applicable fair-housing and
+                      anti-discrimination laws. If you believe a decision was made unfairly, you may request
+                      human re-review through your association or by contacting us.
+                    </p>
+                  </div>
+
+                  <p className="text-sm text-muted-foreground">
+                    AI-generated output may not be used as the sole basis for any decision affecting
+                    another person, or for any unlawful or discriminatory purpose.
+                  </p>
                 </Section>
 
                 <Separator />
@@ -444,15 +487,17 @@ export default function LegalPage() {
                     <div className="p-4 rounded-lg bg-muted/30">
                       <p className="font-medium text-foreground mb-2">Our Property</p>
                       <p className="text-sm">
-                        The platform, software, design, and branding are owned by {companyName}
-                        and protected by intellectual property laws.
+                        The platform, software, design, and branding are owned by Swaggering Badger LLC
+                        (d/b/a POAssociation) and protected by intellectual property laws.
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-muted/30">
                       <p className="font-medium text-foreground mb-2">Your Content</p>
                       <p className="text-sm">
-                        You retain ownership of content you upload. You grant us license to store
-                        and process it to provide our services.
+                        You retain ownership of content you upload. You grant us a license to store
+                        and process it to provide our services, including processing by the third-party
+                        AI providers described in our Privacy Policy. We do not use your content, and do
+                        not permit those providers to use it, to train AI models.
                       </p>
                     </div>
                   </div>
@@ -467,8 +512,10 @@ export default function LegalPage() {
                       fees paid in the 12 months preceding any claim.
                     </p>
                     <p>
-                      Disputes are resolved through binding arbitration under American Arbitration
-                      Association rules. Terms are governed by Delaware law.
+                      These Terms are an agreement between you and Swaggering Badger LLC d/b/a POAssociation
+                      ("we," "us"). These Terms are governed by the laws of the State of Florida, without
+                      regard to conflict-of-laws rules. Disputes are resolved by binding arbitration under
+                      the American Arbitration Association's rules, seated in St. Johns County, Florida.
                     </p>
                   </div>
                 </Section>
@@ -480,7 +527,7 @@ export default function LegalPage() {
                     <div className="p-4 rounded-lg border">
                       <p className="font-medium text-foreground mb-2">By You</p>
                       <p className="text-muted-foreground">
-                        Cancel anytime through account settings. Request data export before termination.
+                        Cancel anytime through account settings. Request a copy of your data before termination.
                       </p>
                     </div>
                     <div className="p-4 rounded-lg border">
@@ -529,7 +576,6 @@ export default function LegalPage() {
                     { type: "Financial Records", period: "7 years", reason: "Tax requirements" },
                     { type: "Signatures", period: "7 years", reason: "Legal validity" },
                     { type: "Session Data", period: "7 days", reason: "Authentication" },
-                    { type: "Audit Logs", period: "2 years", reason: "Security" },
                     { type: "Documents", period: "Subscription + 90 days", reason: "Service delivery" },
                   ]} />
                 </Section>
@@ -540,9 +586,9 @@ export default function LegalPage() {
                   <div className="space-y-4">
                     <div className="grid sm:grid-cols-3 gap-4">
                       {[
-                        { step: "1", title: "Grace Period", desc: "90 days to reactivate or export" },
-                        { step: "2", title: "Data Export", desc: "Download your data anytime" },
-                        { step: "3", title: "Deletion", desc: "Non-essential data removed" }
+                        { step: "1", title: "Grace Period", desc: "90 days to reactivate or request a copy" },
+                        { step: "2", title: "Data Copy", desc: "Request your data anytime" },
+                        { step: "3", title: "Deletion", desc: "Non-essential data removed on request or at the end of the applicable retention period" }
                       ].map((item, i) => (
                         <div key={i} className="p-4 rounded-lg border text-center">
                           <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center mx-auto mb-2">
@@ -592,20 +638,9 @@ export default function LegalPage() {
                 <Separator />
 
                 <Section icon={Server} title="Backups">
-                  <div className="grid sm:grid-cols-3 gap-4 text-center">
-                    {[
-                      { type: "Daily", period: "30 days" },
-                      { type: "Weekly", period: "90 days" },
-                      { type: "Monthly", period: "1 year" }
-                    ].map((backup, i) => (
-                      <div key={i} className="p-4 rounded-lg bg-muted/30">
-                        <p className="font-medium text-foreground">{backup.type} Backups</p>
-                        <p className="text-2xl font-bold text-primary mt-1">{backup.period}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-sm mt-4">
-                    Deleted data may persist in backups until the retention period expires.
+                  <p className="text-sm">
+                    We rely on our database and storage providers' automated backups and point-in-time
+                    recovery. Deleted data may persist in provider backups until those backups age out.
                   </p>
                 </Section>
 
@@ -623,143 +658,88 @@ export default function LegalPage() {
             </Card>
           </TabsContent>
 
-          {/* SMS Policy */}
-          <TabsContent value="sms">
+          {/* Data Processing Addendum (P1-6).
+              Scaffold: controller/processor framing + current subprocessor list + request path.
+              The full DPA contract text is pending licensed-attorney review
+              (see persistent-memory/legal-dpa-draft.md) and is provided to business
+              customers on request; an account-admin review/accept flow is a follow-up. */}
+          <TabsContent value="dpa">
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-3 text-2xl">
-                  <MessageSquare className="h-6 w-6 text-primary" />
-                  SMS Policy
+                  <FileCheck className="h-6 w-6 text-primary" />
+                  Data Processing Addendum
                 </CardTitle>
                 <p className="text-muted-foreground mt-2">
-                  How we use text messaging to communicate with you and your rights regarding SMS.
+                  For our business customers — management companies and associations — who entrust us
+                  with their residents' personal data.
                 </p>
               </CardHeader>
               <CardContent className="space-y-8">
 
-                <Section icon={Bell} title="Message Types">
-                  <p>By opting in, you may receive text messages for:</p>
+                <Section icon={Shield} title="How We Process Your Data">
+                  <p>
+                    {companyName} is a service provider to management companies and associations
+                    (the "Customer"). We process residents' personal data — names, addresses,
+                    application documents, signatures, and related information — <strong>on the
+                    Customer's behalf and under their instructions</strong>. In data-protection terms,
+                    the Customer is the controller and {companyName} is the processor.
+                  </p>
+                  <p>
+                    Our Data Processing Addendum sets out these roles, our security and confidentiality
+                    obligations, breach-notification commitments, the rights of data subjects, and the
+                    list of sub-processors below. It supplements our Terms of Service.
+                  </p>
+                </Section>
 
-                  <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                <Separator />
+
+                <Section icon={Globe} title="Sub-processors">
+                  <p>
+                    We engage the following sub-processors to provide the service. Each is bound by
+                    data-protection obligations no less protective than our DPA. We give advance notice
+                    before adding or replacing a sub-processor that processes personal data.
+                  </p>
+                  <div className="grid gap-3 mt-4">
                     {[
-                      { icon: Lock, title: "Security Alerts", desc: "Login codes, account security" },
-                      { icon: FileText, title: "Application Updates", desc: "Status changes, approvals" },
-                      { icon: Clock, title: "Meeting Reminders", desc: "Upcoming events, RSVPs" },
-                      { icon: AlertCircle, title: "Compliance Alerts", desc: "Deadline notifications" }
-                    ].map((type, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
-                        <type.icon className="h-5 w-5 text-primary mt-0.5" />
+                      { name: "Anthropic (Claude)", desc: "AI-assisted application analysis and form generation" },
+                      { name: "Google (Gemini)", desc: "Document text recognition (OCR) from uploaded documents" },
+                      { name: "Google Maps", desc: "Address verification / geocoding" },
+                      { name: "Stripe", desc: "Payment processing (no card data stored by us)" },
+                      { name: "Microsoft Azure", desc: "Document and file storage" },
+                      { name: "SMTP2GO", desc: "Transactional email delivery" },
+                      { name: "Neon", desc: "Primary application database" },
+                    ].map((sp, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-foreground">{type.title}</p>
-                          <p className="text-sm text-muted-foreground">{type.desc}</p>
+                          <span className="font-medium text-foreground">{sp.name}</span>
+                          <span className="text-muted-foreground"> — {sp.desc}</span>
                         </div>
                       </div>
                     ))}
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Optional, customer-enabled third-party AI connections (the reviewer
+                    "bring-your-own-LLM" connector) route data to providers outside this DPA and are
+                    off by default — see the Privacy Policy.
+                  </p>
                 </Section>
 
                 <Separator />
 
-                <Section icon={CheckCircle} title="Opting In">
-                  <div className="space-y-4">
-                    <InfoCard
-                      items={[
-                        "Enable SMS in your profile settings",
-                        "Provide phone number during registration",
-                        "Respond to an opt-in prompt"
-                      ]}
-                    />
-
-                    <div className="p-4 rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
-                      <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                        SMS consent is never required to use our services or make purchases.
-                      </p>
-                    </div>
-                  </div>
-                </Section>
-
-                <Separator />
-
-                <Section icon={MessageSquare} title="Message Frequency">
-                  <div className="bg-muted/30 rounded-lg p-6 text-center">
-                    <p className="text-3xl font-bold text-primary">0–20</p>
-                    <p className="text-muted-foreground">messages per month (estimated)</p>
-                    <p className="text-sm mt-2">Frequency varies based on your activity and preferences</p>
-                  </div>
-                </Section>
-
-                <Separator />
-
-                <Section icon={Phone} title="Opt Out & Help">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="p-6 rounded-lg border text-center">
-                      <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-3">
-                        <span className="font-bold text-red-600 dark:text-red-400">STOP</span>
-                      </div>
-                      <p className="font-medium">To Unsubscribe</p>
-                      <p className="text-sm text-muted-foreground">Reply STOP to any message</p>
-                    </div>
-                    <div className="p-6 rounded-lg border text-center">
-                      <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-3">
-                        <span className="font-bold text-blue-600 dark:text-blue-400">HELP</span>
-                      </div>
-                      <p className="font-medium">For Assistance</p>
-                      <p className="text-sm text-muted-foreground">Reply HELP to any message</p>
-                    </div>
-                  </div>
-                </Section>
-
-                <Separator />
-
-                <Section icon={CreditCard} title="Rates & Carriers">
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-                      <p className="text-sm">
-                        <span className="font-medium">Message and data rates may apply.</span> Standard carrier
-                        rates apply based on your mobile plan. {companyName} does not charge for SMS.
-                      </p>
-                    </div>
-
-                    <div className="text-sm text-muted-foreground">
-                      <p className="mb-2">Compatible with major carriers including:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {["AT&T", "Verizon", "T-Mobile", "Sprint", "US Cellular"].map((carrier, i) => (
-                          <span key={i} className="px-3 py-1 rounded-full bg-muted">{carrier}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </Section>
-
-                <Separator />
-
-                <Section icon={Shield} title="Privacy & Compliance">
-                  <div className="space-y-3 text-sm">
-                    <InfoCard
-                      title="We Never"
-                      items={[
-                        "Sell your phone number to third parties",
-                        "Share your number for marketing",
-                        "Send promotional messages without consent"
-                      ]}
-                    />
-
-                    <p className="text-muted-foreground mt-4">
-                      We comply with the Telephone Consumer Protection Act (TCPA) and maintain records
-                      of all consent and opt-out requests.
+                <Section icon={FileCheck} title="Requesting the DPA">
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-3 text-sm">
+                    <p className="text-muted-foreground">
+                      Our Data Processing Addendum is available to business customers on request.
+                      Account administrators will also be able to review and accept it from their
+                      account settings.
                     </p>
+                    <Button size="sm" onClick={() => setContactModalOpen(true)}>
+                      Request the DPA
+                    </Button>
                   </div>
                 </Section>
-
-                <Separator />
-
-                <div className="bg-primary/5 rounded-lg p-6 text-center space-y-3">
-                  <p className="font-medium">Questions about SMS?</p>
-                  <Button onClick={() => setContactModalOpen(true)} variant="outline" className="gap-2">
-                    <Mail className="h-4 w-4" />
-                    Contact Us
-                  </Button>
-                </div>
 
               </CardContent>
             </Card>

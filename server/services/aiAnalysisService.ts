@@ -760,14 +760,12 @@ export class AiAnalysisService {
     // Get uploaded documents for this application (including OCR text if available)
     const documents = await storage.getDocumentsWithOcr(applicationId);
 
-    // Get applicant user info if available
-    let applicantName = '';
-    if (application?.submittedByUserId) {
-      const user = await storage.getUser(application.submittedByUserId);
-      if (user) {
-        applicantName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || '';
-      }
-    }
+    // Fair-housing / data-minimization (Legal P0-3): the applicant's name is a
+    // protected-class proxy and must NOT be sent to the LLM for the compliance
+    // analysis. We intentionally do NOT fetch it here. The human-facing PDF
+    // report fetches the name separately (see analysisWorker.ts) so reviewers
+    // still see who applied — only the model is blinded.
+    const applicantName = '';
 
     // Get lot type from form data if available
     const formData = (application?.formData as Record<string, unknown>) || {};
@@ -831,7 +829,8 @@ export class AiAnalysisService {
       .replace('{PROPERTY_ADDRESS}', context.application.propertyAddress)
       .replace('{LOT_TYPE}', context.lotType || '(Not specified)')
       .replace('{SUBMITTED_DATE}', context.application.submittedAt.toISOString().split('T')[0])
-      .replace('{APPLICANT_NAME}', context.applicantName || '(Not specified)')
+      // Fair-housing (Legal P0-3): never send the real applicant name to the model.
+      .replace('{APPLICANT_NAME}', 'the applicant')
       .replace('{FORM_DATA}', formDataFormatted)
       .replace('{FORM_SCHEMA}', formSchemaFormatted)
       .replace('{RELEVANT_BYLAWS}', relevantBylaws)

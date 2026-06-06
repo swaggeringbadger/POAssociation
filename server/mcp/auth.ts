@@ -1,6 +1,35 @@
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
-import type { McpToken } from "@shared/schema";
+import type { McpToken, OauthClient, CommunitySettings } from "@shared/schema";
+
+// Redirect-URI hosts controlled by Anthropic. An OAuth client whose registered
+// redirect URIs all resolve to one of these is recognized as an Anthropic
+// (Claude.ai / Claude Desktop) client — a disclosed subprocessor.
+const ANTHROPIC_REDIRECT_HOSTS = ["claude.ai", "claude.com", "anthropic.com"] as const;
+
+function hostOf(uri: string): string | null {
+  try {
+    return new URL(uri).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classify an OAuth client as Anthropic-controlled (Legal P0-2). We require ALL
+ * registered redirect URIs to be Anthropic hosts — a client is only treated as
+ * Anthropic when we're certain. redirect_uri host is the robust discriminator
+ * (the client_name in DCR is self-asserted and spoofable, so it is NOT trusted).
+ * Clients with no/loopback/other-vendor redirects are treated as third-party.
+ */
+export function isAnthropicOauthClient(client: Pick<OauthClient, "redirectUris">): boolean {
+  const uris = client.redirectUris ?? [];
+  if (uris.length === 0) return false;
+  return uris.every((u) => {
+    const h = hostOf(u);
+    return !!h && ANTHROPIC_REDIRECT_HOSTS.some((d) => h === d || h.endsWith(`.${d}`));
+  });
+}
 
 export const REVIEWER_ROLES = [
   "poa_board_member",
@@ -106,6 +135,39 @@ export async function bearerAuthMiddleware(
   if (!hasReviewerRole) {
     res.status(403).json({ error: "No reviewer role in scoped tenant" });
     return;
+  }
+
+  // Legal P0-2 — per-tenant governance of non-Anthropic MCP clients. OAuth
+  // clients self-identify via their registered redirect URIs, so we can block
+  // third-party (ChatGPT/Grok/etc.) hosted connectors unless the community has
+  // explicitly opted in. Fail closed on lookup error. (Plaintext tokens and
+  // loopback-redirect clients are client-opaque and are governed at the UI
+  // layer + acknowledgement instead — see LevelUpModal.)
+  if (tokenRow.source === "oauth" && tokenRow.oauthClientId) {
+    try {
+      const client = await storage.getOauthClient(tokenRow.oauthClientId);
+      if (client && !isAnthropicOauthClient(client)) {
+        const tenant = await storage.getTenant(tokenRow.tenantId);
+        const settings = tenant?.communitySettings as CommunitySettings | undefined;
+        if (settings?.allowThirdPartyAiClients !== true) {
+          setWwwAuthenticate(
+            req,
+            res,
+            "insufficient_scope",
+            "Non-Anthropic AI clients are not enabled for this community",
+          );
+          res.status(403).json({
+            error:
+              "This community has not enabled non-Anthropic AI clients. An account administrator can allow third-party AI connections in the community's settings.",
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("[mcp-auth] third-party client governance check failed", err);
+      res.status(500).json({ error: "Auth error" });
+      return;
+    }
   }
 
   req.mcpCtx = {

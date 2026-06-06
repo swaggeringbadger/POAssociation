@@ -105,7 +105,7 @@ export default function SecurityPage() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { icon: Lock, title: "256-bit SSL/TLS", desc: "All data encrypted in transit" },
-            { icon: KeyRound, title: "Zero Passwords Stored", desc: "OIDC authentication only" },
+            { icon: KeyRound, title: "Bcrypt-Hashed Passwords", desc: "Never stored in plain text" },
             { icon: CreditCard, title: "PCI via Stripe", desc: "Payment data never touches our servers" },
             { icon: Layers, title: "Tenant Isolation", desc: "Complete data separation" },
           ].map((card, i) => (
@@ -138,7 +138,7 @@ export default function SecurityPage() {
                   items={[
                     "Neon PostgreSQL with mandatory SSL connections",
                     "Data encrypted at rest with AES-256",
-                    "Automated daily backups with point-in-time recovery",
+                    "Automated backups and point-in-time recovery provided by our database provider",
                   ]}
                 />
                 <InfoCard
@@ -157,22 +157,23 @@ export default function SecurityPage() {
             {/* Authentication & Access Control */}
             <Section icon={Fingerprint} title="Authentication & Access Control">
               <p>
-                We use OpenID Connect (OIDC) for authentication — we never store, process, or even see your password.
+                We use email + password authentication. Passwords are never stored in plain text — only as
+                salted bcrypt hashes (cost factor 12).
               </p>
               <div className="grid sm:grid-cols-2 gap-4 mt-4">
                 <InfoCard
                   title="Authentication"
                   items={[
-                    "OIDC via Replit Auth — no password database",
+                    "Email + password — salted bcrypt hashes (cost factor 12), never stored in plain text",
                     "PostgreSQL-backed server-side sessions",
-                    "httpOnly, Secure, SameSite cookies",
+                    "httpOnly, Secure, SameSite=Lax cookies",
                     "7-day session expiration",
                   ]}
                 />
                 <InfoCard
                   title="Authorization"
                   items={[
-                    "9-role RBAC system (super admin through homeowner)",
+                    "Role-based access control (RBAC) across staff, board, and homeowner roles",
                     "Multi-tenant query scoping on every request",
                     "Role-based access checks on protected API routes",
                     "Tenant isolation verified before data access",
@@ -230,15 +231,19 @@ export default function SecurityPage() {
             {/* AI & Data Privacy */}
             <Section icon={Bot} title="AI & Data Privacy">
               <p>
-                Our AI features use Anthropic's Claude API with strict data handling practices.
+                Our AI features are powered by two third-party providers — Anthropic (Claude)
+                and Google (Gemini). We send only the data needed for the specific task
+                requested, and we deliberately use commercial/paid API tiers that do not train
+                models on your data.
               </p>
               <div className="grid sm:grid-cols-2 gap-4 mt-4">
                 <InfoCard
                   title="How We Use AI"
                   items={[
-                    "Stateless API requests — no persistent AI memory",
-                    "Data sent only for the specific analysis requested",
-                    "Anthropic does not use API inputs for model training",
+                    "Anthropic (Claude) — powers application analysis and AI-assisted form generation. We use Anthropic's commercial API, which does not use inputs or outputs to train its models. Data may be retained up to 30 days for trust-and-safety monitoring, then deleted (longer only where legally required or for flagged activity).",
+                    "Google (Gemini) — performs optical character recognition (OCR) on documents you upload so their text can be reviewed. We use Google's paid Gemini API tier, which does not use inputs to train Google's models. Data may be retained briefly for abuse detection and legal compliance, then deleted.",
+                    "Requests are stateless — no provider keeps a persistent memory of your account between requests.",
+                    "We do not permit any AI provider to use your content to train or improve their models.",
                   ]}
                 />
                 <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
@@ -247,8 +252,9 @@ export default function SecurityPage() {
                     <div className="space-y-2 text-sm">
                       <p className="font-medium text-foreground">AI Disclaimer</p>
                       <p className="text-muted-foreground">
-                        AI-generated analyses are for informational purposes only and do not constitute
-                        professional, legal, or architectural advice. Always verify results independently.
+                        AI-generated analyses and document extractions are for informational purposes only
+                        and do not constitute professional, legal, or architectural advice. AI assists human
+                        reviewers — it does not make decisions. Always verify results independently.
                       </p>
                     </div>
                   </div>
@@ -285,7 +291,7 @@ export default function SecurityPage() {
                 <div className="p-4 rounded-lg border">
                   <p className="font-medium mb-2">CCPA / GDPR</p>
                   <p className="text-sm text-muted-foreground">
-                    Users can access, export, correct, or delete their personal data.
+                    Users can access, request a copy of, correct, or delete their personal data.
                     We do not sell personal information. See our{" "}
                     <Link href="/legal?tab=privacy" className="text-primary hover:underline">
                       Privacy Policy
@@ -296,7 +302,7 @@ export default function SecurityPage() {
                 <div className="p-4 rounded-lg border">
                   <p className="font-medium mb-2">Data Retention</p>
                   <p className="text-sm text-muted-foreground">
-                    We maintain clear retention periods for all data categories with automatic cleanup.
+                    We maintain clear retention periods for all data categories.
                     Review our{" "}
                     <Link href="/legal?tab=data-retention" className="text-primary hover:underline">
                       Data Retention Policy

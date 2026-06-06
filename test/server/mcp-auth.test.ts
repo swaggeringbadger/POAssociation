@@ -17,18 +17,24 @@ vi.mock("../../server/storage", () => ({
     getMcpTokenByValue: vi.fn(),
     getUserRolesForTenant: vi.fn(),
     getApplication: vi.fn(),
+    markUserMcpConnected: vi.fn(),
+    getOauthClient: vi.fn(),
+    getTenant: vi.fn(),
   },
 }));
 
 // Import after mock so modules resolve to the mocked storage
 const { storage } = await import("../../server/storage");
-const { bearerAuthMiddleware, assertReviewerAccess, REVIEWER_ROLES } =
+const { bearerAuthMiddleware, assertReviewerAccess, REVIEWER_ROLES, isAnthropicOauthClient } =
   await import("../../server/mcp/auth");
 
 type StorageMock = {
   getMcpTokenByValue: ReturnType<typeof vi.fn>;
   getUserRolesForTenant: ReturnType<typeof vi.fn>;
   getApplication: ReturnType<typeof vi.fn>;
+  markUserMcpConnected: ReturnType<typeof vi.fn>;
+  getOauthClient: ReturnType<typeof vi.fn>;
+  getTenant: ReturnType<typeof vi.fn>;
 };
 const s = storage as unknown as StorageMock;
 
@@ -41,6 +47,7 @@ function mockReqRes(headers: Record<string, string> = {}) {
   const res = {
     status: vi.fn().mockReturnThis(),
     json,
+    setHeader: vi.fn(),
   } as unknown as Response;
   const next: NextFunction = vi.fn();
   return { req, res, next, json };
@@ -65,6 +72,8 @@ function activeToken(overrides: Partial<any> = {}) {
 describe("bearerAuthMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Fire-and-forget connect-stamp returns a promise so `.catch()` is safe.
+    s.markUserMcpConnected.mockResolvedValue(true);
   });
 
   it("returns 401 when Authorization header is missing", async () => {
@@ -137,6 +146,7 @@ describe("bearerAuthMiddleware", () => {
   it("recognizes every role in REVIEWER_ROLES", async () => {
     for (const role of REVIEWER_ROLES) {
       vi.clearAllMocks();
+      s.markUserMcpConnected.mockResolvedValue(true);
       s.getMcpTokenByValue.mockResolvedValue(activeToken());
       s.getUserRolesForTenant.mockResolvedValue([{ role }]);
       const { req, res, next } = mockReqRes({ authorization: "Bearer mcpr_secret" });
@@ -144,6 +154,88 @@ describe("bearerAuthMiddleware", () => {
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
     }
+  });
+
+  // Legal P0-2: per-tenant governance of non-Anthropic MCP clients.
+  describe("third-party AI client governance", () => {
+    beforeEach(() => {
+      s.getUserRolesForTenant.mockResolvedValue([{ role: "poa_board_member" }]);
+    });
+
+    it("blocks a non-Anthropic OAuth client when the tenant has not opted in", async () => {
+      s.getMcpTokenByValue.mockResolvedValue(
+        activeToken({ source: "oauth", oauthClientId: "client-chatgpt" }),
+      );
+      s.getOauthClient.mockResolvedValue({
+        id: "client-chatgpt",
+        redirectUris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+      });
+      s.getTenant.mockResolvedValue({ id: "tenant-1", communitySettings: {} });
+      const { req, res, next } = mockReqRes({ authorization: "Bearer mcpr_secret" });
+      await bearerAuthMiddleware(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("allows a non-Anthropic OAuth client when the tenant has opted in", async () => {
+      s.getMcpTokenByValue.mockResolvedValue(
+        activeToken({ source: "oauth", oauthClientId: "client-chatgpt" }),
+      );
+      s.getOauthClient.mockResolvedValue({
+        id: "client-chatgpt",
+        redirectUris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+      });
+      s.getTenant.mockResolvedValue({
+        id: "tenant-1",
+        communitySettings: { allowThirdPartyAiClients: true },
+      });
+      const { req, res, next } = mockReqRes({ authorization: "Bearer mcpr_secret" });
+      await bearerAuthMiddleware(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it("always allows an Anthropic OAuth client, even when third-party is off", async () => {
+      s.getMcpTokenByValue.mockResolvedValue(
+        activeToken({ source: "oauth", oauthClientId: "client-claude" }),
+      );
+      s.getOauthClient.mockResolvedValue({
+        id: "client-claude",
+        redirectUris: ["https://claude.ai/api/mcp/auth_callback"],
+      });
+      s.getTenant.mockResolvedValue({ id: "tenant-1", communitySettings: {} });
+      const { req, res, next } = mockReqRes({ authorization: "Bearer mcpr_secret" });
+      await bearerAuthMiddleware(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(s.getTenant).not.toHaveBeenCalled(); // short-circuits before the tenant lookup
+    });
+
+    it("does not gate plaintext tokens (client is opaque, governed at the UI)", async () => {
+      s.getMcpTokenByValue.mockResolvedValue(activeToken({ source: "plaintext" }));
+      const { req, res, next } = mockReqRes({ authorization: "Bearer mcpr_secret" });
+      await bearerAuthMiddleware(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(s.getOauthClient).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("isAnthropicOauthClient", () => {
+  it("recognizes Anthropic redirect hosts", () => {
+    expect(isAnthropicOauthClient({ redirectUris: ["https://claude.ai/api/mcp/auth_callback"] })).toBe(true);
+    expect(isAnthropicOauthClient({ redirectUris: ["https://console.anthropic.com/cb"] })).toBe(true);
+  });
+
+  it("rejects third-party and loopback/empty redirects", () => {
+    expect(isAnthropicOauthClient({ redirectUris: ["https://chatgpt.com/cb"] })).toBe(false);
+    expect(isAnthropicOauthClient({ redirectUris: ["http://localhost:5173/cb"] })).toBe(false);
+    expect(isAnthropicOauthClient({ redirectUris: [] })).toBe(false);
+  });
+
+  it("requires ALL redirect URIs to be Anthropic (no mixed-host bypass)", () => {
+    expect(
+      isAnthropicOauthClient({ redirectUris: ["https://claude.ai/cb", "https://evil.com/cb"] }),
+    ).toBe(false);
   });
 });
 

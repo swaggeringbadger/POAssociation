@@ -158,6 +158,12 @@ export const communitySettingsSchema = z.object({
 
   // Public records & resources (AI-generated markdown, editable by admins)
   publicResources: z.string().optional(),
+
+  // MCP data-egress governance (Legal P0-2). When false/unset, only Anthropic
+  // MCP clients (Claude.ai / Claude Desktop) may connect; non-Anthropic clients
+  // (ChatGPT, Grok, Cursor, etc.) are blocked because they are not disclosed
+  // subprocessors. An account admin must explicitly opt in per community.
+  allowThirdPartyAiClients: z.boolean().optional(),
 });
 
 export type CommunitySettings = z.infer<typeof communitySettingsSchema>;

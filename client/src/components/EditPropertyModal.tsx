@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -144,6 +145,7 @@ export default function EditPropertyModal({
           numberOfLots: property.communitySettings?.numberOfLots,
           heroImageFocusX: property.communitySettings?.heroImageFocusX,
           heroImageFocusY: property.communitySettings?.heroImageFocusY,
+          allowThirdPartyAiClients: property.communitySettings?.allowThirdPartyAiClients ?? false,
         },
       });
     } else if (isCreating) {
@@ -994,6 +996,41 @@ export default function EditPropertyModal({
               </div>
               <AiContextSourcesManager tenantId={property.id} designGuidelinesUrl={property.designGuidelinesUrl} />
               <AiInstructionsEditor tenantId={property.id} />
+
+              {/* Legal P0-2: per-community governance of non-Anthropic AI clients. */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="allow-third-party-ai" className="text-sm font-medium">
+                      Allow third-party AI clients
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      When off, only Anthropic AI clients (Claude.ai and Claude Desktop) may connect
+                      to this community via the AI reviewer connector. Turn on to also allow
+                      ChatGPT, Grok, Cursor and other MCP clients. These providers are not
+                      POAssociation subprocessors — enabling them sends application data, including
+                      resident documents, to that provider under your responsibility.
+                    </p>
+                  </div>
+                  <Switch
+                    id="allow-third-party-ai"
+                    checked={formData.communitySettings.allowThirdPartyAiClients === true}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        communitySettings: {
+                          ...prev.communitySettings,
+                          allowThirdPartyAiClients: checked,
+                        },
+                      }))
+                    }
+                    data-testid="switch-allow-third-party-ai"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Saved when you click <span className="font-medium">Save Changes</span>.
+                </p>
+              </div>
             </TabsContent>
           )}
         </Tabs>

@@ -21,7 +21,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, Image, FileSearch, Wand2, ScanText } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, Zap, Satellite, FileSearch, Wand2, ScanText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   checkAiCredits,
@@ -53,8 +53,10 @@ export function AIAnalysisButton({
 }: AIAnalysisButtonProps) {
   const [open, setOpen] = useState(false);
   const [includeSatellite, setIncludeSatellite] = useState(true);
-  const [includeMockups, setIncludeMockups] = useState(true);
-  const [includeBreakdownReport, setIncludeBreakdownReport] = useState(false);
+  // AI image mockups are disabled (2026-06-03); kept false so cost/telemetry stay clean.
+  const [includeMockups] = useState(false);
+  // Comprehensive breakdown report is on by default.
+  const [includeBreakdownReport, setIncludeBreakdownReport] = useState(true);
   const [includeOcr, setIncludeOcr] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -269,25 +271,7 @@ export function AIAnalysisButton({
               </Badge>
             </div>
 
-            <div className="flex items-start space-x-3 p-3 border rounded-lg">
-              <Checkbox
-                id="mockups"
-                checked={includeMockups}
-                onCheckedChange={(checked) => setIncludeMockups(checked as boolean)}
-              />
-              <div className="space-y-1 flex-1">
-                <Label htmlFor="mockups" className="flex items-center gap-2 cursor-pointer">
-                  <Image className="h-4 w-4 text-green-500" />
-                  Generate AI Mockups
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Create visual mockups of the proposed project
-                </p>
-              </div>
-              <Badge variant="outline" className="text-xs shrink-0">
-                +{CREDIT_COSTS.OPTION_AI_MOCKUPS} credits
-              </Badge>
-            </div>
+            {/* AI Mockups option removed — image generation disabled (2026-06-03). */}
 
             <div className="flex items-start space-x-3 p-3 border rounded-lg border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30">
               <Checkbox
@@ -344,12 +328,6 @@ export function AIAnalysisButton({
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>+ Satellite Imagery</span>
                 <span>{CREDIT_COSTS.OPTION_SATELLITE_IMAGERY} credit</span>
-              </div>
-            )}
-            {includeMockups && (
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>+ AI Mockups</span>
-                <span>{CREDIT_COSTS.OPTION_AI_MOCKUPS} credits</span>
               </div>
             )}
             {includeBreakdownReport && (

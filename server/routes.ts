@@ -6734,7 +6734,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/applications/:applicationId/analyze', isAuthenticated, async (req: any, res) => {
     try {
       const { applicationId } = req.params;
-      const { includeSatellite = true, includeMockups = true, includeBreakdownReport = false, includeOcr = false, mockupQuality = 'standard' } = req.body;
+      // includeBreakdownReport defaults TRUE (comprehensive report by default).
+      // includeMockups defaults FALSE — AI image generation is disabled (2026-06-03).
+      const { includeSatellite = true, includeMockups = false, includeBreakdownReport = true, includeOcr = false, mockupQuality = 'standard' } = req.body;
 
       // Get application to verify tenant
       const application = await storage.getApplication(applicationId);
@@ -11002,6 +11004,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Generate AI mockup for a residence
   app.post('/api/tenants/:tenantId/residences/:id/generate-mockup', isAuthenticated, async (req: any, res) => {
+    // AI mockup rendering is disabled (2026-06-03). The feature is pulled for
+    // now and no resident data is sent to external image-gen providers. See
+    // server/services/imageGenerationService.ts. Fail closed before any work.
+    return res.status(410).json({ error: 'AI mockup rendering is currently unavailable.' });
+
+    // eslint-disable-next-line no-unreachable
     try {
       const { id } = req.params;
       const residence = await storage.getCommunityResidence(id);

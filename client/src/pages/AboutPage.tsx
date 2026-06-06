@@ -103,8 +103,8 @@ export default function AboutPage() {
             {[
               {
                 icon: Brain,
-                title: "AI-Powered Reviews",
-                desc: "Architectural applications analyzed by AI for compliance with community guidelines, giving boards consistent, detailed recommendations.",
+                title: "AI-Assisted Reviews",
+                desc: "Architectural applications analyzed by AI to flag compliance with community guidelines, giving boards consistent, detailed recommendations to inform their decisions.",
               },
               {
                 icon: Zap,
@@ -213,12 +213,12 @@ export default function AboutPage() {
               {
                 icon: Lock,
                 title: "Security-First Design",
-                desc: "OIDC authentication, tenant isolation, RBAC, and encrypted connections at every layer.",
+                desc: "Email + password authentication (bcrypt-hashed), tenant isolation, RBAC, and encrypted connections at every layer.",
               },
               {
                 icon: Bot,
                 title: "AI Integration",
-                desc: "Anthropic Claude powers application analysis, property research, and compliance recommendations.",
+                desc: "Anthropic Claude assists reviewers with application analysis, property research, and compliance recommendations.",
               },
               {
                 icon: CreditCard,

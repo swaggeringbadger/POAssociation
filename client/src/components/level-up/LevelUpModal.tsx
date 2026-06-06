@@ -33,6 +33,8 @@ import { createMcpToken } from "@/lib/api";
 export interface ReviewerTenant {
   tenant: { id: string; name: string };
   role: string;
+  /** Legal P0-2: whether this community permits non-Anthropic AI clients. */
+  allowThirdPartyAi?: boolean;
 }
 
 interface LevelUpModalProps {
@@ -99,10 +101,11 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
   const [tenantId, setTenantId] = useState<string>(reviewerTenants[0]?.tenant.id ?? "");
   const [token, setToken] = useState<string | null>(null);
 
-  const tenantName =
-    reviewerTenants.find((t) => t.tenant.id === tenantId)?.tenant.name ??
-    reviewerTenants[0]?.tenant.name ??
-    "your community";
+  const selectedTenant =
+    reviewerTenants.find((t) => t.tenant.id === tenantId) ?? reviewerTenants[0];
+  const tenantName = selectedTenant?.tenant.name ?? "your community";
+  // Legal P0-2: third-party (non-Anthropic) AI clients are gated per community.
+  const allowThirdParty = selectedTenant?.allowThirdPartyAi === true;
 
   const generateMutation = useMutation({
     mutationFn: () => createMcpToken(tenantId, "Level-up connection"),
@@ -167,11 +170,12 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
   }
 
   // ---- connect mode -------------------------------------------------------
-  const tabs = [
+  const allTabs = [
     {
       id: "claude-web",
       label: "Claude.ai",
       icon: Globe,
+      anthropic: true,
       needsToken: false,
       body: (
         <div className="space-y-4">
@@ -206,6 +210,7 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
       id: "claude-desktop",
       label: "Claude Desktop",
       icon: null,
+      anthropic: true,
       needsToken: false,
       body: (
         <div className="space-y-4">
@@ -256,6 +261,7 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
       id: "cursor",
       label: "Cursor",
       icon: null,
+      anthropic: false,
       needsToken: true,
       body: (
         <div className="space-y-4">
@@ -284,6 +290,7 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
       id: "chatgpt",
       label: "ChatGPT",
       icon: null,
+      anthropic: false,
       needsToken: true,
       body: (
         <div className="space-y-4">
@@ -312,6 +319,7 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
       id: "grok",
       label: "Grok",
       icon: null,
+      anthropic: false,
       needsToken: true,
       body: (
         <div className="space-y-4">
@@ -336,6 +344,12 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
       ),
     },
   ];
+
+  // Legal P0-2: hide non-Anthropic clients unless this community has opted in.
+  // Anthropic (Claude.ai / Desktop) is always available — it's a disclosed
+  // subprocessor. The server independently enforces this for OAuth connectors;
+  // hiding the tabs is the front-line governance for token-based clients.
+  const tabs = allTabs.filter((t) => t.anthropic || allowThirdParty);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -390,11 +404,33 @@ export function LevelUpModal({ open, onOpenChange, connected, reviewerTenants }:
                 <code className="flex-1 min-w-0 text-xs font-mono text-amber-900 truncate">{token}</code>
                 <CopyButton value={token} label="Copy token" />
               </div>
-            ) : (
+            ) : allowThirdParty ? (
               <p className="text-xs text-muted-foreground">
                 Generate a token for the Cursor / ChatGPT / Grok steps below. One active token per
                 community — generating again replaces the old one. (Claude.ai and Claude Desktop
                 connect by URL — no token needed.)
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Claude.ai and Claude Desktop connect by URL — no token needed.
+              </p>
+            )}
+
+            {allowThirdParty ? (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Connecting a third-party AI client — such as ChatGPT, Grok, or Cursor — lets that tool
+                retrieve community and application data, including documents and the personal information
+                they contain, and send it to that AI provider. These providers are not our subprocessors
+                and operate under their own terms and privacy policies, which we do not control. Anthropic's
+                Claude clients are covered by our standard data protections; other tools are not. By enabling
+                third-party AI access, you confirm your association authorizes this and that you are
+                responsible for the connected tool's handling of that data.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground bg-white border border-stone-200 rounded-lg px-3 py-2">
+                Only Anthropic AI clients (Claude.ai and Claude Desktop) can connect to{" "}
+                {tenantName}. An account administrator can enable other AI providers in the
+                community's settings.
               </p>
             )}
           </div>

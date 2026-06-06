@@ -32,13 +32,23 @@ export function LevelUpButton() {
     queryFn: async () => {
       const res = await fetch(`/api/users/${user?.id}/tenants`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load tenants");
-      return (await res.json()) as Array<{ tenant: { id: string; name: string }; role: string }>;
+      return (await res.json()) as Array<{
+        tenant: { id: string; name: string; communitySettings?: { allowThirdPartyAiClients?: boolean } | null };
+        role: string;
+      }>;
     },
     enabled: !!user?.id,
   });
 
   const reviewerTenants = useMemo<ReviewerTenant[]>(
-    () => (userTenants ?? []).filter((ut) => REVIEWER_ROLES.has(ut.role)),
+    () =>
+      (userTenants ?? [])
+        .filter((ut) => REVIEWER_ROLES.has(ut.role))
+        .map((ut) => ({
+          tenant: { id: ut.tenant.id, name: ut.tenant.name },
+          role: ut.role,
+          allowThirdPartyAi: ut.tenant.communitySettings?.allowThirdPartyAiClients === true,
+        })),
     [userTenants],
   );
 

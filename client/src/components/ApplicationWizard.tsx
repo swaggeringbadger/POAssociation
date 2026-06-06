@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ChevronLeft, ChevronRight, Check, FileText, CircleDot, Wrench, X, Plus, Mail, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, FileText, CircleDot, Wrench, X, Plus, Mail, User, Sparkles } from 'lucide-react';
 import type { FormData, DocumentRequirement } from '@shared/additionalInfoTypes';
 import type { AdditionalInfoConfig } from '@shared/additionalInfoTypes';
 import { useAppStore } from '@/lib/store';
@@ -68,6 +68,7 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
   const { currentTenant, setCurrentPageTitle } = useAppStore();
 
   const [currentStep, setCurrentStep] = useState(1);
+  const [aiNoticeDismissed, setAiNoticeDismissed] = useState(false);
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({
     title: '',
     description: '',
@@ -839,6 +840,34 @@ export function ApplicationWizard({ projectType }: ApplicationWizardProps) {
           {renderStep()}
         </CardContent>
       </Card>
+
+      {/* AI processing point-of-collection notice (Legal P1-5). */}
+      {currentStep === 5 && !aiNoticeDismissed && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="flex-1 text-muted-foreground">
+            To support your association's review, your submission and uploaded documents may be
+            analyzed by AI and processed by our service providers (Anthropic and Google). AI assists
+            reviewers — it does not make decisions.{' '}
+            <a
+              href="/legal?tab=privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Learn more
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAiNoticeDismissed(true)}
+            aria-label="Dismiss notice"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Navigation */}
       <div className="flex justify-between">
