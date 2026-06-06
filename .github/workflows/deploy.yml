@@ -42,15 +42,14 @@ jobs:
           NPM_CONFIG_OMIT: ""
           NPM_CONFIG_INCLUDE: dev
 
-      - name: Diagnose dev-dep install
-        run: |
-          echo "omit=$(npm config get omit) production=$(npm config get production) include=$(npm config get include)"
-          env | grep -iE 'npm_config|node_env' || true
-          npm ls vite esbuild || true
-          echo "--- .bin (vite/esbuild) ---"; ls node_modules/.bin 2>/dev/null | grep -E 'vite|esbuild' || echo "NONE"
-
+      # The org/runner npm config doesn't create node_modules/.bin symlinks
+      # (bin-links effectively off), so `vite build` via the package.json script
+      # can't resolve. Invoke the installed packages by path — deterministic,
+      # no .bin and no network. (Mirrors `npm run build`: vite build → esbuild bundle.)
       - name: Build client + server
-        run: npm run build
+        run: |
+          node node_modules/vite/bin/vite.js build
+          node node_modules/esbuild/bin/esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
         env:
           NODE_ENV: development
 
