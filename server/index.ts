@@ -2,6 +2,7 @@
 // + requestTracker middleware for incoming requests (auto request-collection is
 // unreliable in an esbuild ESM bundle — see server/appInsights.ts).
 import { requestTracker } from "./appInsights";
+import { initTelemetryConfig } from "./telemetryConfig";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -152,6 +153,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Load live telemetry dials from Azure App Config before serving (no endpoint
+  // -> silent defaults). Cheap; gates what App Insights sends, tunable no-redeploy.
+  await initTelemetryConfig();
+
   // Ensure community tiers are seeded with correct values
   await seedCommunityTiers();
 
