@@ -46,6 +46,14 @@ jobs:
           NPM_CONFIG_OMIT: ""
           NPM_CONFIG_INCLUDE: dev
 
+      - name: Capture npm debug logs (diagnostic — npm crashes mid-install)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-debug-logs
+          path: ~/.npm/_logs/
+          if-no-files-found: ignore
+
       # The org/runner npm config doesn't create node_modules/.bin symlinks
       # (bin-links effectively off), so `vite build` via the package.json script
       # can't resolve. Invoke the installed packages by path — deterministic,
