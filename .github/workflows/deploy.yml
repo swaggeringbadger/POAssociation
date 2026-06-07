@@ -147,10 +147,16 @@ jobs:
           mkdir -p deploy/server
           cp -a server/prompts deploy/server/
           cp -a ref_docs deploy/
+          # Application Insights preload (CommonJS). Loaded via NODE_OPTIONS=--require
+          # so it runs before the ESM bundle and patches http in time to capture
+          # incoming requests. esbuild does NOT bundle it (standalone preload), so
+          # copy it into the artifact root (wwwroot).
+          cp -a server/aiBootstrap.cjs deploy/
           # Fail loudly if either data dep is ever missing from the artifact,
           # rather than discovering it as a crash-loop on the App Service.
           test -f deploy/server/prompts/registry.json || { echo "::error::server/prompts/registry.json missing from artifact — App Service will crash-loop"; exit 1; }
           test -f deploy/ref_docs/REFERENCE_ARCHITECTURE.md || { echo "::error::ref_docs/ missing from artifact"; exit 1; }
+          test -f deploy/aiBootstrap.cjs || { echo "::error::aiBootstrap.cjs missing — App Insights request telemetry will not load"; exit 1; }
           cd deploy && zip -rqy ../app.zip .
 
       - name: Login to Azure (OIDC)

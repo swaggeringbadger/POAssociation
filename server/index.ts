@@ -1,6 +1,6 @@
-// MUST be first: sets up Application Insights (patches console + http) before
-// any other module imports or serves a request. No-op without a connection string.
-import "./appInsights";
+// Application Insights is initialized in server/aiBootstrap.cjs, loaded via
+// NODE_OPTIONS=--require BEFORE this ESM bundle so it patches `http` in time to
+// capture incoming requests (an in-bundle setup runs too late — see that file).
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
