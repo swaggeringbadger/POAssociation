@@ -59,8 +59,25 @@ jobs:
       # path. A clean prod-only install from the (correct) lockfile is
       # deterministic. We've already built above, so dropping the dev toolchain
       # now is safe. Explicit env because the org npm defaults can't be trusted.
-      - name: Reinstall production deps only (clean, deterministic)
-        run: rm -rf node_modules && npm ci --omit=dev --no-audit --no-fund
+      - name: Reinstall production deps only (clean, with retry)
+        # The org runner's npm intermittently crashes mid-install ("Exit handler
+        # never called! — an error with npm itself") and leaves an INCOMPLETE
+        # node_modules — pg went missing → App Service crash-loop (incident
+        # 2026-06-07). Retry the clean prod install (clearing cache) until pg is
+        # actually present, so we never ship a partial artifact.
+        run: |
+          ok=0
+          for i in 1 2 3 4; do
+            echo "::group::prod install attempt $i"
+            rm -rf node_modules
+            npm ci --omit=dev --no-audit --no-fund || echo "npm exited non-zero on attempt $i"
+            echo "::endgroup::"
+            if [ -f node_modules/pg/package.json ]; then ok=1; echo "attempt $i: pg present"; break; fi
+            echo "attempt $i: node_modules incomplete (pg missing) — clearing cache + retrying"
+            npm cache clean --force || true
+            sleep 5
+          done
+          [ "$ok" = "1" ] || { echo "::error::pg still missing after 4 clean-install attempts — org runner npm bug"; exit 1; }
         env:
           NODE_ENV: production
           NPM_CONFIG_PRODUCTION: "true"
