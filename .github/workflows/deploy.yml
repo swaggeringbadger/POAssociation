@@ -39,7 +39,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies (incl. devDeps for the build)
-        run: npm ci --include=dev --no-audit --no-fund
+        run: npm ci --include=dev --no-audit --no-fund --maxsockets 1
         env:
           NODE_ENV: development
           NPM_CONFIG_PRODUCTION: "false"
@@ -74,7 +74,7 @@ jobs:
           for i in 1 2 3 4; do
             echo "::group::prod install attempt $i"
             rm -rf node_modules
-            npm ci --omit=dev --no-audit --no-fund || echo "npm exited non-zero on attempt $i"
+            npm ci --omit=dev --no-audit --no-fund --maxsockets 1 || echo "npm exited non-zero on attempt $i"
             echo "::endgroup::"
             if [ -f node_modules/pg/package.json ]; then ok=1; echo "attempt $i: pg present"; break; fi
             echo "attempt $i: node_modules incomplete (pg missing) — clearing cache + retrying"
