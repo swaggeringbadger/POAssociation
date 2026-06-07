@@ -56,6 +56,17 @@ jobs:
       - name: Prune dev dependencies
         run: npm prune --omit=dev
 
+      # The server bundle keeps deps external (--packages=external), so the
+      # runtime relies on these being present in node_modules. The Neon→pg
+      # driver swap means `pg` MUST survive the prod prune. Fail loudly here if
+      # it's ever missing, rather than discovering it as an ERR_MODULE_NOT_FOUND
+      # crash-loop on the App Service (incident 2026-06-07).
+      - name: Verify runtime deps present (pg must survive prune)
+        run: |
+          test -f node_modules/pg/package.json || { echo "::error::pg missing from node_modules after prune — App Service will crash-loop"; exit 1; }
+          node -e "require.resolve('pg')"
+          echo "pg present: $(node -e "console.log(require('pg/package.json').version)")"
+
       - name: Stage deploy artifact
         run: |
           mkdir -p deploy
