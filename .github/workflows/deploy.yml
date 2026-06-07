@@ -79,7 +79,11 @@ jobs:
       - name: Build client + server
         run: |
           node node_modules/vite/bin/vite.js build
-          node node_modules/esbuild/bin/esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+          # esbuild's bin/esbuild is the native (ELF) binary on this install, so
+          # `node <binary>` dies with "ELF / SyntaxError". Drive esbuild via its
+          # JS API instead — structure-independent (it locates @esbuild/linux-x64
+          # itself), equivalent to the prior CLI flags.
+          node -e "require('esbuild').buildSync({entryPoints:['server/index.ts'],platform:'node',packages:'external',bundle:true,format:'esm',outdir:'dist'})"
         env:
           NODE_ENV: development
 
