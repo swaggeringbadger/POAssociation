@@ -1,3 +1,6 @@
+// MUST be first: sets up Application Insights (patches console + http) before
+// any other module imports or serves a request. No-op without a connection string.
+import "./appInsights";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
