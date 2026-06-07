@@ -53,17 +53,27 @@ jobs:
         env:
           NODE_ENV: development
 
-      - name: Prune dev dependencies
-        run: npm prune --omit=dev
+      # `npm prune --omit=dev` on this org runner wrongly strips prod deps
+      # (`pg` vanished → ERR_MODULE_NOT_FOUND crash-loop, incident 2026-06-07) —
+      # the same flaky npm config that forced the build step to invoke tools by
+      # path. A clean prod-only install from the (correct) lockfile is
+      # deterministic. We've already built above, so dropping the dev toolchain
+      # now is safe. Explicit env because the org npm defaults can't be trusted.
+      - name: Reinstall production deps only (clean, deterministic)
+        run: rm -rf node_modules && npm ci --omit=dev --no-audit --no-fund
+        env:
+          NODE_ENV: production
+          NPM_CONFIG_PRODUCTION: "true"
+          NPM_CONFIG_OMIT: dev
+          NPM_CONFIG_INCLUDE: ""
 
       # The server bundle keeps deps external (--packages=external), so the
-      # runtime relies on these being present in node_modules. The Neon→pg
-      # driver swap means `pg` MUST survive the prod prune. Fail loudly here if
-      # it's ever missing, rather than discovering it as an ERR_MODULE_NOT_FOUND
-      # crash-loop on the App Service (incident 2026-06-07).
-      - name: Verify runtime deps present (pg must survive prune)
+      # runtime relies on these being present in node_modules. Fail loudly here
+      # if `pg` (or any required runtime dep) is ever missing, rather than
+      # discovering it as a crash-loop on the App Service (incident 2026-06-07).
+      - name: Verify runtime deps present in artifact (pg)
         run: |
-          test -f node_modules/pg/package.json || { echo "::error::pg missing from node_modules after prune — App Service will crash-loop"; exit 1; }
+          test -f node_modules/pg/package.json || { echo "::error::pg missing from node_modules — App Service will crash-loop"; exit 1; }
           node -e "require.resolve('pg')"
           echo "pg present: $(node -e "console.log(require('pg/package.json').version)")"
 
