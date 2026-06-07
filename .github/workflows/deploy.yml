@@ -20,7 +20,11 @@ permissions:
 
 env:
   APP_NAME: poassociation
-  NODE_VERSION: '20.x'
+  # Node 22 LTS: Node 20 is EOL (Apr 2026) and its bundled npm 10.x crashes
+  # mid-install on this org runner ("Exit handler never called!" → pg dropped →
+  # crash-loop, incident 2026-06-07). Node 22 ships a newer npm that doesn't.
+  # Keep this matched to the App Service runtime (linuxFxVersion NODE|22-lts).
+  NODE_VERSION: '22.x'
 
 jobs:
   build-and-deploy:
