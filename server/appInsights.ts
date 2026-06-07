@@ -56,15 +56,14 @@ if (conn) {
  * Pass-through when telemetry is disabled.
  */
 export function requestTracker(req: Request, res: Response, next: NextFunction) {
-  if (!client) return next();
+  console.log(`[ai-req] ENTER ${req.method} ${req.path} client=${!!client}`); // TEMP DIAGNOSTIC
+  if (!client) { console.log("[ai-req] bail: no client"); return next(); }
   const ua = String(req.headers["user-agent"] || "");
-  if (PROBE_UA.test(ua) || NOISE_PATH.test(req.originalUrl || req.url)) return next();
+  if (PROBE_UA.test(ua) || NOISE_PATH.test(req.originalUrl || req.url)) { console.log(`[ai-req] bail: filtered (${req.path})`); return next(); }
 
   const start = Date.now();
   res.on("finish", () => {
-    // TEMP DIAGNOSTIC: these console lines land as AppTraces (which DO flow), so
-    // we can see whether the middleware fires and whether trackRequest throws.
-    console.log(`[ai-req] ${req.method} ${req.path} ${res.statusCode} client=${!!client}`);
+    console.log(`[ai-req] FINISH ${req.method} ${req.path} ${res.statusCode}`);
     try {
       client!.trackRequest({
         name: `${req.method} ${(req.route && req.route.path) || req.path}`,
