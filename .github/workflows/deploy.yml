@@ -38,6 +38,24 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      # POA is developed on Replit, whose npm proxies through an internal
+      # package-firewall. That host leaks into package-lock.json `resolved` URLs
+      # (http://package-firewall.replit.local/npm/...), which DON'T resolve from
+      # a GitHub runner → npm dies "Exit handler never called!" mid-install with
+      # an incomplete node_modules (pg dropped → crash-loop, incident 2026-06-07).
+      # Rewrite any such URLs back to public npm before install. Self-heals every
+      # run so a future Replit-added dep can't reintroduce it. Integrity hashes
+      # are unaffected (the firewall just proxies registry.npmjs.org).
+      - name: Sanitize lockfile (Replit package-firewall URLs -> public npm)
+        run: |
+          if grep -q "package-firewall.replit.local" package-lock.json; then
+            n=$(grep -c "package-firewall.replit.local" package-lock.json)
+            echo "Rewriting $n Replit-firewall URL(s) -> https://registry.npmjs.org/"
+            sed -i 's#http://package-firewall.replit.local/npm/#https://registry.npmjs.org/#g' package-lock.json
+          else
+            echo "lockfile clean (no Replit-firewall URLs)"
+          fi
+
       - name: Install dependencies (incl. devDeps for the build)
         run: npm ci --include=dev --no-audit --no-fund --maxsockets 1
         env:
