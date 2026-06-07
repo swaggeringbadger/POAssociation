@@ -1,6 +1,7 @@
-// Application Insights is initialized in server/aiBootstrap.cjs, loaded via
-// NODE_OPTIONS=--require BEFORE this ESM bundle so it patches `http` in time to
-// capture incoming requests (an in-bundle setup runs too late — see that file).
+// Application Insights: in-bundle setup (deps/exceptions/console auto-collected)
+// + requestTracker middleware for incoming requests (auto request-collection is
+// unreliable in an esbuild ESM bundle — see server/appInsights.ts).
+import { requestTracker } from "./appInsights";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -12,6 +13,9 @@ import { seedCommunityTiers } from "./seed-tiers";
 import { seedAgendaSystem } from "./seed-agenda";
 
 const app = express();
+
+// App Insights request telemetry — first, so it times the whole handler chain.
+app.use(requestTracker);
 
 // --- Security: CSP + standard headers via helmet ---
 const isDev = process.env.NODE_ENV !== "production";
