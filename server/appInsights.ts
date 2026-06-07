@@ -62,6 +62,9 @@ export function requestTracker(req: Request, res: Response, next: NextFunction) 
 
   const start = Date.now();
   res.on("finish", () => {
+    // TEMP DIAGNOSTIC: these console lines land as AppTraces (which DO flow), so
+    // we can see whether the middleware fires and whether trackRequest throws.
+    console.log(`[ai-req] ${req.method} ${req.path} ${res.statusCode} client=${!!client}`);
     try {
       client!.trackRequest({
         name: `${req.method} ${(req.route && req.route.path) || req.path}`,
@@ -71,8 +74,9 @@ export function requestTracker(req: Request, res: Response, next: NextFunction) 
         success: res.statusCode < 500,
         properties: { userAgent: ua },
       });
-    } catch {
-      /* never let telemetry break a response */
+      console.log(`[ai-req] tracked ok ${req.method} ${req.path}`);
+    } catch (e: any) {
+      console.log(`[ai-req] trackRequest threw: ${e && e.message}`);
     }
   });
   next();
