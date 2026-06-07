@@ -54,21 +54,24 @@ function subdomainMiddleware(req: any, res: any, next: any) {
     return next();
   }
 
-  // Skip subdomain detection for known hosting platforms
-  // Replit uses: *.replit.dev, *.repl.co, *.replit.app
-  // Also skip localhost and other dev environments
-  const skipDomains = ['replit.dev', 'repl.co', 'replit.app', 'localhost', '127.0.0.1'];
-  const isHostingPlatform = skipDomains.some(domain => hostname.endsWith(domain) || hostname === domain);
-
-  if (isHostingPlatform) {
-    // No subdomain detection for hosting platforms - use ?subdomain= param instead
-    next();
-    return;
+  // Only treat the first hostname label as a tenant subdomain when the host is
+  // actually under OUR base domain (allowlist > blocklist — kills the whole class
+  // of "platform host misread as a tenant" bugs). Anything NOT under
+  // *.poassociation.com — localhost, *.replit.dev, *.azurewebsites.net, preview
+  // hosts, custom domains — never gets a subdomain derived from its hostname.
+  //
+  // Why allowlist: on Azure, `poassociation.azurewebsites.net` was being parsed
+  // as tenant "poassociation" (3 labels) → /api/subdomain returned that → the
+  // client showed "Community Not Found" and the "Go to Main Site" button (a
+  // client-side nav that can't change the hostname) couldn't escape it.
+  let baseDomain = 'poassociation.com';
+  try {
+    baseDomain = new URL(process.env.APP_URL || 'https://poassociation.com').hostname;
+  } catch {
+    // malformed APP_URL — fall back to the literal base domain
   }
 
-  // Check for actual subdomain in hostname
-  // Example: markland.poassociation.com -> parts = ['markland', 'poassociation', 'com']
-  if (parts.length >= 3) {
+  if (hostname.endsWith('.' + baseDomain) && parts.length >= 3) {
     const subdomain = parts[0];
     // Exclude common non-tenant subdomains
     if (subdomain !== 'www' && subdomain !== 'api' && subdomain !== 'admin') {
