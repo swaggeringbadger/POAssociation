@@ -56,14 +56,12 @@ if (conn) {
  * Pass-through when telemetry is disabled.
  */
 export function requestTracker(req: Request, res: Response, next: NextFunction) {
-  console.log(`[ai-req] ENTER ${req.method} ${req.path} client=${!!client}`); // TEMP DIAGNOSTIC
-  if (!client) { console.log("[ai-req] bail: no client"); return next(); }
+  if (!client) return next();
   const ua = String(req.headers["user-agent"] || "");
-  if (PROBE_UA.test(ua) || NOISE_PATH.test(req.originalUrl || req.url)) { console.log(`[ai-req] bail: filtered (${req.path})`); return next(); }
+  if (PROBE_UA.test(ua) || NOISE_PATH.test(req.originalUrl || req.url)) return next();
 
   const start = Date.now();
   res.on("finish", () => {
-    console.log(`[ai-req] FINISH ${req.method} ${req.path} ${res.statusCode}`);
     try {
       client!.trackRequest({
         name: `${req.method} ${(req.route && req.route.path) || req.path}`,
@@ -73,9 +71,8 @@ export function requestTracker(req: Request, res: Response, next: NextFunction) 
         success: res.statusCode < 500,
         properties: { userAgent: ua },
       });
-      console.log(`[ai-req] tracked ok ${req.method} ${req.path}`);
-    } catch (e: any) {
-      console.log(`[ai-req] trackRequest threw: ${e && e.message}`);
+    } catch {
+      /* never let telemetry break a response */
     }
   });
   next();
