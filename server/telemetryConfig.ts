@@ -28,7 +28,26 @@ export type Dials = {
   dropHealthProbes: boolean;
 };
 
+// Steady-state baseline = LEAN (economical): exceptions always; requests + deps
+// sampled to 25% (sampleRate gate in appInsights.ts is scoped to those types, so
+// exceptions are never dropped by sampling); console traces error-only. This is
+// also the fallback when App Config is unreachable (the 50 MB/day cap backstops
+// cost either way).
 const DEFAULTS: Dials = {
+  sampleRate: 25,
+  minTraceLevel: "error",
+  captureRequests: true,
+  captureDependencies: true,
+  captureExceptions: true,
+  captureConsoleTraces: true,
+  dropHealthProbes: true,
+};
+
+// While a verbose window is active (dashboard "Verbose 24h/1h" pill sets
+// poa:telemetry:verboseUntil), getDials() returns this wide-open profile, then
+// auto-reverts to the steady baseline the instant the timestamp lapses — no cron,
+// checked at send-time on every telemetry item.
+const VERBOSE: Dials = {
   sampleRate: 100,
   minTraceLevel: "info",
   captureRequests: true,
@@ -41,28 +60,34 @@ const DEFAULTS: Dials = {
 const PREFIX = "poa:telemetry:";
 
 let dials: Dials = { ...DEFAULTS };
+let verboseUntilMs = 0; // epoch ms; while now < this, getDials() returns VERBOSE
 let client: AppConfigurationClient | null = null;
 let lastSentinel: string | undefined;
 
 export function getDials(): Dials {
-  return dials;
+  return verboseUntilMs > Date.now() ? VERBOSE : dials;
 }
 
 async function loadAll(): Promise<void> {
   if (!client) return;
   const n: Dials = { ...DEFAULTS };
+  let vUntil = 0;
   for await (const s of client.listConfigurationSettings({ keyFilter: PREFIX + "*" })) {
     const k = s.key.slice(PREFIX.length);
     const v = s.value ?? "";
-    if (k === "sampleRate") n.sampleRate = Number(v) || 100;
-    else if (k === "minTraceLevel") n.minTraceLevel = v as Dials["minTraceLevel"];
+    if (k === "sampleRate") {
+      const r = Number(v); // clamp 0–100; bad/empty -> default (note: "0" is a valid drop-all)
+      n.sampleRate = Number.isFinite(r) && r >= 0 && r <= 100 ? r : DEFAULTS.sampleRate;
+    } else if (k === "minTraceLevel") n.minTraceLevel = v as Dials["minTraceLevel"];
     else if (k === "captureRequests") n.captureRequests = v === "true";
     else if (k === "captureDependencies") n.captureDependencies = v === "true";
     else if (k === "captureExceptions") n.captureExceptions = v === "true";
     else if (k === "captureConsoleTraces") n.captureConsoleTraces = v === "true";
     else if (k === "dropHealthProbes") n.dropHealthProbes = v === "true";
+    else if (k === "verboseUntil") vUntil = v ? Date.parse(v) || 0 : 0;
   }
   dials = n;
+  verboseUntilMs = vUntil; // cleared when the key is absent/empty
 }
 
 export async function initTelemetryConfig(): Promise<void> {

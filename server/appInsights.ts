@@ -59,7 +59,10 @@ if (conn) {
       const min = d.minTraceLevel === "error" ? 3 : d.minTraceLevel === "warn" ? 2 : 1;
       if (sev < min) return false;
     }
-    if (d.sampleRate < 100 && Math.random() * 100 >= d.sampleRate) return false;
+    // sampleRate samples only the high-volume, loss-tolerant types (requests +
+    // dependencies). Exceptions and console traces are NEVER sampled away — they're
+    // the signal, and dropping a fraction of exceptions would be a debugging trap.
+    if ((bt === "RequestData" || bt === "RemoteDependencyData") && d.sampleRate < 100 && Math.random() * 100 >= d.sampleRate) return false;
     return true;
   });
 
