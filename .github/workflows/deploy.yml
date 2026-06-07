@@ -137,6 +137,20 @@ jobs:
           mkdir -p deploy
           # cp -a preserves symlinks (node_modules/.bin). dist holds index.js + public/.
           cp -a dist node_modules package.json package-lock.json deploy/
+          # Runtime DATA files read from disk via process.cwd() — NOT bundled by
+          # esbuild (it bundles JS only). Missing them → ENOENT crash-loop on boot
+          # ("Failed to load prompt registry", 503; incident 2026-06-07). cwd at
+          # runtime is wwwroot, so they must land at wwwroot/server/prompts and
+          # wwwroot/ref_docs:
+          #   server/prompts/  -> promptRegistry.ts (registry.json + per-key v<N>.md/.json)
+          #   ref_docs/        -> aiFormGenerationService.ts (REFERENCE_ARCHITECTURE.md + <type>.json)
+          mkdir -p deploy/server
+          cp -a server/prompts deploy/server/
+          cp -a ref_docs deploy/
+          # Fail loudly if either data dep is ever missing from the artifact,
+          # rather than discovering it as a crash-loop on the App Service.
+          test -f deploy/server/prompts/registry.json || { echo "::error::server/prompts/registry.json missing from artifact — App Service will crash-loop"; exit 1; }
+          test -f deploy/ref_docs/REFERENCE_ARCHITECTURE.md || { echo "::error::ref_docs/ missing from artifact"; exit 1; }
           cd deploy && zip -rqy ../app.zip .
 
       - name: Login to Azure (OIDC)
