@@ -83,7 +83,11 @@ jobs:
           # `node <binary>` dies with "ELF / SyntaxError". Drive esbuild via its
           # JS API instead — structure-independent (it locates @esbuild/linux-x64
           # itself), equivalent to the prior CLI flags.
-          node -e "require('esbuild').buildSync({entryPoints:['server/index.ts'],platform:'node',packages:'external',bundle:true,format:'esm',outdir:'dist'})"
+          # splitting:true so the dynamic import('../vite.config') in setupVite
+          # becomes a real lazy chunk (loaded only in dev) instead of being
+          # inlined into index.js — otherwise vite.config's top-level `import
+          # vite` is hoisted into the main bundle and prod crashes (no vite dep).
+          node -e "require('esbuild').buildSync({entryPoints:['server/index.ts'],platform:'node',packages:'external',bundle:true,format:'esm',outdir:'dist',splitting:true})"
         env:
           NODE_ENV: development
 
